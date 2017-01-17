@@ -61,6 +61,13 @@ void SHA_160::compress_n(const uint8_t input[], size_t blocks)
    {
    using namespace SHA1_F;
 
+#if defined(BOTAN_HAS_SHA1_ARMV8)
+   if(CPUID::has_arm_sha1())
+      {
+      return sha1_armv8_compress_n(m_digest, input, blocks);
+      }
+#endif
+
 #if defined(BOTAN_HAS_SHA1_SSE2)
    if(CPUID::has_sse2())
       {

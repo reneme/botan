@@ -45,6 +45,8 @@ class Stream final : public StreamBase<Channel>
       using executor_type = typename next_layer_type::executor_type;
       using native_handle_type = typename std::add_pointer<Channel>::type;
 
+      using StreamBase<Channel>::validate_handshake_type;
+
    public:
       template <typename... Args>
       Stream(StreamLayer&& nextLayer, Args&& ... args)

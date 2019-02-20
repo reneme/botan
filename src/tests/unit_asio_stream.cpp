@@ -149,11 +149,11 @@ class StreamBase<Botan_Tests::MockChannel>
       Botan::AutoSeeded_RNG    m_rng;
       Botan_Tests::MockChannel m_channel;
 
-      void validate_handshake_type(handshake_type type)
+      void validate_handshake_type(handshake_type)
          {
          }
 
-      bool validate_handshake_type(handshake_type type, boost::system::error_code& ec)
+      bool validate_handshake_type(handshake_type, boost::system::error_code&)
          {
          return true;
          }

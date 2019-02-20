@@ -19,10 +19,10 @@ namespace Botan {
 namespace TLS {
 
 enum handshake_type
- {
- client,
- server
- };
+   {
+   client,
+   server
+   };
 
 
 /* Base class for all Botan::TLS::Stream implementations.
@@ -32,8 +32,6 @@ enum handshake_type
 template <class Channel>
 class StreamBase
    {
-      void validate_handshake_type(handshake_type type);
-      bool validate_handshake_type(handshake_type type, boost::system::error_code& ec);
    };
 
 template <>

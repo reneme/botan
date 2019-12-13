@@ -23,6 +23,7 @@
 #include <botan/tls_channel.h>
 #include <botan/tls_client.h>
 #include <botan/tls_magic.h>
+#include <botan/tls_server.h>
 
 // We need to define BOOST_ASIO_DISABLE_SERIAL_PORT before any asio imports. Otherwise asio will include <termios.h>,
 // which interferes with Botan's amalgamation by defining macros like 'B0' and 'FF1'.
@@ -214,8 +215,11 @@ class Stream
          {
          setup_native_handle(side, ec);
 
-         // send client hello, which was written to the send buffer on client instantiation
-         send_pending_encrypted_data(ec);
+         if(side == CLIENT)
+            {
+            // send client hello, which was written to the send buffer on client instantiation
+            send_pending_encrypted_data(ec);
+            }
 
          while(!native_handle()->is_active() && !ec)
             {
@@ -637,21 +641,41 @@ class Stream
       typename std::enable_if<std::is_same<Channel, T>::value>::type
       setup_native_handle(Connection_Side side, boost::system::error_code& ec)
          {
-         if(side == CLIENT)
+         try
             {
-            m_native_handle = std::unique_ptr<Client>(
-                                 new Client(m_core,
-                                            m_context.m_session_manager,
-                                            m_context.m_credentials_manager,
-                                            m_context.m_policy,
-                                            m_context.m_rng,
-                                            m_context.m_server_info));
+            if(side == CLIENT)
+               {
+               m_native_handle = std::unique_ptr<Client>(
+                                    new Client(m_core,
+                                               m_context.m_session_manager,
+                                               m_context.m_credentials_manager,
+                                               m_context.m_policy,
+                                               m_context.m_rng,
+                                               m_context.m_server_info,
+                                               Protocol_Version::latest_tls_version()));
+               }
+            else
+               {
+               m_native_handle = std::unique_ptr<Server>(
+                                    new Server(m_core,
+                                               m_context.m_session_manager,
+                                               m_context.m_credentials_manager,
+                                               m_context.m_policy,
+                                               m_context.m_rng,
+                                               false /* no DTLS */));
+               }
             }
-         else
+         catch(const TLS_Exception& e)
             {
-            // TODO: First steps in order to support the server side of this stream would be to instantiate a
-            // Botan::TLS::Server instance as the stream's native_handle and implement the handshake appropriately.
-            ec = Botan::ErrorType::NotImplemented;
+            ec = e.type();
+            }
+         catch(const Botan::Exception& e)
+            {
+            ec = e.error_type();
+            }
+         catch(const std::exception&)
+            {
+            ec = Botan::ErrorType::Unknown;
             }
          }
 

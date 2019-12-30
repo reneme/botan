@@ -227,22 +227,10 @@ class Stream
             if(ec)
                { return; }
 
-            try
+            try_with_error_code([&]
                {
                native_handle()->received_data(static_cast<const uint8_t*>(read_buffer.data()), read_buffer.size());
-               }
-            catch(const TLS_Exception& e)
-               {
-               ec = e.type();
-               }
-            catch(const Botan::Exception& e)
-               {
-               ec = e.error_type();
-               }
-            catch(const std::exception&)
-               {
-               ec = Botan::ErrorType::Unknown;
-               }
+               }, ec);
 
             send_pending_encrypted_data(ec);
             }
@@ -303,25 +291,12 @@ class Stream
        */
       void shutdown(boost::system::error_code& ec)
          {
-         try
+         try_with_error_code([&]
             {
             native_handle()->close();
-            }
-         catch(const TLS_Exception& e)
-            {
-            ec = e.type();
-            }
-         catch(const Botan::Exception& e)
-            {
-            ec = e.error_type();
-            }
-         catch(const std::exception&)
-            {
-            ec = Botan::ErrorType::Unknown;
-            }
+            }, ec);
 
-         if(!ec)
-            { send_pending_encrypted_data(ec); }
+         send_pending_encrypted_data(ec);
          }
 
       /**
@@ -382,22 +357,10 @@ class Stream
          if(ec)
             { return 0; }
 
-         try
+         try_with_error_code([&]
             {
             native_handle()->received_data(static_cast<const uint8_t*>(read_buffer.data()), read_buffer.size());
-            }
-         catch(const TLS_Exception& e)
-            {
-            ec = e.type();
-            }
-         catch(const Botan::Exception& e)
-            {
-            ec = e.error_type();
-            }
-         catch(const std::exception&)
-            {
-            ec = Botan::ErrorType::Unknown;
-            }
+            }, ec);
 
          return !ec ? copy_received_data(buffers) : 0;
          }
@@ -641,42 +604,30 @@ class Stream
       typename std::enable_if<std::is_same<Channel, T>::value>::type
       setup_native_handle(Connection_Side side, boost::system::error_code& ec)
          {
-         try
+         try_with_error_code([&]
             {
             if(side == CLIENT)
                {
                m_native_handle = std::unique_ptr<Client>(
-                                    new Client(m_core,
-                                               m_context.m_session_manager,
-                                               m_context.m_credentials_manager,
-                                               m_context.m_policy,
-                                               m_context.m_rng,
-                                               m_context.m_server_info,
-                                               Protocol_Version::latest_tls_version()));
+                  new Client(m_core,
+                             m_context.m_session_manager,
+                             m_context.m_credentials_manager,
+                             m_context.m_policy,
+                             m_context.m_rng,
+                             m_context.m_server_info,
+                             Protocol_Version::latest_tls_version()));
                }
             else
                {
                m_native_handle = std::unique_ptr<Server>(
-                                    new Server(m_core,
-                                               m_context.m_session_manager,
-                                               m_context.m_credentials_manager,
-                                               m_context.m_policy,
-                                               m_context.m_rng,
-                                               false /* no DTLS */));
+                  new Server(m_core,
+                             m_context.m_session_manager,
+                             m_context.m_credentials_manager,
+                             m_context.m_policy,
+                             m_context.m_rng,
+                             false /* no DTLS */));
                }
-            }
-         catch(const TLS_Exception& e)
-            {
-            ec = e.type();
-            }
-         catch(const Botan::Exception& e)
-            {
-            ec = e.error_type();
-            }
-         catch(const std::exception&)
-            {
-            ec = Botan::ErrorType::Unknown;
-            }
+            }, ec);
          }
 
       size_t send_pending_encrypted_data(boost::system::error_code& ec)
@@ -700,24 +651,35 @@ class Stream
                it++)
             {
             const boost::asio::const_buffer buffer = *it;
-            try
+            try_with_error_code([&]
                {
                native_handle()->send(static_cast<const uint8_t*>(buffer.data()), buffer.size());
-               }
-            catch(const TLS_Exception& e)
-               {
-               ec = e.type();
-               }
-            catch(const Botan::Exception& e)
-               {
-               ec = e.error_type();
-               }
-            catch(const std::exception&)
-               {
-               ec = Botan::ErrorType::Unknown;
-               }
+               }, ec);
             }
          }
+
+      //! @brief Catch exceptions and set an error_code
+      template <typename Fun>
+      void try_with_error_code(Fun f, boost::system::error_code& ec)
+         {
+         try
+            {
+            f();
+            }
+         catch(const TLS_Exception& e)
+            {
+            ec = e.type();
+            }
+         catch(const Botan::Exception& e)
+            {
+            ec = e.error_type();
+            }
+         catch(const std::exception&)
+            {
+            ec = Botan::ErrorType::Unknown;
+            }
+         }
+
 
       Context&                  m_context;
       StreamLayer               m_nextLayer;

@@ -325,11 +325,10 @@ class AsyncHandshakeOperation : public AsyncBase<Handler, typename Stream::execu
                // operation will eventually call `*this` as its own handler, passing the 0 back to this call operator.
                // This is necessary because the check of `bytesTransferred > 0` assumes that `bytesTransferred` bytes
                // were just read and are available in input_buffer for further processing.
-               AsyncWriteOperation<
-               AsyncHandshakeOperation<typename std::decay<Handler>::type, Stream, Allocator>,
-                                       Stream,
-                                       Allocator>
-                                       op{std::move(*this), m_stream, 0};
+               AsyncWriteOperation<AsyncHandshakeOperation<typename std::decay<Handler>::type, Stream, Allocator>,
+                                   Stream,
+                                   Allocator>
+                                   op{std::move(*this), m_stream, 0};
                return;
                }
 

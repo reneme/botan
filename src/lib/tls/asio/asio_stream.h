@@ -260,7 +260,7 @@ class Stream
        */
       template <typename HandshakeHandler>
       auto async_handshake(Connection_Side side, HandshakeHandler&& handler) ->
-         BOOST_ASIO_INITFN_RESULT_TYPE(HandshakeHandler, void(boost::system::error_code))
+      BOOST_ASIO_INITFN_RESULT_TYPE(HandshakeHandler, void(boost::system::error_code))
          {
          BOOST_ASIO_HANDSHAKE_HANDLER_CHECK(HandshakeHandler, handler) type_check;
 
@@ -469,8 +469,8 @@ class Stream
        */
       template <typename ConstBufferSequence, typename WriteHandler>
       auto async_write_some(const ConstBufferSequence& buffers, WriteHandler&& handler) ->
-         BOOST_ASIO_INITFN_RESULT_TYPE(WriteHandler,
-                                       void(boost::system::error_code, std::size_t))
+      BOOST_ASIO_INITFN_RESULT_TYPE(WriteHandler,
+                                    void(boost::system::error_code, std::size_t))
          {
          BOOST_ASIO_WRITE_HANDLER_CHECK(WriteHandler, handler) type_check;
 
@@ -506,8 +506,8 @@ class Stream
        */
       template <typename MutableBufferSequence, typename ReadHandler>
       auto async_read_some(const MutableBufferSequence& buffers, ReadHandler&& handler) ->
-         BOOST_ASIO_INITFN_RESULT_TYPE(ReadHandler,
-                                       void(boost::system::error_code, std::size_t))
+      BOOST_ASIO_INITFN_RESULT_TYPE(ReadHandler,
+                                    void(boost::system::error_code, std::size_t))
          {
          BOOST_ASIO_READ_HANDLER_CHECK(ReadHandler, handler) type_check;
 

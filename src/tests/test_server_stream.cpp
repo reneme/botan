@@ -10,6 +10,10 @@
 
 #if defined(BOTAN_HAS_TLS) && defined(BOTAN_HAS_BOOST_ASIO)
 
+// first version to be compatible with Networking TS (N4656) and boost::beast
+#include <boost/version.hpp>
+#if BOOST_VERSION >= 106600
+
 #include <functional>
 
 #include <botan/asio_stream.h>
@@ -272,4 +276,5 @@ BOTAN_REGISTER_TEST("tls_server_stream", Tls_Server_Stream_Tests);
 
 }  // namespace Botan_Tests
 
+#endif // BOOST_VERSION
 #endif // BOTAN_HAS_TLS && BOTAN_HAS_BOOST_ASIO

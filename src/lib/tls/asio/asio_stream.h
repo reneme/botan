@@ -332,7 +332,7 @@ class Stream
          {
          public:
             Wrapper(Handler&& handler) : _handler(std::forward<Handler>(handler)) {}
-            void operator()(boost::system::error_code ec, size_t) { return _handler(ec); }
+            void operator()(boost::system::error_code ec, size_t) { _handler(ec); }
          private:
             Handler _handler;
          };

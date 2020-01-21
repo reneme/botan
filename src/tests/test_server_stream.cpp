@@ -144,25 +144,25 @@ class server : public participant, public std::enable_shared_from_this<server>
       void handshake(const error_code& ec)
          {
          check_ec("handshake", ec);
-         loop(error_code{});
+         read(error_code{});
          }
 
-      void loop(const error_code& ec, size_t bytes_transferred=0)
+      void read(const error_code& ec)
          {
-         reenter(*this)
-            {
-            set_timer("read_message");
-            yield net::async_read(*m_stream,
-                                  net::buffer(m_data, max_length),
-                                  std::bind(&server::loop, shared_from_this(), _1, _2));
-            check_ec("read_message", ec);
+         check_ec("send_response", ec);
+         set_timer("read_message");
+         net::async_read(*m_stream,
+                         net::buffer(m_data, max_length),
+                         std::bind(&server::write, shared_from_this(), _1, _2));
+         }
 
-            set_timer("send_response");
-            yield net::async_write(*m_stream,
-                                   net::buffer(m_data, bytes_transferred),
-                                   std::bind(&server::loop, shared_from_this(), _1, _2));
-            check_ec("send_response", ec);
-            }
+      void write(const error_code& ec, size_t bytes_transferred=0)
+         {
+         check_ec("read_message", ec);
+         set_timer("send_response");
+         net::async_write(*m_stream,
+                          net::buffer(m_data, bytes_transferred),
+                          std::bind(&server::read, shared_from_this(), _1));
          }
 
    private:

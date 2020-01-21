@@ -20,6 +20,7 @@
 #include <botan/auto_rng.h>
 
 #include <boost/asio.hpp>
+#include <boost/asio/yield.hpp>
 
 #include "../cli/tls_helpers.h"  // for Basic_Credentials_Manager
 
@@ -42,11 +43,21 @@ class timeout_exception : public std::runtime_error
       using std::runtime_error::runtime_error;
    };
 
-class participant
+class participant : public net::coroutine
    {
    protected:
-      participant(net::io_context& io_context, Botan_Tests::Test::Result& result) : m_timer(io_context),
-         m_result(result) {}
+      participant(net::io_context& io_context, Botan_Tests::Test::Result& result)
+         : m_credentials_manager(true, ""),
+           m_ctx(m_credentials_manager, m_rng, m_session_mgr, m_policy, Botan::TLS::Server_Information()),
+           m_timer(io_context),
+           m_result(result) {}
+
+      participant(net::io_context& io_context, const std::string& server_cert, const std::string& server_key,
+                  Botan_Tests::Test::Result& result)
+         : m_credentials_manager(m_rng, server_cert, server_key),
+           m_ctx(m_credentials_manager, m_rng, m_session_mgr, m_policy, Botan::TLS::Server_Information()),
+           m_timer(io_context),
+           m_result(result) {}
 
       void set_timer(const std::string& msg)
          {
@@ -66,7 +77,7 @@ class participant
          m_timer.cancel();
          }
 
-      void check_rc(const std::string& msg, const error_code& ec)
+      void check_ec(const std::string& msg, const error_code& ec)
          {
          if(ec)
             { m_result.test_failure(msg, ec.message()); }
@@ -76,24 +87,31 @@ class participant
 
       Botan_Tests::Test::Result& result() { return m_result; }
 
+   protected:
+      Botan::AutoSeeded_RNG m_rng;
+      Basic_Credentials_Manager m_credentials_manager;
+      Botan::TLS::Session_Manager_Noop m_session_mgr;
+      Botan::TLS::Policy m_policy;
+      Botan::TLS::Context m_ctx;
+      std::unique_ptr<ssl_stream> m_stream;
+
+      enum { max_length = 512 };
+      char m_data[max_length];
+
    private:
       net::system_timer m_timer;
       // Note: m_result is not mutexed. We assume to be handling one message at a time in a ping-pong fashion.
       Botan_Tests::Test::Result& m_result;
-
    };
 
 class server : public participant, public std::enable_shared_from_this<server>
    {
    public:
       server(net::io_context& io_context, Botan_Tests::Test::Result& result)
-         : participant(io_context, result),
-           m_ioc(io_context),
-           m_acceptor(io_context),
-           m_credentials_manager(m_rng, server_cert(), server_key()),
-           m_ctx(m_credentials_manager, m_rng, m_session_mgr, m_policy, Botan::TLS::Server_Information()) {}
+         : participant(io_context, server_cert(), server_key(), result),
+           m_acceptor(io_context) {}
 
-      void listen(const tcp::endpoint& endpoint)
+      void listen(net::io_context& io_context, const tcp::endpoint& endpoint)
          {
          error_code ec;
 
@@ -102,17 +120,17 @@ class server : public participant, public std::enable_shared_from_this<server>
          m_acceptor.bind(endpoint, ec);
          m_acceptor.listen(net::socket_base::max_listen_connections, ec);
 
-         check_rc("listen", ec);
+         check_ec("listen", ec);
 
          set_timer("accept");
-         m_acceptor.async_accept(m_ioc, std::bind(&server::handle_accept, shared_from_this(), _1, _2));
+         m_acceptor.async_accept(io_context, std::bind(&server::start_session, shared_from_this(), _1, _2));
          }
 
    private:
-      void handle_accept(const error_code& ec, tcp::socket socket)
+      void start_session(const error_code& ec, tcp::socket socket)
          {
-         // Note: If this fails with 'Operation canceled', it likely means m_accept_timer expired and the port is taken.
-         check_rc("accept", ec);
+         // Note: If this fails with 'Operation canceled', it likely means the timer expired and the port is taken.
+         check_ec("accept", ec);
 
          // Note: If this was a real server, we should create a new session (with its own stream) for each accepted
          // connection. In this test we only have one connection.
@@ -120,48 +138,35 @@ class server : public participant, public std::enable_shared_from_this<server>
 
          set_timer("handshake");
          m_stream->async_handshake(Botan::TLS::Connection_Side::SERVER,
-                                   std::bind(&server::read_message, shared_from_this(), _1));
+                                   std::bind(&server::handshake, shared_from_this(), _1));
          }
 
-      void read_message(const error_code& ec)
+      void handshake(const error_code& ec)
          {
-         check_rc("handshake", ec);
-
-         set_timer("read_message");
-         net::async_read(*m_stream,
-                         net::buffer(data_, max_length),
-                         std::bind(&server::send_response, shared_from_this(), _1, _2));
+         check_ec("handshake", ec);
+         loop(error_code{});
          }
 
-      void send_response(const error_code& ec, size_t bytes_transferred)
+      void loop(const error_code& ec, size_t bytes_transferred=0)
          {
-         check_rc("read_message", ec);
+         reenter(*this)
+            {
+            set_timer("read_message");
+            yield net::async_read(*m_stream,
+                                  net::buffer(m_data, max_length),
+                                  std::bind(&server::loop, shared_from_this(), _1, _2));
+            check_ec("read_message", ec);
 
-         set_timer("send_response");
-         net::async_write(*m_stream,
-                          net::buffer(data_, bytes_transferred),
-                          std::bind(&server::handle_write, shared_from_this(), _1));
-         }
-
-      void handle_write(const error_code& ec)
-         {
-         stop_timer();
-         check_rc("send_response", ec);
+            set_timer("send_response");
+            yield net::async_write(*m_stream,
+                                   net::buffer(m_data, bytes_transferred),
+                                   std::bind(&server::loop, shared_from_this(), _1, _2));
+            check_ec("send_response", ec);
+            }
          }
 
    private:
-      net::io_context& m_ioc;
       tcp::acceptor m_acceptor;
-
-      Botan::AutoSeeded_RNG m_rng;
-      Basic_Credentials_Manager m_credentials_manager;
-      Botan::TLS::Session_Manager_Noop m_session_mgr;
-      Botan::TLS::Policy m_policy;
-      Botan::TLS::Context m_ctx;
-
-      std::unique_ptr<ssl_stream> m_stream;
-      enum { max_length = 1024 };
-      char data_[max_length];
    };
 
 class client : public participant, public std::enable_shared_from_this<client>
@@ -174,72 +179,100 @@ class client : public participant, public std::enable_shared_from_this<client>
 
    public:
       client(net::io_context& io_context, Botan_Tests::Test::Result& result)
-         : participant(io_context, result),
-           m_credentials_manager(true, ""),
-           m_ctx(m_credentials_manager, m_rng, m_session_mgr, m_policy, Botan::TLS::Server_Information()),
-           m_stream(io_context, m_ctx)
+         : participant(io_context, result)
          {
          m_ctx.set_verify_callback(accept_all);
+         m_stream = std::unique_ptr<ssl_stream>(new ssl_stream(io_context, m_ctx));
          }
 
-      void connect(const std::vector<tcp::endpoint>& endpoints)
+      void test_conversation(const std::vector<tcp::endpoint>& endpoints)
          {
          set_timer("connect");
-         net::async_connect(m_stream.lowest_layer(), endpoints, std::bind(&client::handshake, shared_from_this(), _1));
+         net::async_connect(m_stream->lowest_layer(),
+                            endpoints,
+                            std::bind(&client::conversation, shared_from_this(), _1));
+         }
+
+      void test_eager_close(const std::vector<tcp::endpoint>& endpoints)
+         {
+         set_timer("connect");
+         net::async_connect(m_stream->lowest_layer(),
+                            endpoints,
+                            std::bind(&client::eager_close, shared_from_this(), _1));
          }
 
    private:
-      void handshake(const error_code& ec)
+      // test a complete conversation with the echo server, including correct shutdown on both sides
+      void conversation(const error_code& ec)
          {
-         check_rc("connect", ec);
+         static auto test_case = &client::conversation;
+         reenter(*this)
+            {
+            check_ec("connect", ec);
 
-         set_timer("handshake");
-         m_stream.async_handshake(Botan::TLS::Connection_Side::CLIENT,
-                                  std::bind(&client::send_message, shared_from_this(), _1));
+            set_timer("handshake");
+            yield m_stream->async_handshake(Botan::TLS::Connection_Side::CLIENT,
+                                            std::bind(test_case, shared_from_this(), _1));
+            check_ec("handshake", ec);
+
+            set_timer("send_message");
+            yield net::async_write(*m_stream,
+                                   net::buffer(m_message, max_length),
+                                   std::bind(test_case, shared_from_this(), _1));
+            check_ec("send_message", ec);
+
+            set_timer("receive_response");
+            yield net::async_read(*m_stream,
+                                  net::buffer(m_data, max_length),
+                                  std::bind(test_case, shared_from_this(), _1));
+            check_ec("receive_response", ec);
+            result().test_eq("correct message", std::string(m_data), std::string(m_message));
+
+            set_timer("shutdown");
+            yield m_stream->async_shutdown(std::bind(test_case, shared_from_this(), _1));
+            check_ec("shutdown", ec);
+
+            stop_timer();
+            }
          }
 
-      void send_message(const error_code& ec)
+      // the client shuts down the session, but closes the socket without waiting for a response
+      void eager_close(const error_code& ec)
          {
-         check_rc("handshake", ec);
+         static auto test_case = &client::eager_close;
+         reenter(*this)
+            {
+            check_ec("connect", ec);
 
-         set_timer("send_message");
-         net::async_write(m_stream,
-                          net::buffer(m_message, max_length),
-                          std::bind(&client::receive_response, shared_from_this(), _1, _2));
-         }
+            set_timer("handshake");
+            yield m_stream->async_handshake(Botan::TLS::Connection_Side::CLIENT,
+                                            std::bind(test_case, shared_from_this(), _1));
+            check_ec("handshake", ec);
 
-      void receive_response(const error_code& ec, size_t)
-         {
-         check_rc("send_message", ec);
+            set_timer("shutdown");
+            yield m_stream->async_shutdown(std::bind(test_case, shared_from_this(), _1));
+            check_ec("shutdown", ec);
 
-         set_timer("receive_response");
-         net::async_read(m_stream,
-                         net::buffer(data_, max_length),
-                         std::bind(&client::check_response, shared_from_this(), _1, _2));
-         }
+            set_timer("receive_response");
+            auto self = shared_from_this();
+            /* no yield! */ net::async_read(*m_stream, net::buffer(m_data, max_length),
+                                            [this, self](const error_code &ec, size_t)
+               {
+               // check that "waiting" for the server's shutdown turns out to be aborted
+               result().confirm("async_read is aborted", ec == net::error::operation_aborted);
+               });
 
-      void check_response(const error_code& ec, size_t)
-         {
-         stop_timer();
+            m_stream->lowest_layer().close();
 
-         check_rc("receive_response", ec);
-
-         result().test_eq("correct message", std::string(data_), std::string(m_message));
+            stop_timer();
+            }
          }
 
    private:
-      Botan::AutoSeeded_RNG m_rng;
-      Basic_Credentials_Manager m_credentials_manager;
-      Botan::TLS::Session_Manager_Noop m_session_mgr;
-      Botan::TLS::Policy m_policy;
-      Botan::TLS::Context m_ctx;
-
-      ssl_stream m_stream;
-
-      enum { max_length = 1024 };
-      char data_[max_length];
       const char m_message[max_length] = "Time is an illusion. Lunchtime doubly so.";
    };
+
+#include <boost/asio/unyield.hpp>
 
 }  // namespace
 
@@ -257,10 +290,12 @@ class Tls_Server_Stream_Tests final : public Test
          std::vector<tcp::endpoint> endpoints{tcp::endpoint{net::ip::make_address("127.0.0.1"), 8082}};
 
          auto s = std::make_shared<server>(io_context, server_results);
-         s->listen(endpoints.back());
+         s->listen(io_context, endpoints.back());
 
          auto c = std::make_shared<client>(io_context, client_results);
-         c->connect(endpoints);
+         // TODO: multiple test cases
+         c->test_conversation(endpoints);
+         // c->test_eager_close(endpoints);
 
          try
             {

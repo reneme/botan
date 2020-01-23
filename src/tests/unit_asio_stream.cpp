@@ -65,6 +65,7 @@ class MockChannel
       void send(const uint8_t buf[], std::size_t buf_size) { m_callbacks.tls_emit_data(buf, buf_size); }
 
       bool is_active() { return m_active; }
+      bool is_closed() { return false; }  // needed to satisfy the template requirements
 
    protected:
       Botan::TLS::Callbacks& m_callbacks;

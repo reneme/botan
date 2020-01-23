@@ -65,7 +65,9 @@ class Stream
       explicit Stream(Context& context, Args&& ... args)
          : m_context(context)
          , m_nextLayer(std::forward<Args>(args)...)
-         , m_core(m_receive_buffer, m_send_buffer, m_context)
+         , m_core(*this)
+         , m_shutdown_sent(false)
+         , m_shutdown_received(false)
          , m_input_buffer_space(MAX_CIPHERTEXT_SIZE, '\0')
          , m_input_buffer(m_input_buffer_space.data(), m_input_buffer_space.size())
          {}
@@ -84,7 +86,9 @@ class Stream
       explicit Stream(Arg&& arg, Context& context)
          : m_context(context)
          , m_nextLayer(std::forward<Arg>(arg))
-         , m_core(m_receive_buffer, m_send_buffer, m_context)
+         , m_core(*this)
+         , m_shutdown_sent(false)
+         , m_shutdown_received(false)
          , m_input_buffer_space(MAX_CIPHERTEXT_SIZE, '\0')
          , m_input_buffer(m_input_buffer_space.data(), m_input_buffer_space.size())
          {}
@@ -111,6 +115,7 @@ class Stream
       const next_layer_type& next_layer() const { return m_nextLayer; }
       next_layer_type& next_layer() { return m_nextLayer; }
 
+      // TODO: since we are using beast already, use beast::get_lowest_layer for beast::tcp_stream compatibility
       lowest_layer_type& lowest_layer() { return m_nextLayer.lowest_layer(); }
       const lowest_layer_type& lowest_layer() const { return m_nextLayer.lowest_layer(); }
 
@@ -297,6 +302,9 @@ class Stream
             }, ec);
 
          send_pending_encrypted_data(ec);
+
+         if(!ec)
+            { set_shutdown_sent(); }
          }
 
       /**
@@ -332,19 +340,23 @@ class Stream
          {
          public:
             Wrapper(Handler&& handler) : _handler(std::forward<Handler>(handler)) {}
-            void operator()(boost::system::error_code ec, size_t) { _handler(ec); }
+            void operator()(boost::system::error_code ec, size_t)
+               {
+               if(!ec)
+                  { /* TODO: set_shutdown_sent */ }
+               _handler(ec);
+               }
          private:
             Handler _handler;
          };
 
    public:
-
       /**
        * @brief Asynchronously shut down SSL on the stream.
        *
        * This function call always returns immediately.
        *
-       * @param handler The handler to be called when the handshake operation completes.
+       * @param handler The handler to be called when the shutdown operation completes.
        *                The equivalent function signature of the handler must be: void(boost::system::error_code)
        */
       template <typename ShutdownHandler>
@@ -523,6 +535,18 @@ class Stream
 
       //! @}
 
+      // TODO: do we need these public? asio ssl stream doesn't have them, but they are very useful for testing
+      bool shutdown_sent() const
+         {
+         return m_shutdown_sent;
+         }
+
+      bool shutdown_received() const
+         {
+         return m_shutdown_received;
+         }
+
+
    protected:
       template <class H, class S, class M, class A> friend class detail::AsyncReadOperation;
       template <class H, class S, class A> friend class detail::AsyncWriteOperation;
@@ -540,28 +564,32 @@ class Stream
       class StreamCore : public Botan::TLS::Callbacks
          {
          public:
-            StreamCore(boost::beast::flat_buffer& receive_buffer, boost::beast::flat_buffer& send_buffer, Context& context)
-               : m_receive_buffer(receive_buffer), m_send_buffer(send_buffer), m_tls_context(context) {}
+            StreamCore(Stream& stream) : m_stream(stream) {}
 
             virtual ~StreamCore() = default;
 
             void tls_emit_data(const uint8_t data[], std::size_t size) override
                {
-               m_send_buffer.commit(
-                  boost::asio::buffer_copy(m_send_buffer.prepare(size), boost::asio::buffer(data, size))
+               m_stream.m_send_buffer.commit(
+                  boost::asio::buffer_copy(m_stream.m_send_buffer.prepare(size), boost::asio::buffer(data, size))
                );
                }
 
             void tls_record_received(uint64_t, const uint8_t data[], std::size_t size) override
                {
-               m_receive_buffer.commit(
-                  boost::asio::buffer_copy(m_receive_buffer.prepare(size), boost::asio::const_buffer(data, size))
+               m_stream.m_receive_buffer.commit(
+                  boost::asio::buffer_copy(m_stream.m_receive_buffer.prepare(size), boost::asio::const_buffer(data, size))
                );
                }
 
             void tls_alert(Botan::TLS::Alert alert) override
                {
-               BOTAN_UNUSED(alert);
+               if(alert.type() == Botan::TLS::Alert::CLOSE_NOTIFY)
+                  {
+                  m_stream.set_shutdown_received();
+                  // Channel::process_alert will automatically write the corresponding close_notify response to the
+                  // send_buffer and close the native_handle after this function returns.
+                  }
                }
 
             std::chrono::milliseconds tls_verify_cert_chain_ocsp_timeout() const override
@@ -583,9 +611,9 @@ class Stream
                const std::string& hostname,
                const TLS::Policy& policy) override
                {
-               if(m_tls_context.has_verify_callback())
+               if(m_stream.m_context.has_verify_callback())
                   {
-                  m_tls_context.get_verify_callback()(cert_chain, ocsp_responses, trusted_roots, usage, hostname, policy);
+                  m_stream.m_context.get_verify_callback()(cert_chain, ocsp_responses, trusted_roots, usage, hostname, policy);
                   }
                else
                   {
@@ -593,9 +621,8 @@ class Stream
                   }
                }
 
-            boost::beast::flat_buffer& m_receive_buffer;
-            boost::beast::flat_buffer& m_send_buffer;
-            Context& m_tls_context;
+         private:
+            Stream& m_stream;
          };
 
       const boost::asio::mutable_buffer& input_buffer() { return m_input_buffer; }
@@ -698,6 +725,33 @@ class Stream
             }
          }
 
+      /**
+       * @brief Map an EOF error_code returned by the underlying transport according to state of the SSL session.
+       *
+       * Returns a const reference to the error code object, suitable for passing to a completion handler.
+       * This method corresponds to the method map_error_code in Boost.Asio's SSL engine.
+       */
+      const boost::system::error_code map_error_code(boost::system::error_code& ec)
+         {
+         // We only want to map the error::eof code.
+         if(ec != boost::asio::error::eof)
+            {
+            return ec;
+            }
+
+         // TODO
+         // If there's data yet to be read, it's an error.
+         // -> ec = StreamError::StreamTruncated;
+
+         // Otherwise, the peer should have negotiated a proper shutdown.
+         if(!shutdown_received())
+            {
+            ec = StreamError::StreamTruncated;
+            }
+
+         return ec;
+         }
+
       //! @brief Catch exceptions and set an error_code
       template <typename Fun>
       void try_with_error_code(Fun f, boost::system::error_code& ec)
@@ -720,6 +774,15 @@ class Stream
             }
          }
 
+      void set_shutdown_sent()
+         {
+         m_shutdown_sent = true;
+         }
+
+      void set_shutdown_received()
+         {
+         m_shutdown_received = true;
+         }
 
       Context&                  m_context;
       StreamLayer               m_nextLayer;
@@ -729,6 +792,9 @@ class Stream
 
       StreamCore                m_core;
       std::unique_ptr<ChannelT> m_native_handle;
+
+      bool m_shutdown_sent;
+      bool m_shutdown_received;
 
       // Buffer space used to read input intended for the core
       std::vector<uint8_t>              m_input_buffer_space;

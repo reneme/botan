@@ -149,6 +149,9 @@ class AsyncReadOperation : public AsyncBase<Handler, typename Stream::executor_t
                   m_stream.native_handle()->received_data(
                      static_cast<const uint8_t*>(read_buffer.data()), read_buffer.size()
                   );
+
+                  if (m_stream.native_handle()->is_closed())
+                     { ec = boost::asio::error::eof; }
                   }
                catch(const TLS_Exception& e)
                   {
@@ -186,6 +189,7 @@ class AsyncReadOperation : public AsyncBase<Handler, typename Stream::executor_t
                ec = m_ec;
                }
 
+            m_stream.map_error_code(ec);
             this->complete_now(ec, m_decodedBytes);
             }
          }
@@ -251,6 +255,7 @@ class AsyncWriteOperation : public AsyncBase<Handler, typename Stream::executor_
                ec = m_ec;
                }
 
+            m_stream.map_error_code(ec);
             // The size of the sent TLS record can differ from the size of the payload due to TLS encryption. We need to
             // tell the handler how many bytes of the original data we already processed.
             this->complete_now(ec, m_plainBytesTransferred);
@@ -348,6 +353,7 @@ class AsyncHandshakeOperation : public AsyncBase<Handler, typename Stream::execu
                ec = m_ec;
                }
 
+            m_stream.map_error_code(ec);
             this->complete_now(ec);
             }
          }

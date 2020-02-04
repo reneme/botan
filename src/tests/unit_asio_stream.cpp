@@ -247,7 +247,7 @@ class Asio_Stream_Tests final : public Test
          {
          net::io_context ioc;
          // fail right away
-         FailCount  fc{0, net::error::eof};
+         FailCount  fc{0, net::error::no_recovery};
          TestStream remote{ioc};
 
          auto ctx = get_context();
@@ -262,7 +262,7 @@ class Asio_Stream_Tests final : public Test
          auto handler = [&](const error_code &ec)
             {
             result.test_eq("does not activate channel", ssl.native_handle()->is_active(), false);
-            result.confirm("propagates error code", ec == net::error::eof);
+            result.confirm("propagates error code", ec == net::error::no_recovery);
             };
 
          ssl.async_handshake(Botan::TLS::CLIENT, handler);
@@ -468,7 +468,7 @@ class Asio_Stream_Tests final : public Test
          {
          net::io_context ioc;
          // fail right away
-         FailCount  fc{0, net::error::eof};
+         FailCount  fc{0, net::error::no_recovery};
          auto ctx = get_context();
          AsioStream ssl(ctx, ioc, fc);
          uint8_t    data[TEST_DATA_SIZE];
@@ -478,7 +478,7 @@ class Asio_Stream_Tests final : public Test
          auto read_handler = [&](const error_code &ec, std::size_t bytes_transferred)
             {
             result.test_eq("didn't transfer anything", bytes_transferred, 0);
-            result.confirm("propagates error code", ec == net::error::eof);
+            result.confirm("propagates error code", ec == net::error::no_recovery);
             };
 
          net::mutable_buffer buf {data, TEST_DATA_SIZE};
@@ -707,7 +707,7 @@ class Asio_Stream_Tests final : public Test
          {
          net::io_context ioc;
          // fail right away
-         FailCount  fc{0, net::error::eof};
+         FailCount  fc{0, net::error::no_recovery};
          TestStream remote{ioc};
 
          auto ctx = get_context();
@@ -719,7 +719,7 @@ class Asio_Stream_Tests final : public Test
          auto write_handler = [&](const error_code &ec, std::size_t bytes_transferred)
             {
             result.test_eq("committed some bytes to the core", bytes_transferred, TEST_DATA_SIZE);
-            result.confirm("propagates error code", ec == net::error::eof);
+            result.confirm("propagates error code", ec == net::error::no_recovery);
             };
 
          net::async_write(ssl, net::const_buffer(TEST_DATA, TEST_DATA_SIZE), write_handler);

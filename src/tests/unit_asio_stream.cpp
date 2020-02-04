@@ -178,7 +178,7 @@ class Asio_Stream_Tests final : public Test
          {
          net::io_context ioc;
          // fail right away
-         FailCount  fc{0, net::error::eof};
+         FailCount  fc{0, net::error::no_recovery};
          TestStream remote{ioc};
 
          auto ctx = get_context();
@@ -193,7 +193,7 @@ class Asio_Stream_Tests final : public Test
 
          Test::Result result("sync TLS handshake error");
          result.test_eq("does not activate channel", ssl.native_handle()->is_active(), false);
-         result.confirm("propagates error code", ec == net::error::eof);
+         result.confirm("propagates error code", ec == net::error::no_recovery);
          results.push_back(result);
          }
 
@@ -346,7 +346,7 @@ class Asio_Stream_Tests final : public Test
          {
          net::io_context ioc;
          // fail right away
-         FailCount  fc{0, net::error::eof};
+         FailCount  fc{0, net::error::no_recovery};
          TestStream remote{ioc};
 
          auto ctx = get_context();
@@ -360,7 +360,7 @@ class Asio_Stream_Tests final : public Test
 
          Test::Result result("sync read_some error");
          result.test_eq("didn't transfer anything", bytes_transferred, 0);
-         result.confirm("propagates error code", ec == net::error::eof);
+         result.confirm("propagates error code", ec == net::error::no_recovery);
 
          results.push_back(result);
          }
@@ -601,7 +601,7 @@ class Asio_Stream_Tests final : public Test
          {
          net::io_context ioc;
          // fail right away
-         FailCount  fc{0, net::error::eof};
+         FailCount  fc{0, net::error::no_recovery};
          TestStream remote{ioc};
 
          auto ctx = get_context();
@@ -614,7 +614,7 @@ class Asio_Stream_Tests final : public Test
 
          Test::Result result("sync write_some error");
          result.test_eq("didn't transfer anything", bytes_transferred, 0);
-         result.confirm("propagates error code", ec == net::error::eof);
+         result.confirm("propagates error code", ec == net::error::no_recovery);
 
          results.push_back(result);
          }

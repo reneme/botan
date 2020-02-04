@@ -229,6 +229,7 @@ class Stream
          while(!native_handle()->is_active() && !ec)
             {
             boost::asio::const_buffer read_buffer{input_buffer().data(), m_nextLayer.read_some(input_buffer(), ec)};
+            map_error_code(ec);
             if(ec)
                { return; }
 
@@ -406,6 +407,7 @@ class Stream
             { return copy_received_data(buffers); }
 
          boost::asio::const_buffer read_buffer{input_buffer().data(), m_nextLayer.read_some(input_buffer(), ec)};
+         map_error_code(ec);
          if(ec)
             { return 0; }
 
@@ -703,6 +705,7 @@ class Stream
             { return 0; }
 
          auto writtenBytes = boost::asio::write(m_nextLayer, send_buffer(), ec);
+         map_error_code(ec);
          consume_send_buffer(writtenBytes);
          return writtenBytes;
          }

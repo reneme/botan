@@ -190,18 +190,18 @@ class Server : public Side, public std::enable_shared_from_this<Server>
             m_result.confirm("received stream truncated error", ec == Botan::TLS::StreamTruncated);
             }
 
-         if(ec == net::error::eof || (m_short_read_expected && ec == Botan::TLS::StreamTruncated))
-            {
-            // TODO: Is this needed? At this point the channel should have written the close_notify to the buffer
-            // already
-            shutdown();
-            }
-         else
+         if (!ec)
             {
             m_result.check_ec("read_message", ec);
             m_result.set_timer("send_response");
             net::async_write(*m_stream, buffer(bytes_transferred),
                              std::bind(&Server::handle_write, shared_from_this(), _1));
+            }
+         else
+            {
+            // TODO: Is this needed? At this point the channel should have written the close_notify to the buffer
+            // already
+            shutdown();
             }
          }
 

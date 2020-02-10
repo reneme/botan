@@ -744,9 +744,13 @@ class Stream
             return ec;
             }
 
-         // TODO
-         // If there's data yet to be read, it's an error.
-         // -> ec = StreamError::StreamTruncated;
+         // If there's data yet to be written, it's an error.
+         // TODO: this is meant to handle the case that we received close_notify but peer didn't wait to receive ours
+         //       double-check that this is what we do here
+         if(has_data_to_send())
+            {
+            ec = StreamError::StreamTruncated;
+            }
 
          // Otherwise, the peer should have negotiated a proper shutdown.
          if(!shutdown_received())

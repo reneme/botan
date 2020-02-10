@@ -240,6 +240,15 @@ class Client : public Side
          }
 
       ssl_stream& stream() {return *m_stream; }
+
+      void close_socket()
+         {
+         // Shutdown on TCP level before closing the socket for portable behavior. Otherwise the peer will see a
+         // connection_reset error rather than EOF on Windows.
+         m_stream->lowest_layer().shutdown(tcp::socket::shutdown_both);
+         m_stream->lowest_layer().close();
+         }
+
    };
 
 #include <boost/asio/yield.hpp>
@@ -350,7 +359,7 @@ class Test_Eager_Close : public net::coroutine, public std::enable_shared_from_t
                });
 
             m_result.confirm("did not receive close_notify", !m_client.stream().shutdown_received());
-            m_client.stream().lowest_layer().close();
+            m_client.close_socket();
 
             m_result.stop_timer();
             }
@@ -406,7 +415,7 @@ class Test_Close_Without_Shutdown
                });
 
             m_result.confirm("received close_notify", !m_client.stream().shutdown_received());
-            m_client.stream().lowest_layer().close();
+            m_client.close_socket();
             }
          }
 
@@ -457,7 +466,7 @@ class Test_No_Shutdown_Response : public net::coroutine, public std::enable_shar
 
             // close the socket rather than shutting down
             m_server->expect_short_read();
-            m_client.stream().lowest_layer().close();
+            m_client.close_socket();
             }
          }
 

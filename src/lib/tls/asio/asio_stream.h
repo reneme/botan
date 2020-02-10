@@ -41,8 +41,6 @@ namespace TLS {
 /**
  * @brief boost::asio compatible SSL/TLS stream
  *
- * Currently only the TLS::Client specialization is implemented.
- *
  * @tparam StreamLayer type of the next layer, usually a network socket
  * @tparam ChannelT type of the native_handle, defaults to Botan::TLS::Channel, only needed for testing purposes
  */
@@ -204,7 +202,7 @@ class Stream
        * The function call will block until handshaking is complete or an error occurs.
        *
        * @param side The type of handshaking to be performed, i.e. as a client or as a server.
-       * @throws boost::system::system_error if error occured, or if the chosen Connection_Side is not available
+       * @throws boost::system::system_error if error occured
        */
       void handshake(Connection_Side side)
          {
@@ -255,7 +253,6 @@ class Stream
        * @param side The type of handshaking to be performed, i.e. as a client or as a server.
        * @param handler The handler to be called when the handshake operation completes.
        *                The equivalent function signature of the handler must be: void(boost::system::error_code)
-       * @throws NotImplemented if Connection_Side is not CLIENT
        */
       template <typename HandshakeHandler>
       auto async_handshake(Connection_Side side, HandshakeHandler&& handler) ->
@@ -672,7 +669,7 @@ class Stream
        * Botan::TLS::Server.
        *
        * @param side The desired connection side (client or server)
-       * @param ec Set to NotImplemented when side is SERVER - currently only CLIENT is implemented
+       * @param ec Set to indicate what error occurred, if any.
        */
       template<class T = ChannelT>
       typename std::enable_if<std::is_same<Channel, T>::value>::type

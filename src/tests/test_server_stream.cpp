@@ -98,10 +98,16 @@ struct Result_Wrapper
          m_timer.cancel();
          }
 
-      void check_ec(const std::string& msg, const error_code& ec)
+      void expect_success(const std::string& msg, const error_code& ec)
          {
-         if(ec)
-            { m_result.test_failure(msg, ec.message()); }
+         error_code success;
+         expect_ec(msg, success, ec);
+         }
+
+      void expect_ec(const std::string& msg, const error_code& expected, const error_code& ec)
+         {
+         if(ec != expected)
+            { m_result.test_failure(msg, "Unexpected error code: " + ec.message()); }
          else
             { m_result.test_success(msg); }
          }
@@ -135,7 +141,7 @@ class Server : public Side, public std::enable_shared_from_this<Server>
          m_acceptor.bind(endpoint, ec);
          m_acceptor.listen(net::socket_base::max_listen_connections, ec);
 
-         m_result.check_ec("listen", ec);
+         m_result.expect_success("listen", ec);
 
          m_result.set_timer("accept");
          m_acceptor.async_accept(std::bind(&Server::start_session, shared_from_this(), _1, _2));
@@ -158,7 +164,7 @@ class Server : public Side, public std::enable_shared_from_this<Server>
       void start_session(const error_code& ec, tcp::socket socket)
          {
          // Note: If this fails with 'Operation canceled', it likely means the timer expired and the port is taken.
-         m_result.check_ec("accept", ec);
+         m_result.expect_success("accept", ec);
 
          // Note: If this was a real server, we should create a new session (with its own stream) for each accepted
          // connection. In this test we only have one connection.
@@ -171,13 +177,13 @@ class Server : public Side, public std::enable_shared_from_this<Server>
 
       void handshake(const error_code& ec)
          {
-         m_result.check_ec("handshake", ec);
+         m_result.expect_success("handshake", ec);
          handle_write(error_code{});
          }
 
       void handle_write(const error_code& ec)
          {
-         m_result.check_ec("send_response", ec);
+         m_result.expect_success("send_response", ec);
          m_result.set_timer("read_message");
          net::async_read(*m_stream, buffer(),
                          std::bind(&Server::handle_read, shared_from_this(), _1, _2));
@@ -187,12 +193,12 @@ class Server : public Side, public std::enable_shared_from_this<Server>
          {
          if(m_short_read_expected)
             {
-            m_result.confirm("received stream truncated error", ec == Botan::TLS::StreamTruncated);
+            m_result.expect_ec("received stream truncated error", Botan::TLS::StreamTruncated, ec);
             }
 
          if (!ec)
             {
-            m_result.check_ec("read_message", ec);
+            m_result.expect_success("read_message", ec);
             m_result.set_timer("send_response");
             net::async_write(*m_stream, buffer(bytes_transferred),
                              std::bind(&Server::handle_write, shared_from_this(), _1));
@@ -208,7 +214,7 @@ class Server : public Side, public std::enable_shared_from_this<Server>
       void on_shutdown(const error_code& ec)
          {
          m_result.stop_timer();
-         m_result.check_ec("shutdown", ec);
+         m_result.expect_success("shutdown", ec);
          }
 
    private:
@@ -261,35 +267,35 @@ class Test_Conversation : public net::coroutine, public std::enable_shared_from_
             m_result.set_timer("connect");
             yield net::async_connect(m_client.stream().lowest_layer(), k_endpoints,
                                      std::bind(test_case, shared_from_this(), _1));
-            m_result.check_ec("connect", ec);
+            m_result.expect_success("connect", ec);
 
             m_result.set_timer("handshake");
             yield m_client.stream().async_handshake(Botan::TLS::Connection_Side::CLIENT,
                                                     std::bind(test_case, shared_from_this(), _1));
-            m_result.check_ec("handshake", ec);
+            m_result.expect_success("handshake", ec);
 
             m_result.set_timer("send_message");
             yield net::async_write(m_client.stream(),
                                    net::buffer(message, max_msg_length),
                                    std::bind(test_case, shared_from_this(), _1));
-            m_result.check_ec("send_message", ec);
+            m_result.expect_success("send_message", ec);
 
             m_result.set_timer("receive_response");
             yield net::async_read(m_client.stream(),
                                   m_client.buffer(),
                                   std::bind(test_case, shared_from_this(), _1));
-            m_result.check_ec("receive_response", ec);
+            m_result.expect_success("receive_response", ec);
             m_result.confirm("correct message", m_client.message() == std::string(message));
 
             m_result.set_timer("shutdown");
             yield m_client.stream().async_shutdown(std::bind(test_case, shared_from_this(), _1));
-            m_result.check_ec("shutdown", ec);
+            m_result.expect_success("shutdown", ec);
 
             m_result.set_timer("await close_notify");
             yield net::async_read(m_client.stream(), m_client.buffer(),
                                   std::bind(test_case, shared_from_this(), _1));
             m_result.confirm("received close_notify", m_client.stream().shutdown_received());
-            m_result.confirm("closed with EOF", ec == net::error::eof);
+            m_result.expect_ec("closed with EOF", net::error::eof, ec);
 
             m_result.stop_timer();
             }
@@ -321,16 +327,16 @@ class Test_Eager_Close : public net::coroutine, public std::enable_shared_from_t
             m_result.set_timer("connect");
             yield net::async_connect(m_client.stream().lowest_layer(), k_endpoints,
                                      std::bind(test_case, shared_from_this(), _1));
-            m_result.check_ec("connect", ec);
+            m_result.expect_success("connect", ec);
 
             m_result.set_timer("handshake");
             yield m_client.stream().async_handshake(Botan::TLS::Connection_Side::CLIENT,
                                                     std::bind(test_case, shared_from_this(), _1));
-            m_result.check_ec("handshake", ec);
+            m_result.expect_success("handshake", ec);
 
             m_result.set_timer("shutdown");
             yield m_client.stream().async_shutdown(std::bind(test_case, shared_from_this(), _1));
-            m_result.check_ec("shutdown", ec);
+            m_result.expect_success("shutdown", ec);
 
             m_result.set_timer("receive_response");
             // Start the async_read but do not yield for it to complete. Instead, close the socket and expect the read
@@ -340,7 +346,7 @@ class Test_Eager_Close : public net::coroutine, public std::enable_shared_from_t
                                             [this, self](const error_code &ec, size_t)
                {
                // check that "waiting" for the server's shutdown turns out to be aborted
-               m_result.confirm("async_read is aborted", ec == net::error::operation_aborted);
+               m_result.expect_ec("async_read is aborted", net::error::operation_aborted, ec);
                });
 
             m_result.confirm("did not receive close_notify", !m_client.stream().shutdown_received());
@@ -378,12 +384,12 @@ class Test_Close_Without_Shutdown
             m_result.set_timer("connect");
             yield net::async_connect(m_client.stream().lowest_layer(), k_endpoints,
                                      std::bind(test_case, shared_from_this(), _1));
-            m_result.check_ec("connect", ec);
+            m_result.expect_success("connect", ec);
 
             m_result.set_timer("handshake");
             yield m_client.stream().async_handshake(Botan::TLS::Connection_Side::CLIENT,
                                                     std::bind(test_case, shared_from_this(), _1));
-            m_result.check_ec("handshake", ec);
+            m_result.expect_success("handshake", ec);
 
             m_server->expect_short_read();
 
@@ -396,7 +402,7 @@ class Test_Close_Without_Shutdown
                {
                m_result.stop_timer();
                // check that "waiting" for the server's shutdown turns out to be aborted
-               m_result.confirm("async_read is aborted", ec == net::error::operation_aborted);
+               m_result.expect_ec("async_read is aborted", net::error::operation_aborted, ec);
                });
 
             m_result.confirm("received close_notify", !m_client.stream().shutdown_received());
@@ -432,19 +438,19 @@ class Test_No_Shutdown_Response : public net::coroutine, public std::enable_shar
             m_result.set_timer("connect");
             yield net::async_connect(m_client.stream().lowest_layer(), k_endpoints,
                                      std::bind(test_case, shared_from_this(), _1));
-            m_result.check_ec("connect", ec);
+            m_result.expect_success("connect", ec);
 
             m_result.set_timer("handshake");
             yield m_client.stream().async_handshake(Botan::TLS::Connection_Side::CLIENT,
                                                     std::bind(test_case, shared_from_this(), _1));
-            m_result.check_ec("handshake", ec);
+            m_result.expect_success("handshake", ec);
 
             m_server->shutdown();
 
             m_result.set_timer("read close_notify");
             yield net::async_read(m_client.stream(), m_client.buffer(),
                                   std::bind(test_case, shared_from_this(), _1));
-            m_result.confirm("read gives EOF", ec == net::error::eof);
+            m_result.expect_ec("read gives EOF", net::error::eof, ec);
             m_result.confirm("received close_notify", m_client.stream().shutdown_received());
 
             m_result.stop_timer();

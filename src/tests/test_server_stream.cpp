@@ -171,7 +171,7 @@ class Server : public Side, public std::enable_shared_from_this<Server>
       void shutdown()
          {
          m_result.set_timer("shutdown");
-         m_stream->async_shutdown(std::bind(&Server::on_shutdown, shared_from_this(), _1));
+         m_stream->async_shutdown(std::bind(&Server::handle_shutdown, shared_from_this(), _1));
          }
 
       Result result() { return m_result.result(); }
@@ -220,15 +220,15 @@ class Server : public Side, public std::enable_shared_from_this<Server>
             net::async_write(*m_stream, buffer(bytes_transferred),
                              std::bind(&Server::handle_write, shared_from_this(), _1));
             }
-         else
+         else if (m_stream->shutdown_received())
             {
-            // TODO: Is this needed? At this point the channel should have written the close_notify to the buffer
-            // already
+            m_result.expect_ec("received EOF after close_notify", net::error::eof, ec);
+            m_result.set_timer("send_close_notify_response");
             shutdown();
             }
          }
 
-      void on_shutdown(const error_code& ec)
+      void handle_shutdown(const error_code& ec)
          {
          m_result.stop_timer();
          m_result.expect_success("shutdown", ec);

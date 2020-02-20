@@ -232,7 +232,7 @@ class Stream
          while(!native_handle()->is_active() && !ec)
             {
             boost::asio::const_buffer read_buffer{input_buffer().data(), m_nextLayer.read_some(input_buffer(), ec)};
-            map_error_code(ec);
+            detect_stream_truncation(ec);
             if(ec)
                { return; }
 
@@ -295,6 +295,8 @@ class Stream
        * This function is used to shut down SSL on the stream. The function call will block until SSL has been shut down
        * or an error occurs. Note that this will not close the lowest layer.
        *
+       * Note that this can be used in reaction of a received shutdown alert from the peer.
+       *
        * @param ec Set to indicate what error occured, if any.
        */
       void shutdown(boost::system::error_code& ec)
@@ -315,6 +317,8 @@ class Stream
        *
        * This function is used to shut down SSL on the stream. The function call will block until SSL has been shut down
        * or an error occurs. Note that this will not close the lowest layer.
+       *
+       * Note that this can be used in reaction of a received shutdown alert from the peer.
        *
        * @throws boost::system::system_error if error occured
        */
@@ -358,6 +362,8 @@ class Stream
        * @brief Asynchronously shut down SSL on the stream.
        *
        * This function call always returns immediately.
+       *
+       * Note that this can be used in reaction of a received shutdown alert from the peer.
        *
        * @param handler The handler to be called when the shutdown operation completes.
        *                The equivalent function signature of the handler must be: void(boost::system::error_code)
@@ -409,7 +415,7 @@ class Stream
             { return copy_received_data(buffers); }
 
          boost::asio::const_buffer read_buffer{input_buffer().data(), m_nextLayer.read_some(input_buffer(), ec)};
-         map_error_code(ec);
+         detect_stream_truncation(ec);
          if(ec)
             { return 0; }
 
@@ -707,7 +713,7 @@ class Stream
             { return 0; }
 
          auto writtenBytes = boost::asio::write(m_nextLayer, send_buffer(), ec);
-         map_error_code(ec);
+         detect_stream_truncation(ec);
          consume_send_buffer(writtenBytes);
          return writtenBytes;
          }
@@ -734,9 +740,9 @@ class Stream
        * @brief Map an EOF error_code returned by the underlying transport according to state of the SSL session.
        *
        * Returns a const reference to the error code object, suitable for passing to a completion handler.
-       * This method corresponds to the method map_error_code in Boost.Asio's SSL engine.
+       * This method corresponds to the method 'map_error_code' in Boost.Asio's SSL engine.
        */
-      const boost::system::error_code map_error_code(boost::system::error_code& ec)
+      const boost::system::error_code detect_stream_truncation(boost::system::error_code& ec)
          {
          // We only want to map the error::eof code.
          if(ec != boost::asio::error::eof)
@@ -744,9 +750,13 @@ class Stream
             return ec;
             }
 
-         // If there's data yet to be written, it's an error.
-         // TODO: this is meant to handle the case that we received close_notify but peer didn't wait to receive ours
-         //       double-check that this is what we do here
+         // Happy case: peer sent 'close_notify' and we are awaiting a chance to reply with our 'close_notify'
+         if(shutdown_received() && has_data_to_send())
+            {
+            return ec;
+            }
+
+         // If there's data (other than 'close_notify') yet to be written, it's an error.
          if(has_data_to_send())
             {
             ec = StreamError::StreamTruncated;

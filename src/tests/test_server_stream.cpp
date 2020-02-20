@@ -63,6 +63,22 @@ struct Side
 
       std::string message() const { return std::string(m_data); }
 
+    // This is a CompletionCondition for net::async_read().
+    // Our toy protocol always expects a single \0-terminated string.
+    std::size_t received_zero_byte(const boost::system::error_code& error,
+                                   std::size_t bytes_transferred)
+    {
+       if (error) {
+           return 0;
+       }
+
+       if (bytes_transferred > 0 && m_data[bytes_transferred - 1] == '\0') {
+           return 0;
+       }
+
+       return max_msg_length - bytes_transferred;
+    };
+
    protected:
       Botan::AutoSeeded_RNG m_rng;
       Basic_Credentials_Manager m_credentials_manager;
@@ -186,6 +202,7 @@ class Server : public Side, public std::enable_shared_from_this<Server>
          m_result.expect_success("send_response", ec);
          m_result.set_timer("read_message");
          net::async_read(*m_stream, buffer(),
+                         std::bind(&Server::received_zero_byte, shared_from_this(), _1, _2),
                          std::bind(&Server::handle_read, shared_from_this(), _1, _2));
          }
 
@@ -269,7 +286,7 @@ class Test_Conversation : public net::coroutine, public std::enable_shared_from_
       void run(const error_code& ec)
          {
          static auto test_case = &Test_Conversation::run;
-         const char message[max_msg_length] = "Time is an illusion. Lunchtime doubly so.";
+         const std::string message("Time is an illusion. Lunchtime doubly so.");
 
          reenter(*this)
             {
@@ -285,16 +302,17 @@ class Test_Conversation : public net::coroutine, public std::enable_shared_from_
 
             m_result.set_timer("send_message");
             yield net::async_write(m_client.stream(),
-                                   net::buffer(message, max_msg_length),
+                                   net::buffer(message.c_str(), message.size() + 1), // including \0 termination
                                    std::bind(test_case, shared_from_this(), _1));
             m_result.expect_success("send_message", ec);
 
             m_result.set_timer("receive_response");
             yield net::async_read(m_client.stream(),
                                   m_client.buffer(),
+                                  std::bind(&Client::received_zero_byte, &m_client, _1, _2),
                                   std::bind(test_case, shared_from_this(), _1));
             m_result.expect_success("receive_response", ec);
-            m_result.confirm("correct message", m_client.message() == std::string(message));
+            m_result.confirm("correct message", m_client.message() == message);
 
             m_result.set_timer("shutdown");
             yield m_client.stream().async_shutdown(std::bind(test_case, shared_from_this(), _1));

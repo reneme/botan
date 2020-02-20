@@ -140,7 +140,7 @@ class AsyncReadOperation : public AsyncBase<Handler, typename Stream::executor_t
          {
          reenter(this)
             {
-            if(bytes_transferred > 0 && !ec)
+            if(bytes_transferred > 0 && (!ec || ec == boost::asio::error::eof))
                {
                // We have received encrypted data from the network, now hand it to TLS::Channel for decryption.
                boost::asio::const_buffer read_buffer{m_stream.input_buffer().data(), bytes_transferred};
@@ -149,9 +149,6 @@ class AsyncReadOperation : public AsyncBase<Handler, typename Stream::executor_t
                   m_stream.native_handle()->received_data(
                      static_cast<const uint8_t*>(read_buffer.data()), read_buffer.size()
                   );
-
-                  if (m_stream.native_handle()->is_closed())
-                     { ec = boost::asio::error::eof; }
                   }
                catch(const TLS_Exception& e)
                   {
@@ -165,6 +162,17 @@ class AsyncReadOperation : public AsyncBase<Handler, typename Stream::executor_t
                   {
                   ec = Botan::ErrorType::Unknown;
                   }
+               }
+
+            if (m_stream.shutdown_received())
+               {
+               // we just received a 'close_notify' from the peer and don't expect any more data
+               ec = boost::asio::error::eof;
+               }
+            else if (ec == boost::asio::error::eof)
+               {
+               // we did not expect this disconnection from the peer
+               ec = StreamError::StreamTruncated;
                }
 
             if(!m_stream.has_received_data() && !ec && boost::asio::buffer_size(m_buffers) > 0)
@@ -189,7 +197,6 @@ class AsyncReadOperation : public AsyncBase<Handler, typename Stream::executor_t
                ec = m_ec;
                }
 
-            m_stream.detect_stream_truncation(ec);
             this->complete_now(ec, m_decodedBytes);
             }
          }
@@ -246,6 +253,12 @@ class AsyncWriteOperation : public AsyncBase<Handler, typename Stream::executor_
                return;
                }
 
+            if (ec == boost::asio::error::eof && !m_stream.shutdown_received())
+               {
+               // transport layer was closed by peer without receiving 'close_notify'
+               ec = StreamError::StreamTruncated;
+               }
+
             if(!isContinuation)
                {
                // Make sure the handler is not called without an intermediate initiating function.
@@ -255,7 +268,6 @@ class AsyncWriteOperation : public AsyncBase<Handler, typename Stream::executor_
                ec = m_ec;
                }
 
-            m_stream.detect_stream_truncation(ec);
             // The size of the sent TLS record can differ from the size of the payload due to TLS encryption. We need to
             // tell the handler how many bytes of the original data we already processed.
             this->complete_now(ec, m_plainBytesTransferred);
@@ -298,6 +310,11 @@ class AsyncHandshakeOperation : public AsyncBase<Handler, typename Stream::execu
          {
          reenter(this)
             {
+            if(ec == boost::asio::error::eof)
+               {
+               ec = StreamError::StreamTruncated;
+               }
+
             if(bytesTransferred > 0 && !ec)
                {
                // Provide encrypted TLS data received from the network to TLS::Channel for decryption
@@ -353,7 +370,6 @@ class AsyncHandshakeOperation : public AsyncBase<Handler, typename Stream::execu
                ec = m_ec;
                }
 
-            m_stream.detect_stream_truncation(ec);
             this->complete_now(ec);
             }
          }

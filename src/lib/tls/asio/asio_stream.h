@@ -232,7 +232,6 @@ class Stream
          while(!native_handle()->is_active() && !ec)
             {
             boost::asio::const_buffer read_buffer{input_buffer().data(), m_nextLayer.read_some(input_buffer(), ec)};
-            detect_stream_truncation(ec);
             if(ec)
                { return; }
 
@@ -415,14 +414,28 @@ class Stream
             { return copy_received_data(buffers); }
 
          boost::asio::const_buffer read_buffer{input_buffer().data(), m_nextLayer.read_some(input_buffer(), ec)};
-         detect_stream_truncation(ec);
-         if(ec)
+         if(ec && ec != boost::asio::error::eof) // Peer might have sent 'close_notify' and disconnected immediately.
+                                                 // Then, ->received_data() will initiate a graceful shutdown.
             { return 0; }
 
          try_with_error_code([&]
             {
             native_handle()->received_data(static_cast<const uint8_t*>(read_buffer.data()), read_buffer.size());
             }, ec);
+
+         if (ec && ec != boost::asio::error::eof) // something went wrong in ->received_data()
+            { return 0; }
+
+         if (native_handle()->is_closed())
+            {
+            // we just received a 'close_notify' from the peer and don't expect any more data
+            ec = boost::asio::error::eof;
+            }
+         else if (ec == boost::asio::error::eof)
+            {
+            // we did not expect this disconnection from the peer
+            ec = StreamError::StreamTruncated;
+            }
 
          return !ec ? copy_received_data(buffers) : 0;
          }
@@ -713,8 +726,14 @@ class Stream
             { return 0; }
 
          auto writtenBytes = boost::asio::write(m_nextLayer, send_buffer(), ec);
-         detect_stream_truncation(ec);
          consume_send_buffer(writtenBytes);
+
+         if (ec == boost::asio::error::eof && !shutdown_received())
+            {
+            // transport layer was closed by peer without receiving 'close_notify'
+            ec = StreamError::StreamTruncated;
+            }
+
          return writtenBytes;
          }
 

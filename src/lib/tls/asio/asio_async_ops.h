@@ -144,24 +144,7 @@ class AsyncReadOperation : public AsyncBase<Handler, typename Stream::executor_t
                {
                // We have received encrypted data from the network, now hand it to TLS::Channel for decryption.
                boost::asio::const_buffer read_buffer{m_stream.input_buffer().data(), bytes_transferred};
-               try
-                  {
-                  m_stream.native_handle()->received_data(
-                     static_cast<const uint8_t*>(read_buffer.data()), read_buffer.size()
-                  );
-                  }
-               catch(const TLS_Exception& e)
-                  {
-                  ec = e.type();
-                  }
-               catch(const Botan::Exception& e)
-                  {
-                  ec = e.error_type();
-                  }
-               catch(...)
-                  {
-                  ec = Botan::ErrorType::Unknown;
-                  }
+               m_stream.received_data(read_buffer, ec);
                }
 
             if (m_stream.shutdown_received())
@@ -319,24 +302,7 @@ class AsyncHandshakeOperation : public AsyncBase<Handler, typename Stream::execu
                {
                // Provide encrypted TLS data received from the network to TLS::Channel for decryption
                boost::asio::const_buffer read_buffer {m_stream.input_buffer().data(), bytesTransferred};
-               try
-                  {
-                  m_stream.native_handle()->received_data(
-                     static_cast<const uint8_t*>(read_buffer.data()), read_buffer.size()
-                  );
-                  }
-               catch(const TLS_Exception& e)
-                  {
-                  ec = e.type();
-                  }
-               catch(const Botan::Exception& e)
-                  {
-                  ec = e.error_type();
-                  }
-               catch(...)
-                  {
-                  ec = Botan::ErrorType::Unknown;
-                  }
+               m_stream.received_data(read_buffer, ec);
                }
 
             if(m_stream.has_data_to_send() && !ec)

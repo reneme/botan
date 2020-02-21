@@ -235,10 +235,7 @@ class Stream
             if(ec)
                { return; }
 
-            try_with_error_code([&]
-               {
-               native_handle()->received_data(static_cast<const uint8_t*>(read_buffer.data()), read_buffer.size());
-               }, ec);
+            received_data(read_buffer, ec);
 
             send_pending_encrypted_data(ec);
             }
@@ -417,12 +414,9 @@ class Stream
          if(ec)
             { return 0; }
 
-         try_with_error_code([&]
-            {
-            native_handle()->received_data(static_cast<const uint8_t*>(read_buffer.data()), read_buffer.size());
-            }, ec);
+         received_data(read_buffer, ec);
 
-         if (ec) // something went wrong in ->received_data()
+         if (ec) // something went wrong in received_data()
             { return 0; }
 
          if (shutdown_received())
@@ -752,6 +746,14 @@ class Stream
                native_handle()->send(static_cast<const uint8_t*>(buffer.data()), buffer.size());
                }, ec);
             }
+         }
+
+      void received_data(const boost::asio::const_buffer& read_buffer, boost::system::error_code& ec)
+         {
+         try_with_error_code([&]
+            {
+            native_handle()->received_data(static_cast<const uint8_t*>(read_buffer.data()), read_buffer.size());
+            }, ec);
          }
 
       /**

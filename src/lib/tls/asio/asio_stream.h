@@ -414,8 +414,7 @@ class Stream
             { return copy_received_data(buffers); }
 
          boost::asio::const_buffer read_buffer{input_buffer().data(), m_nextLayer.read_some(input_buffer(), ec)};
-         if(ec && ec != boost::asio::error::eof) // Peer might have sent 'close_notify' and disconnected immediately.
-                                                 // Then, ->received_data() will initiate a graceful shutdown.
+         if(ec)
             { return 0; }
 
          try_with_error_code([&]
@@ -423,10 +422,10 @@ class Stream
             native_handle()->received_data(static_cast<const uint8_t*>(read_buffer.data()), read_buffer.size());
             }, ec);
 
-         if (ec && ec != boost::asio::error::eof) // something went wrong in ->received_data()
+         if (ec) // something went wrong in ->received_data()
             { return 0; }
 
-         if (native_handle()->is_closed())
+         if (shutdown_received())
             {
             // we just received a 'close_notify' from the peer and don't expect any more data
             ec = boost::asio::error::eof;

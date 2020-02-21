@@ -365,6 +365,62 @@ class Test_Conversation : public net::coroutine, public std::enable_shared_from_
       Result_Wrapper m_result;
    };
 
+class Test_Conversation_Sync
+   {
+   public:
+      Test_Conversation_Sync(net::io_context& ioc, std::shared_ptr<Server> /* unused */)
+         : m_client(ioc),
+           m_result(ioc, "Test Conversation Sync") {}
+
+      ~Test_Conversation_Sync()
+         {
+         m_client_thread.join();
+         }
+
+      void run(const error_code&)
+         {
+         m_client_thread = std::thread(std::bind(&Test_Conversation_Sync::run_synchronous_client, this));
+         }
+
+      void run_synchronous_client()
+         {
+         const std::string message("Time is an illusion. Lunchtime doubly so.");
+         error_code ec;
+
+         net::connect(m_client.stream().lowest_layer(), k_endpoints, ec);
+         m_result.expect_success("connect", ec);
+
+         m_client.stream().handshake(Botan::TLS::Connection_Side::CLIENT, ec);
+         m_result.expect_success("handshake", ec);
+
+         net::write(m_client.stream(),
+                    net::buffer(message.c_str(), message.size() + 1), // including \0 termination
+                    ec);
+         m_result.expect_success("send_message", ec);
+
+         net::read(m_client.stream(),
+                   m_client.buffer(),
+                   std::bind(&Client::received_zero_byte, &m_client, _1, _2),
+                   ec);
+         m_result.expect_success("receive_response", ec);
+         m_result.confirm("correct message", m_client.message() == message);
+
+         m_client.stream().shutdown(ec);
+         m_result.expect_success("shutdown", ec);
+
+         net::read(m_client.stream(), m_client.buffer(), ec);
+         m_result.confirm("received close_notify", m_client.stream().shutdown_received());
+         m_result.expect_ec("closed with EOF", net::error::eof, ec);
+         }
+
+      Result result() { return m_result.result(); }
+
+   private:
+      Client m_client;
+      Result_Wrapper m_result;
+      std::thread m_client_thread;
+   };
+
 /* In this test case the client shuts down the SSL connection, but does not wait for the server's response before
  * closing the socket. Accordingly, it will not receive the server's close_notify alert. Instead, the async_read
  * operation will be aborted. The server should be able to successfully shutdown nonetheless.
@@ -408,6 +464,47 @@ class Test_Eager_Close : public net::coroutine, public std::enable_shared_from_t
       Result_Wrapper m_result;
    };
 
+class Test_Eager_Close_Sync
+   {
+   public:
+      Test_Eager_Close_Sync(net::io_context& ioc, std::shared_ptr<Server> /* unused */)
+         : m_client(ioc),
+           m_result(ioc, "Test Eager Close Sync") {}
+
+      ~Test_Eager_Close_Sync()
+         {
+         m_client_thread.join();
+         }
+
+      void run(const error_code&)
+         {
+         m_client_thread = std::thread(std::bind(&Test_Eager_Close_Sync::run_synchronous_client, this));
+         }
+
+      void run_synchronous_client()
+         {
+         error_code ec;
+
+         net::connect(m_client.stream().lowest_layer(), k_endpoints, ec);
+         m_result.expect_success("connect", ec);
+
+         m_client.stream().handshake(Botan::TLS::Connection_Side::CLIENT, ec);
+         m_result.expect_success("handshake", ec);
+
+         m_client.stream().shutdown(ec);
+         m_result.expect_success("shutdown", ec);
+
+         m_client.close_socket();
+         m_result.confirm("did not receive close_notify", !m_client.stream().shutdown_received());
+         }
+
+      Result result() { return m_result.result(); }
+
+   private:
+      Client m_client;
+      Result_Wrapper m_result;
+      std::thread m_client_thread;
+   };
 /* In this test case the client closes the socket without properly shutting down the connection.
  * The server should see a StreamTruncated error.
  */
@@ -450,6 +547,48 @@ class Test_Close_Without_Shutdown
       Client m_client;
       Result_Wrapper m_result;
       std::shared_ptr<Server> m_server;
+   };
+
+class Test_Close_Without_Shutdown_Sync
+   {
+   public:
+      Test_Close_Without_Shutdown_Sync(net::io_context& ioc, std::shared_ptr<Server> server)
+         : m_client(ioc),
+           m_result(ioc, "Test Close Without Shutdown Sync"),
+           m_server(server) {}
+
+      ~Test_Close_Without_Shutdown_Sync()
+         {
+         m_client_thread.join();
+         }
+
+      void run(const error_code&)
+         {
+         m_client_thread = std::thread(std::bind(&Test_Close_Without_Shutdown_Sync::run_synchronous_client, this));
+         }
+
+      void run_synchronous_client()
+         {
+         error_code ec;
+         net::connect(m_client.stream().lowest_layer(), k_endpoints, ec);
+         m_result.expect_success("connect", ec);
+
+         m_client.stream().handshake(Botan::TLS::Connection_Side::CLIENT, ec);
+         m_result.expect_success("handshake", ec);
+
+         m_server->expect_short_read();
+
+         m_client.close_socket();
+         m_result.confirm("did not receive close_notify", !m_client.stream().shutdown_received());
+         }
+
+      Result result() { return m_result.result(); }
+
+   private:
+      Client m_client;
+      Result_Wrapper m_result;
+      std::shared_ptr<Server> m_server;
+      std::thread m_client_thread;
    };
 
 /* In this test case the server shuts down the connection but the client doesn't send the corresponding close_notify
@@ -504,6 +643,54 @@ class Test_No_Shutdown_Response : public net::coroutine, public std::enable_shar
       std::shared_ptr<Server> m_server;
    };
 
+class Test_No_Shutdown_Response_Sync
+   {
+   public:
+      Test_No_Shutdown_Response_Sync(net::io_context& ioc, std::shared_ptr<Server> server)
+         : m_client(ioc),
+           m_result(ioc, "Test No Shutdown Response Sync"),
+           m_server(server) {}
+
+      ~Test_No_Shutdown_Response_Sync()
+         {
+         m_client_thread.join();
+         }
+
+      void run(const error_code&)
+         {
+         m_client_thread = std::thread(std::bind(&Test_No_Shutdown_Response_Sync::run_synchronous_client, this));
+         }
+
+      void run_synchronous_client()
+         {
+         error_code ec;
+         net::connect(m_client.stream().lowest_layer(), k_endpoints, ec);
+         m_result.expect_success("connect", ec);
+
+         m_client.stream().handshake(Botan::TLS::Connection_Side::CLIENT, ec);
+         m_result.expect_success("handshake", ec);
+
+         m_server->shutdown();
+
+         net::read(m_client.stream(), m_client.buffer(), ec);
+         m_result.expect_ec("read gives EOF", net::error::eof, ec);
+         m_result.confirm("received close_notify", m_client.stream().shutdown_received());
+         m_result.confirm("did not send close_notify", !m_client.stream().shutdown_sent());
+
+         // close the socket rather than shutting down
+         m_server->expect_short_read();
+         m_client.close_socket();
+         }
+
+      Result result() { return m_result.result(); }
+
+   private:
+      Client m_client;
+      Result_Wrapper m_result;
+      std::shared_ptr<Server> m_server;
+      std::thread m_client_thread;
+   };
+
 #include <boost/asio/unyield.hpp>
 
 template<typename TestT>
@@ -548,6 +735,18 @@ class Tls_Server_Stream_Tests final : public Test
 
          auto r4 = run_test_case<Test_No_Shutdown_Response>();
          results.insert(results.end(), r4.cbegin(), r4.cend());
+
+         auto r5 = run_test_case<Test_Conversation_Sync>();
+         results.insert(results.end(), r5.cbegin(), r5.cend());
+
+         auto r6 = run_test_case<Test_Eager_Close_Sync>();
+         results.insert(results.end(), r6.cbegin(), r6.cend());
+
+         auto r7 = run_test_case<Test_Close_Without_Shutdown_Sync>();
+         results.insert(results.end(), r7.cbegin(), r7.cend());
+
+         auto r8 = run_test_case<Test_No_Shutdown_Response_Sync>();
+         results.insert(results.end(), r8.cbegin(), r8.cend());
 
          return results;
          }

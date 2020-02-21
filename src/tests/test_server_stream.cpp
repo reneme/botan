@@ -63,21 +63,23 @@ struct Side
 
       std::string message() const { return std::string(m_data); }
 
-    // This is a CompletionCondition for net::async_read().
-    // Our toy protocol always expects a single \0-terminated string.
-    std::size_t received_zero_byte(const boost::system::error_code& error,
-                                   std::size_t bytes_transferred)
-    {
-       if (error) {
-           return 0;
-       }
+      // This is a CompletionCondition for net::async_read().
+      // Our toy protocol always expects a single \0-terminated string.
+      std::size_t received_zero_byte(const boost::system::error_code& error,
+                                     std::size_t bytes_transferred)
+         {
+         if(error)
+            {
+            return 0;
+            }
 
-       if (bytes_transferred > 0 && m_data[bytes_transferred - 1] == '\0') {
-           return 0;
-       }
+         if(bytes_transferred > 0 && m_data[bytes_transferred - 1] == '\0')
+            {
+            return 0;
+            }
 
-       return max_msg_length - bytes_transferred;
-    };
+         return max_msg_length - bytes_transferred;
+         };
 
    protected:
       Botan::AutoSeeded_RNG m_rng;
@@ -131,6 +133,11 @@ struct Result_Wrapper
       void confirm(const std::string& msg, bool condition)
          {
          m_result.confirm(msg, condition);
+         }
+
+      void test_failure(const std::string& msg)
+         {
+         m_result.test_failure(msg);
          }
 
    private:
@@ -211,27 +218,39 @@ class Server : public Side, public std::enable_shared_from_this<Server>
          if(m_short_read_expected)
             {
             m_result.expect_ec("received stream truncated error", Botan::TLS::StreamTruncated, ec);
+            quit();
+            return;
             }
 
-         if (!ec)
+         if(!ec)
             {
             m_result.expect_success("read_message", ec);
             m_result.set_timer("send_response");
             net::async_write(*m_stream, buffer(bytes_transferred),
                              std::bind(&Server::handle_write, shared_from_this(), _1));
             }
-         else if (m_stream->shutdown_received())
+         else if(m_stream->shutdown_received())
             {
             m_result.expect_ec("received EOF after close_notify", net::error::eof, ec);
             m_result.set_timer("send_close_notify_response");
             shutdown();
             }
+         else
+            {
+            m_result.test_failure("Unexpected error code: " + ec.message());
+            quit();
+            }
          }
 
       void handle_shutdown(const error_code& ec)
          {
-         m_result.stop_timer();
          m_result.expect_success("shutdown", ec);
+         quit();
+         }
+
+      void quit()
+         {
+         m_result.stop_timer();
          }
 
    private:
@@ -262,6 +281,8 @@ class Client : public Side
          {
          // Shutdown on TCP level before closing the socket for portable behavior. Otherwise the peer will see a
          // connection_reset error rather than EOF on Windows.
+         // See the remark in
+         // https://www.boost.org/doc/libs/1_68_0/doc/html/boost_asio/reference/basic_stream_socket/close/overload1.html
          m_stream->lowest_layer().shutdown(tcp::socket::shutdown_both);
          m_stream->lowest_layer().close();
          }
@@ -364,22 +385,10 @@ class Test_Eager_Close : public net::coroutine, public std::enable_shared_from_t
             m_result.set_timer("shutdown");
             yield m_client.stream().async_shutdown(std::bind(test_case, shared_from_this(), _1));
             m_result.expect_success("shutdown", ec);
-
-            m_result.set_timer("receive_response");
-            // Start the async_read but do not yield for it to complete. Instead, close the socket and expect the read
-            // to be aborted.
-            auto self = shared_from_this();
-            /* no yield! */ net::async_read(m_client.stream(), m_client.buffer(),
-                                            [this, self](const error_code &ec, size_t)
-               {
-               // check that "waiting" for the server's shutdown turns out to be aborted
-               m_result.expect_ec("async_read is aborted", net::error::operation_aborted, ec);
-               });
-
-            m_result.confirm("did not receive close_notify", !m_client.stream().shutdown_received());
-            m_client.close_socket();
-
             m_result.stop_timer();
+
+            m_client.close_socket();
+            m_result.confirm("did not receive close_notify", !m_client.stream().shutdown_received());
             }
          }
 
@@ -391,7 +400,7 @@ class Test_Eager_Close : public net::coroutine, public std::enable_shared_from_t
    };
 
 /* In this test case the client closes the socket without properly shutting down the connection.
- * The server should see a short-read error.
+ * The server should see a StreamTruncated error.
  */
 class Test_Close_Without_Shutdown
    : public net::coroutine,
@@ -417,23 +426,12 @@ class Test_Close_Without_Shutdown
             yield m_client.stream().async_handshake(Botan::TLS::Connection_Side::CLIENT,
                                                     std::bind(test_case, shared_from_this(), _1));
             m_result.expect_success("handshake", ec);
+            m_result.stop_timer();
 
             m_server->expect_short_read();
 
-            m_result.set_timer("receive_response");
-            // Start the async_read but do not yield for it to complete. Instead, close the socket and expect the read
-            // to be aborted.
-            auto self = shared_from_this();
-            /* no yield! */ net::async_read(m_client.stream(), m_client.buffer(),
-                                            [this, self](const error_code &ec, size_t)
-               {
-               m_result.stop_timer();
-               // check that "waiting" for the server's shutdown turns out to be aborted
-               m_result.expect_ec("async_read is aborted", net::error::operation_aborted, ec);
-               });
-
-            m_result.confirm("received close_notify", !m_client.stream().shutdown_received());
             m_client.close_socket();
+            m_result.confirm("did not receive close_notify", !m_client.stream().shutdown_received());
             }
          }
 
@@ -479,6 +477,7 @@ class Test_No_Shutdown_Response : public net::coroutine, public std::enable_shar
                                   std::bind(test_case, shared_from_this(), _1));
             m_result.expect_ec("read gives EOF", net::error::eof, ec);
             m_result.confirm("received close_notify", m_client.stream().shutdown_received());
+            m_result.confirm("did not send close_notify", !m_client.stream().shutdown_sent());
 
             m_result.stop_timer();
 
@@ -529,10 +528,10 @@ class Tls_Server_Stream_Tests final : public Test
          {
          std::vector<Test::Result> results;
 
-         auto r1 = run_test_case<Test_Eager_Close>();
+         auto r1 = run_test_case<Test_Conversation>();
          results.insert(results.end(), r1.cbegin(), r1.cend());
 
-         auto r2 = run_test_case<Test_Conversation>();
+         auto r2 = run_test_case<Test_Eager_Close>();
          results.insert(results.end(), r2.cbegin(), r2.cend());
 
          auto r3 = run_test_case<Test_Close_Without_Shutdown>();

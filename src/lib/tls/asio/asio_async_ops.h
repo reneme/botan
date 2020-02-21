@@ -140,7 +140,7 @@ class AsyncReadOperation : public AsyncBase<Handler, typename Stream::executor_t
          {
          reenter(this)
             {
-            if(bytes_transferred > 0 && (!ec || ec == boost::asio::error::eof))
+            if(bytes_transferred > 0 && !ec)
                {
                // We have received encrypted data from the network, now hand it to TLS::Channel for decryption.
                boost::asio::const_buffer read_buffer{m_stream.input_buffer().data(), bytes_transferred};

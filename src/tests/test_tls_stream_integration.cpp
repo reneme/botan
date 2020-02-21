@@ -717,7 +717,7 @@ std::vector<Result> run_test_case()
 
 namespace Botan_Tests {
 
-class Tls_Server_Stream_Tests final : public Test
+class Tls_Stream_Integration_Tests final : public Test
    {
    public:
       std::vector<Test::Result> run() override
@@ -752,7 +752,7 @@ class Tls_Server_Stream_Tests final : public Test
          }
    };
 
-BOTAN_REGISTER_TEST("tls_server_stream", Tls_Server_Stream_Tests);
+BOTAN_REGISTER_TEST("tls_stream_integration", Tls_Stream_Integration_Tests);
 
 }  // namespace Botan_Tests
 

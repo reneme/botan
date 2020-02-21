@@ -177,6 +177,15 @@ class Server : public Side, public std::enable_shared_from_this<Server>
 
       void shutdown()
          {
+         error_code ec;
+         m_stream->shutdown(ec);
+         m_result.expect_success("server shutdown", ec);
+         m_result.confirm("server sent shutdown", m_stream->shutdown_sent());
+         quit();
+         }
+
+      void async_shutdown()
+         {
          m_result.set_timer("shutdown");
          m_stream->async_shutdown(std::bind(&Server::handle_shutdown, shared_from_this(), _1));
          }
@@ -233,7 +242,7 @@ class Server : public Side, public std::enable_shared_from_this<Server>
             {
             m_result.expect_ec("received EOF after close_notify", net::error::eof, ec);
             m_result.set_timer("send_close_notify_response");
-            shutdown();
+            async_shutdown();
             }
          else
             {

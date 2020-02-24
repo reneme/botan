@@ -152,7 +152,8 @@ class Server : public Side, public std::enable_shared_from_this<Server>
          : Side(server_cert(), server_key()),
            m_acceptor(ioc),
            m_result(ioc, "Server"),
-           m_short_read_expected(false) {}
+           m_short_read_expected(false),
+           m_idle_after_handshake(false) {}
 
       void listen()
          {
@@ -170,24 +171,23 @@ class Server : public Side, public std::enable_shared_from_this<Server>
          m_acceptor.async_accept(std::bind(&Server::start_session, shared_from_this(), _1, _2));
          }
 
+      void shutdown()
+         {
+         error_code shutdown_ec;
+         m_stream->shutdown(shutdown_ec);
+         m_result.expect_success("shutdown", shutdown_ec);
+         m_result.confirm("sent shutdown", m_stream->shutdown_sent());
+         handle_write(error_code{});
+         }
+
       void expect_short_read()
          {
          m_short_read_expected = true;
          }
 
-      void shutdown()
+      void idle_after_handshake()
          {
-         error_code ec;
-         m_stream->shutdown(ec);
-         m_result.expect_success("server shutdown", ec);
-         m_result.confirm("server sent shutdown", m_stream->shutdown_sent());
-         quit();
-         }
-
-      void async_shutdown()
-         {
-         m_result.set_timer("shutdown");
-         m_stream->async_shutdown(std::bind(&Server::handle_shutdown, shared_from_this(), _1));
+         m_idle_after_handshake = true;
          }
 
       Result result() { return m_result.result(); }
@@ -204,13 +204,14 @@ class Server : public Side, public std::enable_shared_from_this<Server>
 
          m_result.set_timer("handshake");
          m_stream->async_handshake(Botan::TLS::Connection_Side::SERVER,
-                                   std::bind(&Server::handshake, shared_from_this(), _1));
+                                   std::bind(&Server::handle_handshake, shared_from_this(), _1));
          }
 
-      void handshake(const error_code& ec)
+      void handle_handshake(const error_code& ec)
          {
          m_result.expect_success("handshake", ec);
-         handle_write(error_code{});
+         if(!m_idle_after_handshake)
+            { handle_write(error_code{}); }
          }
 
       void handle_write(const error_code& ec)
@@ -241,8 +242,8 @@ class Server : public Side, public std::enable_shared_from_this<Server>
          else if(m_stream->shutdown_received())
             {
             m_result.expect_ec("received EOF after close_notify", net::error::eof, ec);
-            m_result.set_timer("send_close_notify_response");
-            async_shutdown();
+            m_result.set_timer("shutdown");
+            m_stream->async_shutdown(std::bind(&Server::handle_shutdown, shared_from_this(), _1));
             }
          else
             {
@@ -266,6 +267,7 @@ class Server : public Side, public std::enable_shared_from_this<Server>
       tcp::acceptor m_acceptor;
       Result_Wrapper m_result;
       bool m_short_read_expected;
+      bool m_idle_after_handshake;
    };
 
 class Client : public Side
@@ -613,6 +615,9 @@ class Test_No_Shutdown_Response : public net::coroutine, public std::enable_shar
                                      std::bind(test_case, shared_from_this(), _1));
             m_result.expect_success("connect", ec);
 
+            m_server->expect_short_read();
+            m_server->idle_after_handshake();
+
             m_result.set_timer("handshake");
             yield m_client.stream().async_handshake(Botan::TLS::Connection_Side::CLIENT,
                                                     std::bind(test_case, shared_from_this(), _1));
@@ -630,7 +635,6 @@ class Test_No_Shutdown_Response : public net::coroutine, public std::enable_shar
             m_result.stop_timer();
 
             // close the socket rather than shutting down
-            m_server->expect_short_read();
             m_client.close_socket();
             }
          }
@@ -667,6 +671,9 @@ class Test_No_Shutdown_Response_Sync
          net::connect(m_client.stream().lowest_layer(), k_endpoints, ec);
          m_result.expect_success("connect", ec);
 
+         m_server->expect_short_read();
+         m_server->idle_after_handshake();
+
          m_client.stream().handshake(Botan::TLS::Connection_Side::CLIENT, ec);
          m_result.expect_success("handshake", ec);
 
@@ -678,7 +685,6 @@ class Test_No_Shutdown_Response_Sync
          m_result.confirm("did not send close_notify", !m_client.stream().shutdown_sent());
 
          // close the socket rather than shutting down
-         m_server->expect_short_read();
          m_client.close_socket();
          }
 

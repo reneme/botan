@@ -700,7 +700,7 @@ class Test_No_Shutdown_Response_Sync
 #include <boost/asio/unyield.hpp>
 
 template<typename TestT>
-std::vector<Result> run_test_case()
+void run_test_case(std::vector<Result>& results)
    {
    net::io_context ioc;
 
@@ -716,7 +716,8 @@ std::vector<Result> run_test_case()
       }
    catch(Timeout_Exception&) { /* the test result will already contain a failure */ }
 
-   return {s->result(), t->result()};
+   results.push_back(s->result());
+   results.push_back(t->result());
    }
 
 }  // namespace
@@ -730,29 +731,14 @@ class Tls_Stream_Integration_Tests final : public Test
          {
          std::vector<Test::Result> results;
 
-         auto r1 = run_test_case<Test_Conversation>();
-         results.insert(results.end(), r1.cbegin(), r1.cend());
-
-         auto r2 = run_test_case<Test_Eager_Close>();
-         results.insert(results.end(), r2.cbegin(), r2.cend());
-
-         auto r3 = run_test_case<Test_Close_Without_Shutdown>();
-         results.insert(results.end(), r3.cbegin(), r3.cend());
-
-         auto r4 = run_test_case<Test_No_Shutdown_Response>();
-         results.insert(results.end(), r4.cbegin(), r4.cend());
-
-         auto r5 = run_test_case<Test_Conversation_Sync>();
-         results.insert(results.end(), r5.cbegin(), r5.cend());
-
-         auto r6 = run_test_case<Test_Eager_Close_Sync>();
-         results.insert(results.end(), r6.cbegin(), r6.cend());
-
-         auto r7 = run_test_case<Test_Close_Without_Shutdown_Sync>();
-         results.insert(results.end(), r7.cbegin(), r7.cend());
-
-         auto r8 = run_test_case<Test_No_Shutdown_Response_Sync>();
-         results.insert(results.end(), r8.cbegin(), r8.cend());
+         run_test_case<Test_Conversation>(results);
+         run_test_case<Test_Eager_Close>(results);
+         run_test_case<Test_Close_Without_Shutdown>(results);
+         run_test_case<Test_No_Shutdown_Response>(results);
+         run_test_case<Test_Conversation_Sync>(results);
+         run_test_case<Test_Eager_Close_Sync>(results);
+         run_test_case<Test_Close_Without_Shutdown_Sync>(results);
+         run_test_case<Test_No_Shutdown_Response_Sync>(results);
 
          return results;
          }

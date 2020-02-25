@@ -64,7 +64,6 @@ class Stream
          : m_context(context)
          , m_nextLayer(std::forward<Args>(args)...)
          , m_core(*this)
-         , m_shutdown_sent(false)
          , m_shutdown_received(false)
          , m_input_buffer_space(MAX_CIPHERTEXT_SIZE, '\0')
          , m_input_buffer(m_input_buffer_space.data(), m_input_buffer_space.size())
@@ -85,7 +84,6 @@ class Stream
          : m_context(context)
          , m_nextLayer(std::forward<Arg>(arg))
          , m_core(*this)
-         , m_shutdown_sent(false)
          , m_shutdown_received(false)
          , m_input_buffer_space(MAX_CIPHERTEXT_SIZE, '\0')
          , m_input_buffer(m_input_buffer_space.data(), m_input_buffer_space.size())
@@ -303,9 +301,6 @@ class Stream
             }, ec);
 
          send_pending_encrypted_data(ec);
-
-         if(!ec)
-            { set_shutdown_sent(); }
          }
 
       /**
@@ -345,8 +340,6 @@ class Stream
             Wrapper(Handler&& handler) : _handler(std::forward<Handler>(handler)) {}
             void operator()(boost::system::error_code ec, size_t)
                {
-               if(!ec)
-                  { /* TODO: set_shutdown_sent */ }
                _handler(ec);
                }
          private:
@@ -551,17 +544,10 @@ class Stream
 
       //! @}
 
-      // TODO: do we need these public? asio ssl stream doesn't have them, but they are very useful for testing
-      bool shutdown_sent() const
-         {
-         return m_shutdown_sent;
-         }
-
       bool shutdown_received() const
          {
          return m_shutdown_received;
          }
-
 
    protected:
       template <class H, class S, class M, class A> friend class detail::AsyncReadOperation;
@@ -813,11 +799,6 @@ class Stream
             }
          }
 
-      void set_shutdown_sent()
-         {
-         m_shutdown_sent = true;
-         }
-
       void set_shutdown_received()
          {
          m_shutdown_received = true;
@@ -832,7 +813,6 @@ class Stream
       StreamCore                m_core;
       std::unique_ptr<ChannelT> m_native_handle;
 
-      bool m_shutdown_sent;
       bool m_shutdown_received;
 
       // Buffer space used to read input intended for the core

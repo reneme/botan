@@ -206,7 +206,6 @@ class Server : public Side, public std::enable_shared_from_this<Server>
          error_code shutdown_ec;
          m_stream->shutdown(shutdown_ec);
          m_result.expect_success("shutdown", shutdown_ec);
-         m_result.confirm("sent shutdown", m_stream->shutdown_sent());
          handle_write(error_code{});
          }
 
@@ -627,7 +626,6 @@ class Test_No_Shutdown_Response : public TestBase, public net::coroutine,
                                   std::bind(test_case, shared_from_this(), _1));
             m_result.expect_ec("read gives EOF", net::error::eof, ec);
             m_result.confirm("received close_notify", m_client.stream().shutdown_received());
-            m_result.confirm("did not send close_notify", !m_client.stream().shutdown_sent());
 
             m_result.stop_timer();
 
@@ -661,7 +659,6 @@ class Test_No_Shutdown_Response_Sync : public Synchronous_Test
          net::read(m_client.stream(), m_client.buffer(), ec);
          m_result.expect_ec("read gives EOF", net::error::eof, ec);
          m_result.confirm("received close_notify", m_client.stream().shutdown_received());
-         m_result.confirm("did not send close_notify", !m_client.stream().shutdown_sent());
 
          // close the socket rather than shutting down
          m_client.close_socket();

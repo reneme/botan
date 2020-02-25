@@ -214,8 +214,7 @@ class Server : public Side, public std::enable_shared_from_this<Server>
       void handle_handshake(const error_code& ec)
          {
          m_result.expect_success("handshake", ec);
-         if(!m_idle_after_handshake)
-            { handle_write(error_code{}); }
+         handle_write(error_code{});
          }
 
       void handle_write(const error_code& ec)
@@ -286,7 +285,6 @@ class Server : public Side, public std::enable_shared_from_this<Server>
       tcp::acceptor m_acceptor;
       Result_Wrapper m_result;
       bool m_short_read_expected;
-      bool m_idle_after_handshake;
    };
 
 class Client : public Side

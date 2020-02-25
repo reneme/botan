@@ -152,8 +152,16 @@ class Server : public Side, public std::enable_shared_from_this<Server>
          : Side(server_cert(), server_key()),
            m_acceptor(ioc),
            m_result(ioc, "Server"),
-           m_short_read_expected(false),
-           m_idle_after_handshake(false) {}
+           m_short_read_expected(false) {}
+
+      // Control messages
+      // The messages below can be used by the test clients in order to configure the server's behavior during a test
+      // case.
+      //
+      // Tell the server that the next read should result in a StreamTruncated error
+      std::string expect_short_read_message = "SHORT_READ";
+      // Prepare the server for the test case "Shutdown No Response"
+      std::string prepare_shutdown_no_response_message = "SHUTDOWN_NOW";
 
       void listen()
          {
@@ -171,23 +179,9 @@ class Server : public Side, public std::enable_shared_from_this<Server>
          m_acceptor.async_accept(std::bind(&Server::start_session, shared_from_this(), _1, _2));
          }
 
-      void shutdown()
-         {
-         error_code shutdown_ec;
-         m_stream->shutdown(shutdown_ec);
-         m_result.expect_success("shutdown", shutdown_ec);
-         m_result.confirm("sent shutdown", m_stream->shutdown_sent());
-         handle_write(error_code{});
-         }
-
       void expect_short_read()
          {
          m_short_read_expected = true;
-         }
-
-      void idle_after_handshake()
-         {
-         m_idle_after_handshake = true;
          }
 
       Result result() { return m_result.result(); }
@@ -206,6 +200,16 @@ class Server : public Side, public std::enable_shared_from_this<Server>
          m_stream->async_handshake(Botan::TLS::Connection_Side::SERVER,
                                    std::bind(&Server::handle_handshake, shared_from_this(), _1));
          }
+
+      void shutdown()
+         {
+         error_code shutdown_ec;
+         m_stream->shutdown(shutdown_ec);
+         m_result.expect_success("shutdown", shutdown_ec);
+         m_result.confirm("sent shutdown", m_stream->shutdown_sent());
+         handle_write(error_code{});
+         }
+
 
       void handle_handshake(const error_code& ec)
          {
@@ -232,24 +236,39 @@ class Server : public Side, public std::enable_shared_from_this<Server>
             return;
             }
 
-         if(!ec)
+         if(ec)
             {
-            m_result.expect_success("read_message", ec);
-            m_result.set_timer("send_response");
-            net::async_write(*m_stream, buffer(bytes_transferred),
-                             std::bind(&Server::handle_write, shared_from_this(), _1));
+            if(m_stream->shutdown_received())
+               {
+               m_result.expect_ec("received EOF after close_notify", net::error::eof, ec);
+               m_result.set_timer("shutdown");
+               m_stream->async_shutdown(std::bind(&Server::handle_shutdown, shared_from_this(), _1));
+               }
+            else
+               {
+               m_result.test_failure("Unexpected error code: " + ec.message());
+               quit();
+               }
+            return;
             }
-         else if(m_stream->shutdown_received())
+
+         m_result.expect_success("read_message", ec);
+
+         if(message() == prepare_shutdown_no_response_message)
             {
-            m_result.expect_ec("received EOF after close_notify", net::error::eof, ec);
-            m_result.set_timer("shutdown");
-            m_stream->async_shutdown(std::bind(&Server::handle_shutdown, shared_from_this(), _1));
+            m_short_read_expected = true;
+            shutdown();
+            return;
             }
-         else
+
+         if(message() == expect_short_read_message)
             {
-            m_result.test_failure("Unexpected error code: " + ec.message());
-            quit();
+            m_short_read_expected = true;
             }
+
+         m_result.set_timer("send_response");
+         net::async_write(*m_stream, buffer(bytes_transferred),
+                          std::bind(&Server::handle_write, shared_from_this(), _1));
          }
 
       void handle_shutdown(const error_code& ec)
@@ -534,9 +553,24 @@ class Test_Close_Without_Shutdown
             yield m_client.stream().async_handshake(Botan::TLS::Connection_Side::CLIENT,
                                                     std::bind(test_case, shared_from_this(), _1));
             m_result.expect_success("handshake", ec);
-            m_result.stop_timer();
 
-            m_server->expect_short_read();
+            // send the control message to configure the server to expect a short-read
+            m_result.set_timer("send expect_short_read message");
+            yield net::async_write(m_client.stream(),
+                                   net::buffer(m_server->expect_short_read_message.c_str(),
+                                               m_server->expect_short_read_message.size() + 1), // including \0 termination
+                                   std::bind(test_case, shared_from_this(), _1));
+            m_result.expect_success("send expect_short_read message", ec);
+
+            // read the confirmation of the control message above
+            m_result.set_timer("receive_response");
+            yield net::async_read(m_client.stream(),
+                                  m_client.buffer(),
+                                  std::bind(&Client::received_zero_byte, &m_client, _1, _2),
+                                  std::bind(test_case, shared_from_this(), _1));
+            m_result.expect_success("receive_response", ec);
+
+            m_result.stop_timer();
 
             m_client.close_socket();
             m_result.confirm("did not receive close_notify", !m_client.stream().shutdown_received());
@@ -615,16 +649,20 @@ class Test_No_Shutdown_Response : public net::coroutine, public std::enable_shar
                                      std::bind(test_case, shared_from_this(), _1));
             m_result.expect_success("connect", ec);
 
-            m_server->expect_short_read();
-            m_server->idle_after_handshake();
-
             m_result.set_timer("handshake");
             yield m_client.stream().async_handshake(Botan::TLS::Connection_Side::CLIENT,
                                                     std::bind(test_case, shared_from_this(), _1));
             m_result.expect_success("handshake", ec);
 
-            m_server->shutdown();
+            // send a control message to make the server shut down
+            m_result.set_timer("send shutdown message");
+            yield net::async_write(m_client.stream(),
+                                   net::buffer(m_server->prepare_shutdown_no_response_message.c_str(),
+                                               m_server->prepare_shutdown_no_response_message.size() + 1), // including \0 termination
+                                   std::bind(test_case, shared_from_this(), _1));
+            m_result.expect_success("send shutdown message", ec);
 
+            // read the server's close-notify message
             m_result.set_timer("read close_notify");
             yield net::async_read(m_client.stream(), m_client.buffer(),
                                   std::bind(test_case, shared_from_this(), _1));
@@ -671,13 +709,14 @@ class Test_No_Shutdown_Response_Sync
          net::connect(m_client.stream().lowest_layer(), k_endpoints, ec);
          m_result.expect_success("connect", ec);
 
-         m_server->expect_short_read();
-         m_server->idle_after_handshake();
-
          m_client.stream().handshake(Botan::TLS::Connection_Side::CLIENT, ec);
          m_result.expect_success("handshake", ec);
 
-         m_server->shutdown();
+         net::write(m_client.stream(),
+                    net::buffer(m_server->prepare_shutdown_no_response_message.c_str(),
+                                m_server->prepare_shutdown_no_response_message.size() + 1), // including \0 termination
+                    ec);
+         m_result.expect_success("send expect_short_read message", ec);
 
          net::read(m_client.stream(), m_client.buffer(), ec);
          m_result.expect_ec("read gives EOF", net::error::eof, ec);

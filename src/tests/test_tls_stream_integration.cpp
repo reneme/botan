@@ -321,18 +321,56 @@ class Client : public Side
 
 #include <boost/asio/yield.hpp>
 
+class TestBase
+   {
+   public:
+      TestBase(net::io_context& ioc, std::shared_ptr<Server> server, const std::string& name)
+         : m_client(ioc),
+           m_server(server),
+           m_result(ioc, name) {}
+
+      virtual void finishAsynchronousWork() {}
+
+      Result result() { return m_result.result(); }
+
+   protected:
+      Client m_client;
+      std::shared_ptr<Server> m_server;
+      Result_Wrapper m_result;
+   };
+
+class Synchronous_Test : public TestBase
+   {
+   public:
+      using TestBase::TestBase;
+
+      void finishAsynchronousWork() override
+         {
+         m_client_thread.join();
+         }
+
+      void run(const error_code&)
+         {
+         m_client_thread = std::thread(std::bind(&Synchronous_Test::run_synchronous_client, this));
+         }
+
+      virtual void run_synchronous_client() = 0;
+
+   private:
+      std::thread m_client_thread;
+   };
+
 /* In this test case both parties perform the handshake, exchange a message, and do a full shutdown.
  *
  * The client expects the server to echo the same message it sent. The client then initiates the shutdown. The server is
  * expected to receive a close_notify and complete its shutdown with an error_code Success, the client is expected to
  * receive a close_notify and complete its shutdown with an error_code EOF.
  */
-class Test_Conversation : public net::coroutine, public std::enable_shared_from_this<Test_Conversation>
+class Test_Conversation : public TestBase, public net::coroutine, public std::enable_shared_from_this<Test_Conversation>
    {
    public:
-      Test_Conversation(net::io_context& ioc, std::shared_ptr<Server> /* unused */)
-         : m_client(ioc),
-           m_result(ioc, "Test Conversation") {}
+      Test_Conversation(net::io_context& ioc, std::shared_ptr<Server> server)
+         : TestBase(ioc, server, "Test Conversation") {}
 
       void run(const error_code& ec)
          {
@@ -378,32 +416,15 @@ class Test_Conversation : public net::coroutine, public std::enable_shared_from_
             m_result.stop_timer();
             }
          }
-
-      Result result() { return m_result.result(); }
-
-   private:
-      Client m_client;
-      Result_Wrapper m_result;
    };
 
-class Test_Conversation_Sync
+class Test_Conversation_Sync : public Synchronous_Test
    {
    public:
-      Test_Conversation_Sync(net::io_context& ioc, std::shared_ptr<Server> /* unused */)
-         : m_client(ioc),
-           m_result(ioc, "Test Conversation Sync") {}
+      Test_Conversation_Sync(net::io_context& ioc, std::shared_ptr<Server> server)
+         : Synchronous_Test(ioc, server, "Test Conversation Sync") {}
 
-      ~Test_Conversation_Sync()
-         {
-         m_client_thread.join();
-         }
-
-      void run(const error_code&)
-         {
-         m_client_thread = std::thread(std::bind(&Test_Conversation_Sync::run_synchronous_client, this));
-         }
-
-      void run_synchronous_client()
+      void run_synchronous_client() override
          {
          const std::string message("Time is an illusion. Lunchtime doubly so.");
          error_code ec;
@@ -433,25 +454,17 @@ class Test_Conversation_Sync
          m_result.confirm("received close_notify", m_client.stream().shutdown_received());
          m_result.expect_ec("closed with EOF", net::error::eof, ec);
          }
-
-      Result result() { return m_result.result(); }
-
-   private:
-      Client m_client;
-      Result_Wrapper m_result;
-      std::thread m_client_thread;
    };
 
 /* In this test case the client shuts down the SSL connection, but does not wait for the server's response before
  * closing the socket. Accordingly, it will not receive the server's close_notify alert. Instead, the async_read
  * operation will be aborted. The server should be able to successfully shutdown nonetheless.
  */
-class Test_Eager_Close : public net::coroutine, public std::enable_shared_from_this<Test_Eager_Close>
+class Test_Eager_Close : public TestBase, public net::coroutine, public std::enable_shared_from_this<Test_Eager_Close>
    {
    public:
-      Test_Eager_Close(net::io_context& ioc, std::shared_ptr<Server> /* unused */)
-         : m_client(ioc),
-           m_result(ioc, "Test Eager Close") {}
+      Test_Eager_Close(net::io_context& ioc, std::shared_ptr<Server> server)
+         : TestBase(ioc, server, "Test Eager Close") {}
 
       void run(const error_code& ec)
          {
@@ -477,30 +490,13 @@ class Test_Eager_Close : public net::coroutine, public std::enable_shared_from_t
             m_result.confirm("did not receive close_notify", !m_client.stream().shutdown_received());
             }
          }
-
-      Result result() { return m_result.result(); }
-
-   private:
-      Client m_client;
-      Result_Wrapper m_result;
    };
 
-class Test_Eager_Close_Sync
+class Test_Eager_Close_Sync : public Synchronous_Test
    {
    public:
-      Test_Eager_Close_Sync(net::io_context& ioc, std::shared_ptr<Server> /* unused */)
-         : m_client(ioc),
-           m_result(ioc, "Test Eager Close Sync") {}
-
-      ~Test_Eager_Close_Sync()
-         {
-         m_client_thread.join();
-         }
-
-      void run(const error_code&)
-         {
-         m_client_thread = std::thread(std::bind(&Test_Eager_Close_Sync::run_synchronous_client, this));
-         }
+      Test_Eager_Close_Sync(net::io_context& ioc, std::shared_ptr<Server> server)
+         : Synchronous_Test(ioc, server, "Test Eager Close Sync") {}
 
       void run_synchronous_client()
          {
@@ -518,26 +514,19 @@ class Test_Eager_Close_Sync
          m_client.close_socket();
          m_result.confirm("did not receive close_notify", !m_client.stream().shutdown_received());
          }
-
-      Result result() { return m_result.result(); }
-
-   private:
-      Client m_client;
-      Result_Wrapper m_result;
-      std::thread m_client_thread;
    };
+
 /* In this test case the client closes the socket without properly shutting down the connection.
  * The server should see a StreamTruncated error.
  */
 class Test_Close_Without_Shutdown
-   : public net::coroutine,
+   : public TestBase,
+     public net::coroutine,
      public std::enable_shared_from_this<Test_Close_Without_Shutdown>
    {
    public:
       Test_Close_Without_Shutdown(net::io_context& ioc, std::shared_ptr<Server> server)
-         : m_client(ioc),
-           m_result(ioc, "Test Close Without Shutdown"),
-           m_server(server) {}
+         : TestBase(ioc, server, "Test Close Without Shutdown") {}
 
       void run(const error_code& ec)
          {
@@ -576,32 +565,13 @@ class Test_Close_Without_Shutdown
             m_result.confirm("did not receive close_notify", !m_client.stream().shutdown_received());
             }
          }
-
-      Result result() { return m_result.result(); }
-
-   private:
-      Client m_client;
-      Result_Wrapper m_result;
-      std::shared_ptr<Server> m_server;
    };
 
-class Test_Close_Without_Shutdown_Sync
+class Test_Close_Without_Shutdown_Sync : public Synchronous_Test
    {
    public:
       Test_Close_Without_Shutdown_Sync(net::io_context& ioc, std::shared_ptr<Server> server)
-         : m_client(ioc),
-           m_result(ioc, "Test Close Without Shutdown Sync"),
-           m_server(server) {}
-
-      ~Test_Close_Without_Shutdown_Sync()
-         {
-         m_client_thread.join();
-         }
-
-      void run(const error_code&)
-         {
-         m_client_thread = std::thread(std::bind(&Test_Close_Without_Shutdown_Sync::run_synchronous_client, this));
-         }
+         : Synchronous_Test(ioc, server, "Test Close Without Shutdown Sync") {}
 
       void run_synchronous_client()
          {
@@ -617,27 +587,18 @@ class Test_Close_Without_Shutdown_Sync
          m_client.close_socket();
          m_result.confirm("did not receive close_notify", !m_client.stream().shutdown_received());
          }
-
-      Result result() { return m_result.result(); }
-
-   private:
-      Client m_client;
-      Result_Wrapper m_result;
-      std::shared_ptr<Server> m_server;
-      std::thread m_client_thread;
    };
 
 /* In this test case the server shuts down the connection but the client doesn't send the corresponding close_notify
  * response. Instead, it closes the socket immediately.
  * The server should see a short-read error.
  */
-class Test_No_Shutdown_Response : public net::coroutine, public std::enable_shared_from_this<Test_No_Shutdown_Response>
+class Test_No_Shutdown_Response : public TestBase, public net::coroutine,
+   public std::enable_shared_from_this<Test_No_Shutdown_Response>
    {
    public:
       Test_No_Shutdown_Response(net::io_context& ioc, std::shared_ptr<Server> server)
-         : m_client(ioc),
-           m_result(ioc, "Test No Shutdown Response"),
-           m_server(server) {}
+         : TestBase(ioc, server, "Test No Shutdown Response") {}
 
       void run(const error_code& ec)
          {
@@ -676,32 +637,13 @@ class Test_No_Shutdown_Response : public net::coroutine, public std::enable_shar
             m_client.close_socket();
             }
          }
-
-      Result result() { return m_result.result(); }
-
-   private:
-      Client m_client;
-      Result_Wrapper m_result;
-      std::shared_ptr<Server> m_server;
    };
 
-class Test_No_Shutdown_Response_Sync
+class Test_No_Shutdown_Response_Sync : public Synchronous_Test
    {
    public:
       Test_No_Shutdown_Response_Sync(net::io_context& ioc, std::shared_ptr<Server> server)
-         : m_client(ioc),
-           m_result(ioc, "Test No Shutdown Response Sync"),
-           m_server(server) {}
-
-      ~Test_No_Shutdown_Response_Sync()
-         {
-         m_client_thread.join();
-         }
-
-      void run(const error_code&)
-         {
-         m_client_thread = std::thread(std::bind(&Test_No_Shutdown_Response_Sync::run_synchronous_client, this));
-         }
+         : Synchronous_Test(ioc, server, "Test No Shutdown Response Sync") {}
 
       void run_synchronous_client()
          {
@@ -726,14 +668,6 @@ class Test_No_Shutdown_Response_Sync
          // close the socket rather than shutting down
          m_client.close_socket();
          }
-
-      Result result() { return m_result.result(); }
-
-   private:
-      Client m_client;
-      Result_Wrapper m_result;
-      std::shared_ptr<Server> m_server;
-      std::thread m_client_thread;
    };
 
 #include <boost/asio/unyield.hpp>
@@ -754,6 +688,8 @@ void run_test_case(std::vector<Result>& results)
       ioc.run();
       }
    catch(Timeout_Exception&) { /* the test result will already contain a failure */ }
+
+   t->finishAsynchronousWork();
 
    results.push_back(s->result());
    results.push_back(t->result());

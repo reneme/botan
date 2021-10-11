@@ -52,8 +52,6 @@ class Certificate_Verify_Impl : public Handshake_Message
 
       explicit Certificate_Verify_Impl(const std::vector<uint8_t>& buf);
 
-      virtual ~Certificate_Verify_Impl() = 0;
-
       std::vector<uint8_t> serialize() const override;
    private:
       std::vector<uint8_t> m_signature;

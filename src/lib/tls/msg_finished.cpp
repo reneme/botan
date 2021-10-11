@@ -25,9 +25,7 @@ namespace TLS {
 Finished::Finished(Handshake_IO& io,
                    Handshake_State& state,
                    Connection_Side side) :
-   m_impl( state.version() == Protocol_Version::TLS_V13
-      ? TLS_Message_Factory::create<Finished_Impl, Protocol_Version::TLS_V13>(io, state, side)
-      : TLS_Message_Factory::create<Finished_Impl, Protocol_Version::TLS_V12>(io, state, side))
+   m_impl(MessageFactory::create<Finished_Impl>(state.version(), io, state, side))
    {
    }
 
@@ -43,9 +41,7 @@ std::vector<uint8_t> Finished::serialize() const
 * Deserialize a Finished message
 */
 Finished::Finished(const Protocol_Version& protocol_version, const std::vector<uint8_t>& buf):
-   m_impl( protocol_version == Protocol_Version::TLS_V13
-      ? TLS_Message_Factory::create<Finished_Impl, Protocol_Version::TLS_V13>(buf)
-      : TLS_Message_Factory::create<Finished_Impl, Protocol_Version::TLS_V12>(buf))
+   m_impl(MessageFactory::create<Finished_Impl>(protocol_version, buf))
    {
    }
 

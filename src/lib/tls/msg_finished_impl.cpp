@@ -74,8 +74,6 @@ std::vector<uint8_t> Finished_Impl::serialize() const
 Finished_Impl::Finished_Impl(const std::vector<uint8_t>& buf) : m_verification_data(buf)
    {}
 
-Finished_Impl::~Finished_Impl() = default;
-
 std::vector<uint8_t> Finished_Impl::verify_data() const
    {
    return m_verification_data;

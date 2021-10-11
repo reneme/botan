@@ -40,8 +40,6 @@ class Finished_Impl : public Handshake_Message
 
       explicit Finished_Impl(const std::vector<uint8_t>& buf);
 
-      virtual ~Finished_Impl() = 0;
-
       std::vector<uint8_t> serialize() const override;
    private:
       std::vector<uint8_t> m_verification_data;

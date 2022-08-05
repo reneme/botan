@@ -139,6 +139,12 @@ class Test_Options
       bool m_abort_on_first_fail;
    };
 
+struct Code_Location
+   {
+   std::string file;
+   unsigned int line;
+   };
+
 /*
 * A generic test which returns a set of results when run.
 * The tests may not all have the same type (for example test
@@ -158,6 +164,11 @@ class Test
          public:
             explicit Result(std::string who)
                : m_who(std::move(who))
+               , m_timestamp(std::chrono::system_clock::now()) {}
+
+            explicit Result(std::string who, std::string file, unsigned int line)
+               : m_who(who)
+               , m_code_location({file, line})
                , m_timestamp(std::chrono::system_clock::now()) {}
 
             /**
@@ -186,6 +197,11 @@ class Test
             const std::string& who() const
                {
                return m_who;
+               }
+
+            const std::optional<Code_Location>& code_location() const
+               {
+               return m_code_location;
                }
 
             const std::vector<std::string>& failures() const { return m_fail_log; }
@@ -547,6 +563,7 @@ class Test
 
          private:
             std::string m_who;
+            std::optional<Code_Location> m_code_location;
             std::chrono::system_clock::time_point m_timestamp;
             uint64_t m_started = 0;
             uint64_t m_ns_taken = 0;

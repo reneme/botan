@@ -38,6 +38,7 @@ void Test::Result::merge(const Result& other, bool ignore_test_name)
       }
 
    m_timestamp = std::min(m_timestamp, other.m_timestamp);
+   m_code_location = other.m_code_location;
    m_ns_taken += other.m_ns_taken;
    m_tests_passed += other.m_tests_passed;
    m_fail_log.insert(m_fail_log.end(), other.m_fail_log.begin(), other.m_fail_log.end());

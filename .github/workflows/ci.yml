@@ -149,49 +149,50 @@ jobs:
         if: always() # always run even if the previous step fails
         with:
           report_paths: 'test_results/*.xml'
+          github_token: ${{ github.token }}
 
-  x-compile:
-    name: "Cross-Compilation"
-    strategy:
-      fail-fast: false
+  # x-compile:
+  #   name: "Cross-Compilation"
+  #   strategy:
+  #     fail-fast: false
 
-      matrix:
-        include:
-          - target: cross-i386
-            compiler: gcc
-            host_os: ubuntu-latest
-          - target: cross-arm64
-            compiler: gcc
-            host_os: ubuntu-latest
-          - target: cross-ppc64
-            compiler: gcc
-            host_os: ubuntu-latest
-          - target: cross-android-arm32
-            compiler: clang
-            host_os: ubuntu-latest
-          - target: cross-android-arm64
-            compiler: clang
-            host_os: ubuntu-latest
-          - target: cross-win64
-            compiler: gcc
-            host_os: ubuntu-latest
-          - target: cross-ios-arm64
-            compiler: clang
-            host_os: macos-latest
+  #     matrix:
+  #       include:
+  #         - target: cross-i386
+  #           compiler: gcc
+  #           host_os: ubuntu-latest
+  #         - target: cross-arm64
+  #           compiler: gcc
+  #           host_os: ubuntu-latest
+  #         - target: cross-ppc64
+  #           compiler: gcc
+  #           host_os: ubuntu-latest
+  #         - target: cross-android-arm32
+  #           compiler: clang
+  #           host_os: ubuntu-latest
+  #         - target: cross-android-arm64
+  #           compiler: clang
+  #           host_os: ubuntu-latest
+  #         - target: cross-win64
+  #           compiler: gcc
+  #           host_os: ubuntu-latest
+  #         - target: cross-ios-arm64
+  #           compiler: clang
+  #           host_os: macos-latest
 
-    runs-on: ${{ matrix.host_os }}
+  #   runs-on: ${{ matrix.host_os }}
 
-    env:
-      ANDROID_NDK: android-ndk-r21d
+  #   env:
+  #     ANDROID_NDK: android-ndk-r21d
 
-    steps:
-      - uses: actions/checkout@v3
+  #   steps:
+  #     - uses: actions/checkout@v3
 
-      - name: Setup Build Agent
-        uses: ./.github/actions/setup-build-agent
-        with:
-          target: ${{ matrix.target }}
-          cache-key: ${{ matrix.host_os }}-${{ matrix.compiler }}-xcompile-${{ matrix.target }}
+  #     - name: Setup Build Agent
+  #       uses: ./.github/actions/setup-build-agent
+  #       with:
+  #         target: ${{ matrix.target }}
+  #         cache-key: ${{ matrix.host_os }}-${{ matrix.compiler }}-xcompile-${{ matrix.target }}
 
-      - name: Build and Test Botan
-        run: python3 ./src/scripts/ci_build.py --cc='${{ matrix.compiler }}' ${{ matrix.target }}
+  #     - name: Build and Test Botan
+  #       run: python3 ./src/scripts/ci_build.py --cc='${{ matrix.compiler }}' ${{ matrix.target }}

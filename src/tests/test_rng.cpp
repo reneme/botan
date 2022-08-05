@@ -761,6 +761,8 @@ class System_RNG_Tests final : public Test
          rng.clear(); // clear is a noop for system rng
          result.confirm("System RNG always seeded", rng.is_seeded());
 
+         result.confirm("Test should fail", false);
+
          rng.reseed(Botan::Entropy_Sources::global_sources(),
                     256,
                     std::chrono::milliseconds(100));

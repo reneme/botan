@@ -115,9 +115,9 @@ jobs:
           # - target: emscripten
           #   compiler: emcc
           #   host_os: macos-latest
-          # - target: baremetal
-          #   compiler: gcc
-          #   host_os: ubuntu-latest
+          - target: baremetal
+            compiler: gcc
+            host_os: ubuntu-latest
           - target: minimized
             compiler: gcc
             host_os: ubuntu-latest

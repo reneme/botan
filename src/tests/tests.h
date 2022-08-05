@@ -160,6 +160,11 @@ class Test
                : m_who(std::move(who))
                , m_timestamp(std::chrono::system_clock::now()) {}
 
+            explicit Result(std::string who, std::string file)
+               : m_who(who)
+               , m_file(file)
+               , m_timestamp(std::chrono::system_clock::now()) {}
+
             /**
              * This 'consolidation constructor' creates a single test result from
              * a vector of downstream test result objects.
@@ -186,6 +191,11 @@ class Test
             const std::string& who() const
                {
                return m_who;
+               }
+
+            const std::optional<std::string>& file() const
+               {
+               return m_file;
                }
 
             const std::vector<std::string>& failures() const { return m_fail_log; }
@@ -547,6 +557,7 @@ class Test
 
          private:
             std::string m_who;
+            std::optional<std::string> m_file;
             std::chrono::system_clock::time_point m_timestamp;
             uint64_t m_started = 0;
             uint64_t m_ns_taken = 0;

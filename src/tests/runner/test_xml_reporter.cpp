@@ -244,6 +244,11 @@ void XmlReporter::render_testcase(std::ostream& out, const TestSummary& test) co
       out << " time=\"" << format(test.elapsed_time.value()) << "\"";
       }
 
+   if(test.file.has_value())
+      {
+      out << " file=\"" << escape(test.file.value()) << "\"";
+      }
+
    if(test.failures.empty() && test.notes.empty())
       {
       out << " />\n";

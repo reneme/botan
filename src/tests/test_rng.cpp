@@ -751,7 +751,7 @@ class System_RNG_Tests final : public Test
    public:
       std::vector<Test::Result> run() override
          {
-         Test::Result result("System_RNG");
+         Test::Result result("System_RNG", __FILE__);
 
          Botan::System_RNG rng;
 

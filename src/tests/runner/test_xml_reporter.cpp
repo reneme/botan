@@ -35,7 +35,6 @@ void XmlReporter::render() const
    BOTAN_STATE_CHECK(m_outfile.has_value() && m_outfile->good());
 
    render_preamble(m_outfile.value());
-   render_properties(m_outfile.value());
    render_testsuites(m_outfile.value());
    }
 

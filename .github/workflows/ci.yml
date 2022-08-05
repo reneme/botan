@@ -115,7 +115,7 @@ jobs:
             compiler: gcc
             host_os: ubuntu-latest
           - target: static
-            compiler: gcc
+            compiler: clang
             host_os: macos-latest
           # - target: lint
           #   compiler: gcc

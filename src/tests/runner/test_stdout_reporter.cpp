@@ -72,6 +72,14 @@ void StdoutReporter::render_preamble() const
                << prop.second << "\n";
          }
       }
+
+   m_out << "Starting tests";
+   const auto name = run_name();
+   if(name.has_value())
+      {
+      m_out << " " << name.value();
+      }
+   m_out << "\n";
    }
 
 void StdoutReporter::render_summary() const

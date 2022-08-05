@@ -190,7 +190,15 @@ void XmlReporter::render_testsuites(std::ostream& out) const
    out << "<testsuites"
        << " tests=\"" << tests_run() << "\""
        << " failures=\"" << tests_failed() << "\""
-       << " time=\"" << format(elapsed_time()) << "\">\n";
+       << " time=\"" << format(elapsed_time()) << "\"";
+
+   const auto name = run_name();
+   if(name.has_value())
+      {
+      out << " name=\"" << name.value() << "\"";
+      }
+
+   out << ">\n";
 
    for(const auto& suite : testsuites())
       {

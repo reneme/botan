@@ -78,7 +78,12 @@ std::optional<std::chrono::nanoseconds> Testsuite::elapsed_time() const
 Reporter::Reporter(const Test_Options& opts)
    : m_total_test_runs(opts.test_runs())
    , m_current_test_run(0)
-   {}
+   {
+   if (!opts.test_run_name().empty())
+      {
+      m_test_run_name = opts.test_run_name();
+      }
+   }
 
 void Reporter::set_property(const std::string& name, const std::string& value)
    {
@@ -154,5 +159,24 @@ std::chrono::nanoseconds Reporter::elapsed_time() const
    {
    return std::chrono::high_resolution_clock::now() - m_start_time;
    }
+
+std::optional<std::string> Reporter::run_name() const
+   {
+   if(!m_test_run_name.has_value())
+      {
+      return std::nullopt;
+      }
+
+   std::stringstream ss;
+   ss << m_test_run_name.value();
+
+   if(m_total_test_runs > 1)
+      {
+      ss << " " << m_current_test_run << "/" << m_total_test_runs;
+      }
+
+   return ss.str();
+   }
+
 
 }

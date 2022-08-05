@@ -169,12 +169,14 @@ class Reporter
       const PropertyMap& properties() const { return m_properties; }
       const TestsuiteMap& testsuites() const { return m_testsuites; }
 
+      std::optional<std::string> run_name() const;
       size_t current_test_run() const { return m_current_test_run; }
       size_t total_test_runs() const { return m_total_test_runs; }
 
    private:
       const size_t m_total_test_runs;
       size_t m_current_test_run;
+      std::optional<std::string> m_test_run_name;
 
       PropertyMap m_properties;
 

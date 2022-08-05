@@ -68,6 +68,7 @@ class Test_Options
                    const std::string& provider,
                    const std::string& drbg_seed,
                    const std::string& xml_results_dir,
+                   const std::string& test_run_name,
                    size_t test_runs,
                    size_t test_threads,
                    bool verbose,
@@ -82,6 +83,7 @@ class Test_Options
          m_provider(provider),
          m_drbg_seed(drbg_seed),
          m_xml_results_dir(xml_results_dir),
+         m_test_run_name(test_run_name),
          m_test_runs(test_runs),
          m_test_threads(test_threads),
          m_verbose(verbose),
@@ -108,6 +110,8 @@ class Test_Options
 
       const std::string& xml_results_dir() const { return m_xml_results_dir; }
 
+      const std::string& test_run_name() const { return m_test_run_name; }
+
       size_t test_runs() const { return m_test_runs; }
 
       size_t test_threads() const { return m_test_threads; }
@@ -130,6 +134,7 @@ class Test_Options
       std::string m_provider;
       std::string m_drbg_seed;
       std::string m_xml_results_dir;
+      std::string m_test_run_name;
       size_t m_test_runs;
       size_t m_test_threads;
       bool m_verbose;

@@ -1,0 +1,30 @@
+name: Test Reporter
+on:
+  workflow_run:
+    workflows: [ci]
+    types: [completed]
+
+permissions:
+  checks: write
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download Test Report
+        uses: dawidd6/action-download-artifact@v2
+        with:
+          name: test-reports
+          path: test_reports
+          workflow: ${{ github.event.workflow.id }}
+          run_id: ${{ github.event.workflow_run.id }}
+
+      - name: Debug
+        run: ls -lisa .; ls -lisa test-reports; ls -lisa test_reports
+
+      - name: Publish Test Report
+        uses: mikepenz/action-junit-report@v3
+        if: always()
+        with:
+          commit: ${{github.event.workflow_run.head_sha}}
+          report_paths: '**/build/test-results/test/TEST-*.xml'

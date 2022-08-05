@@ -25,7 +25,7 @@ class TestSummary final
 
    public:
       const std::string name;
-      const std::optional<std::string> file;
+      const std::optional<Code_Location> code_location;
 
       const size_t assertions;
       const std::vector<std::string> notes;

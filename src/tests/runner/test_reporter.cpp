@@ -29,7 +29,7 @@ operator+(const std::optional<T>& a, const std::optional<T>& b)
 
 TestSummary::TestSummary(const Test::Result& result)
    : name(result.who())
-   , file(result.file())
+   , code_location(result.code_location())
    , assertions(result.tests_run())
    , notes(result.notes())
    , failures(result.failures())

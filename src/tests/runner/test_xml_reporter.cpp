@@ -206,7 +206,7 @@ void XmlReporter::render_testsuites(std::ostream& out) const
       render_testsuite(out, suite.second);
       }
 
-   out << "</testsuites>\n";
+   out << "</testsuite>\n";
    }
 
 void XmlReporter::render_testsuite(std::ostream& out, const Testsuite& suite) const

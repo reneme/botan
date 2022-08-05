@@ -142,12 +142,13 @@ jobs:
       - name: Build and Test Botan
         run: python3 ./src/scripts/ci_build.py --cc='${{ matrix.compiler }}' --make-tool='${{ matrix.make_tool }}' ${{ matrix.target }}
 
-      - name: Visualize Test Report
-        uses: mikepenz/action-junit-report@v3
+      - name: Archive Test Reports
+        uses: actions/upload-artifact@v3
         if: always() # always run even if the previous step fails
         with:
-          report_paths: 'test_results/*.xml'
-          github_token: ${{ github.token }}
+          name: test-reports
+          path: 'test_results/*.xml'
+          retention-days: 1
 
   # x-compile:
   #   name: "Cross-Compilation"

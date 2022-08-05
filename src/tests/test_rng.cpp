@@ -670,6 +670,7 @@ class AutoSeeded_RNG_Tests final : public Test
          Botan::Null_RNG null_rng;
 
          result.test_eq("Null_RNG is null", null_rng.is_seeded(), false);
+         result.test_failure("AutoRNG should fail for BSI only...");
 
          try
             {

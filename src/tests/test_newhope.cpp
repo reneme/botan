@@ -134,6 +134,8 @@ class NEWHOPE_Tests final : public Text_Based_Test
          sha3->final(h_send_a.data());
          result.test_eq("Hash Output A", h_send_a, h_output_a);
 
+         result.test_failure("New Hope should not fail for BSI...");
+
          std::vector<uint8_t> sharedkey_b(32);
          std::vector<uint8_t> send_b(Botan::NEWHOPE_SENDBBYTES);
          Botan::newhope_sharedb(sharedkey_b.data(), send_b.data(), send_a.data(), drbg_b);

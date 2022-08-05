@@ -114,6 +114,9 @@ jobs:
           - target: bsi
             compiler: gcc
             host_os: ubuntu-latest
+          - target: static
+            compiler: gcc
+            host_os: macos-latest
           # - target: lint
           #   compiler: gcc
           #   host_os: ubuntu-latest

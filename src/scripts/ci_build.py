@@ -74,7 +74,7 @@ def build_targets(target, target_os):
 
 def determine_flags(target, target_os, target_cpu, target_cc, cc_bin,
                     ccache, root_dir, pkcs11_lib, use_gdb, disable_werror, extra_cxxflags,
-                    disabled_tests):
+                    disabled_tests, run_name):
     # pylint: disable=too-many-branches,too-many-statements,too-many-arguments,too-many-locals
 
     """
@@ -308,6 +308,14 @@ def determine_flags(target, target_os, target_cpu, target_cc, cc_bin,
         if disabled_tests:
             test_cmd += ['--skip-tests=%s' % (','.join(disabled_tests))]
 
+        # generate JUnit test result report
+        test_results_dir = os.path.join(root_dir, "test_results")
+        os.mkdir(test_results_dir)
+        test_cmd += ['--test-results-dir=%s' % (test_results_dir)]
+
+        if run_name:
+            test_cmd += ['--test-run-name=%s' % (run_name)]
+
         if use_gdb:
             (cmd, args) = test_cmd[0], test_cmd[1:]
             run_test_command = test_prefix + ['gdb', cmd,
@@ -419,6 +427,9 @@ def parse_args(args):
 
     parser.add_option('--run-under-gdb', dest='use_gdb', action='store_true', default=False,
                       help='Run test suite under gdb and capture backtrace')
+
+    parser.add_option('--run-name', default="",
+                      help='An identifier for this CI run')
 
     return parser.parse_args(args)
 
@@ -538,7 +549,7 @@ def main(args=None):
             target, options.os, options.cpu, options.cc,
             options.cc_bin, options.compiler_cache, root_dir,
             options.pkcs11_lib, options.use_gdb, options.disable_werror,
-            options.extra_cxxflags, options.disabled_tests)
+            options.extra_cxxflags, options.disabled_tests, options.run_name)
 
         cmds.append([py_interp, os.path.join(root_dir, 'configure.py')] + config_flags)
 

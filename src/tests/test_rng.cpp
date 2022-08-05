@@ -670,6 +670,7 @@ class AutoSeeded_RNG_Tests final : public Test
          Botan::Null_RNG null_rng;
 
          result.test_eq("Null_RNG is null", null_rng.is_seeded(), false);
+         result.test_failure("AutoRNG should fail for BSI only...");
 
          try
             {
@@ -751,7 +752,7 @@ class System_RNG_Tests final : public Test
    public:
       std::vector<Test::Result> run() override
          {
-         Test::Result result("System_RNG");
+         Test::Result result("System_RNG", __FILE__, __LINE__);
 
          Botan::System_RNG rng;
 
@@ -760,6 +761,9 @@ class System_RNG_Tests final : public Test
          result.confirm("System RNG always seeded", rng.is_seeded());
          rng.clear(); // clear is a noop for system rng
          result.confirm("System RNG always seeded", rng.is_seeded());
+
+         result.test_note("This test is not broken. It just fails to test the test reporting");
+         result.test_failure("Whoops!");
 
          rng.reseed(Botan::Entropy_Sources::global_sources(),
                     256,

@@ -5,7 +5,7 @@
 */
 
 #include "../cli/argparse.h"
-#include "test_runner.h"
+#include "runner/test_runner.h"
 #include "tests.h"
 #include <iostream>
 #include <vector>
@@ -57,8 +57,8 @@ int main(int argc, char* argv[])
       const std::string arg_spec =
          "botan-test --verbose --help --data-dir= --pkcs11-lib= --provider= "
          "--log-success --abort-on-first-fail --no-avoid-undefined --skip-tests= "
-         "--test-threads=0 --run-long-tests --run-online-tests --test-runs=1 --drbg-seed= "
-         "*suites";
+         "--test-threads=0 --test-results-dir= --test-run-name= --run-long-tests "
+         "--run-online-tests --test-runs=1 --drbg-seed= *suites";
 
       Botan_CLI::Argument_Parser parser(arg_spec);
 
@@ -88,6 +88,8 @@ int main(int argc, char* argv[])
          parser.get_arg("pkcs11-lib"),
          parser.get_arg("provider"),
          parser.get_arg("drbg-seed"),
+         parser.get_arg("test-results-dir"),
+         parser.get_arg("test-run-name"),
          parser.get_arg_sz("test-runs"),
          parser.get_arg_sz("test-threads"),
          parser.flag_set("verbose"),
@@ -98,7 +100,7 @@ int main(int argc, char* argv[])
 
       Botan_Tests::Test_Runner tests(std::cout);
 
-      return tests.run(opts);
+      return tests.run(opts) ? 0 : 1;
       }
    catch(std::exception& e)
       {

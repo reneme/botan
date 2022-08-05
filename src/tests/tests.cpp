@@ -37,6 +37,8 @@ void Test::Result::merge(const Result& other, bool ignore_test_name)
       throw Test_Error("Merging tests from different sources");
       }
 
+   m_timestamp = std::min(m_timestamp, other.m_timestamp);
+   m_code_location = other.m_code_location;
    m_ns_taken += other.m_ns_taken;
    m_tests_passed += other.m_tests_passed;
    m_fail_log.insert(m_fail_log.end(), other.m_fail_log.begin(), other.m_fail_log.end());
@@ -429,6 +431,7 @@ Test::Result::Result(std::string who, std::vector<Result> downstream_results)
       merge(result, true /* ignore non-matching test names */);
    }
 
+// TODO: this should move to `StdoutReporter`
 std::string Test::Result::result_string() const
    {
    const bool verbose = Test::options().verbose();

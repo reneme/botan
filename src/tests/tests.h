@@ -67,6 +67,8 @@ class Test_Options
                    const std::string& pkcs11_lib,
                    const std::string& provider,
                    const std::string& drbg_seed,
+                   const std::string& xml_results_dir,
+                   const std::string& test_run_name,
                    size_t test_runs,
                    size_t test_threads,
                    bool verbose,
@@ -80,6 +82,8 @@ class Test_Options
          m_pkcs11_lib(pkcs11_lib),
          m_provider(provider),
          m_drbg_seed(drbg_seed),
+         m_xml_results_dir(xml_results_dir),
+         m_test_run_name(test_run_name),
          m_test_runs(test_runs),
          m_test_threads(test_threads),
          m_verbose(verbose),
@@ -104,6 +108,10 @@ class Test_Options
 
       const std::string& drbg_seed() const { return m_drbg_seed; }
 
+      const std::string& xml_results_dir() const { return m_xml_results_dir; }
+
+      const std::string& test_run_name() const { return m_test_run_name; }
+
       size_t test_runs() const { return m_test_runs; }
 
       size_t test_threads() const { return m_test_threads; }
@@ -125,6 +133,8 @@ class Test_Options
       std::string m_pkcs11_lib;
       std::string m_provider;
       std::string m_drbg_seed;
+      std::string m_xml_results_dir;
+      std::string m_test_run_name;
       size_t m_test_runs;
       size_t m_test_threads;
       bool m_verbose;
@@ -132,6 +142,12 @@ class Test_Options
       bool m_run_online_tests;
       bool m_run_long_tests;
       bool m_abort_on_first_fail;
+   };
+
+struct Code_Location
+   {
+   std::string file;
+   unsigned int line;
    };
 
 /*
@@ -151,7 +167,14 @@ class Test
       class Result final
          {
          public:
-            explicit Result(std::string who) : m_who(std::move(who)) {}
+            explicit Result(std::string who)
+               : m_who(std::move(who))
+               , m_timestamp(std::chrono::system_clock::now()) {}
+
+            explicit Result(std::string who, std::string file, unsigned int line)
+               : m_who(who)
+               , m_code_location({file, line})
+               , m_timestamp(std::chrono::system_clock::now()) {}
 
             /**
              * This 'consolidation constructor' creates a single test result from
@@ -179,6 +202,31 @@ class Test
             const std::string& who() const
                {
                return m_who;
+               }
+
+            const std::optional<Code_Location>& code_location() const
+               {
+               return m_code_location;
+               }
+
+            const std::vector<std::string>& failures() const { return m_fail_log; }
+            const std::vector<std::string>& notes() const { return m_log; }
+
+            std::optional<std::chrono::nanoseconds> elapsed_time() const
+               {
+               if (m_ns_taken == 0)
+                  {
+                  return std::nullopt;
+                  }
+               else
+                  {
+                  return std::chrono::nanoseconds(m_ns_taken);
+                  }
+               }
+
+            const std::chrono::system_clock::time_point& timestamp() const
+               {
+               return m_timestamp;
                }
 
             std::string result_string() const;
@@ -520,6 +568,8 @@ class Test
 
          private:
             std::string m_who;
+            std::optional<Code_Location> m_code_location;
+            std::chrono::system_clock::time_point m_timestamp;
             uint64_t m_started = 0;
             uint64_t m_ns_taken = 0;
             size_t m_tests_passed = 0;
@@ -545,6 +595,10 @@ class Test
       static std::string data_file(const std::string& what);
 
       static std::string format_time(uint64_t nanoseconds);
+      static std::string format_time(const std::chrono::nanoseconds nanoseconds)
+         {
+         return format_time(nanoseconds.count());
+         }
 
       template<typename Alloc>
       static std::vector<uint8_t, Alloc>

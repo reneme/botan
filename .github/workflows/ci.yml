@@ -121,9 +121,9 @@ jobs:
           - target: minimized
             compiler: gcc
             host_os: ubuntu-latest
-          # - target: bsi
-          #   compiler: gcc
-          #   host_os: ubuntu-latest
+          - target: bsi
+            compiler: gcc
+            host_os: ubuntu-latest
           # - target: lint
           #   compiler: gcc
           #   host_os: ubuntu-latest

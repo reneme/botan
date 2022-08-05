@@ -146,7 +146,7 @@ jobs:
         uses: actions/upload-artifact@v3
         if: always() # always run even if the previous step fails
         with:
-          name: test-reports-${{ github.job }}
+          name: test-reports
           path: 'test_results/*.xml'
           retention-days: 1
           if-no-files-found: ignore

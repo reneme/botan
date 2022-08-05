@@ -6,10 +6,7 @@
 
 name: ci
 
-permissions:
-  contents: read
-  pull-requests: write
-  # implicitly all other scopes not listed become none
+permissions: write-all
 
 on:
   push:

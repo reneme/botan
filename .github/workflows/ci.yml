@@ -130,7 +130,7 @@ jobs:
           cache-key: ${{ matrix.host_os }}-${{ matrix.compiler }}-x86_64-${{ matrix.target }}
 
       - name: Build and Test Botan
-        run: python3 ./src/scripts/ci_build.py --run-name='${{ github.job_id }}-${{ matrix.target }}' --cc='${{ matrix.compiler }}' --make-tool='${{ matrix.make_tool }}' ${{ matrix.target }}
+        run: python3 ./src/scripts/ci_build.py --run-name='${{ github.job }}-${{ matrix.target }}' --cc='${{ matrix.compiler }}' --make-tool='${{ matrix.make_tool }}' ${{ matrix.target }}
 
       - name: Push Test Results
         uses: check-run-reporter/action@v2.11.1

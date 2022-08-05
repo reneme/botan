@@ -187,7 +187,8 @@ void XmlReporter::render_properties(std::ostream& out) const
 void XmlReporter::render_testsuites(std::ostream& out) const
    {
    // render an empty testsuites tag even if no tests were run
-   out << "<testsuites"
+   // (turns out it's better to nest testsuite tags)
+   out << "<testsuite"
        << " tests=\"" << tests_run() << "\""
        << " failures=\"" << tests_failed() << "\""
        << " time=\"" << format(elapsed_time()) << "\"";

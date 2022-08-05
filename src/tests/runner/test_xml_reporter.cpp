@@ -187,32 +187,31 @@ void XmlReporter::render_properties(std::ostream& out) const
 void XmlReporter::render_testsuites(std::ostream& out) const
    {
    // render an empty testsuites tag even if no tests were run
-   // (turns out it's better to nest testsuite tags)
-   out << "<testsuite"
+   out << "<testsuites"
        << " tests=\"" << tests_run() << "\""
        << " failures=\"" << tests_failed() << "\""
-       << " time=\"" << format(elapsed_time()) << "\"";
-
-   const auto name = run_name();
-   if(name.has_value())
-      {
-      out << " name=\"" << name.value() << "\"";
-      }
-
-   out << ">\n";
+       << " time=\"" << format(elapsed_time()) << "\">\n";
 
    for(const auto& suite : testsuites())
       {
       render_testsuite(out, suite.second);
       }
 
-   out << "</testsuite>\n";
+   out << "</testsuites>\n";
    }
 
 void XmlReporter::render_testsuite(std::ostream& out, const Testsuite& suite) const
    {
+   std::stringstream name;
+   const auto run = run_name();
+   if(run.has_value())
+      {
+      name << run.value() << " - ";
+      }
+   name << suite.name();
+
    out << "<testsuite"
-       << " name=\"" << escape(suite.name()) << "\""
+       << " name=\"" << escape(name.str()) << "\""
        << " tests=\"" << suite.tests_run() << "\""
        << " failures=\"" << suite.tests_failed() << "\""
        << " timestamp=\"" << format(suite.timestamp()) << "\"";

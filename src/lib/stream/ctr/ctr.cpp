@@ -82,82 +82,66 @@ std::string CTR_BE::name() const
 
    }
 
-void CTR_BE::cipher(const uint8_t in[], uint8_t out[], size_t length)
-   {
-   verify_key_set(m_iv.empty() == false);
+namespace internal {
 
-   const uint8_t* pad_bits = &m_pad[0];
-   const size_t pad_size = m_pad.size();
+template <typename ApplyBitsFunT>
+void apply_keystream(CTR_BE* ctr, size_t length, ApplyBitsFunT apply_bits)
+{
+   ctr->verify_key_set(ctr->m_iv.empty() == false);
 
-   if(m_pad_pos > 0)
+   const uint8_t* pad_bits = &ctr->m_pad[0];
+   const size_t pad_size = ctr->m_pad.size();
+
+   if(ctr->m_pad_pos > 0)
       {
-      const size_t avail = pad_size - m_pad_pos;
+      const size_t avail = pad_size - ctr->m_pad_pos;
       const size_t take = std::min(length, avail);
-      xor_buf(out, in, pad_bits + m_pad_pos, take);
+      apply_bits(pad_bits + ctr->m_pad_pos, take);
       length -= take;
-      in += take;
-      out += take;
-      m_pad_pos += take;
+      ctr->m_pad_pos += take;
 
       if(take == avail)
          {
-         add_counter(m_ctr_blocks);
-         m_cipher->encrypt_n(m_counter.data(), m_pad.data(), m_ctr_blocks);
-         m_pad_pos = 0;
+         ctr->add_counter(ctr->m_ctr_blocks);
+         ctr->m_cipher->encrypt_n(ctr->m_counter.data(), ctr->m_pad.data(), ctr->m_ctr_blocks);
+         ctr->m_pad_pos = 0;
          }
       }
 
    while(length >= pad_size)
       {
-      xor_buf(out, in, pad_bits, pad_size);
+      apply_bits(pad_bits, pad_size);
       length -= pad_size;
-      in += pad_size;
-      out += pad_size;
 
-      add_counter(m_ctr_blocks);
-      m_cipher->encrypt_n(m_counter.data(), m_pad.data(), m_ctr_blocks);
+      ctr->add_counter(ctr->m_ctr_blocks);
+      ctr->m_cipher->encrypt_n(ctr->m_counter.data(), ctr->m_pad.data(), ctr->m_ctr_blocks);
       }
 
-   xor_buf(out, in, pad_bits, length);
-   m_pad_pos += length;
+   apply_bits(pad_bits, length);
+   ctr->m_pad_pos += length;
+}
+
+}
+
+void CTR_BE::cipher(const uint8_t in[], uint8_t out[], size_t length)
+   {
+   internal::apply_keystream(this, length,
+      [&](const uint8_t* stream_bytes, size_t stream_bytes_len)
+         {
+         xor_buf(out, in, stream_bytes, stream_bytes_len);
+         out += stream_bytes_len;
+         in += stream_bytes_len;
+         });
    }
 
 void CTR_BE::write_keystream(uint8_t out[], size_t length)
    {
-   verify_key_set(m_iv.empty() == false);
-
-   const uint8_t* pad_bits = &m_pad[0];
-   const size_t pad_size = m_pad.size();
-
-   if(m_pad_pos > 0)
-      {
-      const size_t avail = pad_size - m_pad_pos;
-      const size_t take = std::min(length, avail);
-      copy_mem(out, pad_bits + m_pad_pos, take);
-      length -= take;
-      out += take;
-      m_pad_pos += take;
-
-      if(take == avail)
+   internal::apply_keystream(this, length,
+      [&](const uint8_t* stream_bytes, size_t stream_bytes_len)
          {
-         add_counter(m_ctr_blocks);
-         m_cipher->encrypt_n(m_counter.data(), m_pad.data(), m_ctr_blocks);
-         m_pad_pos = 0;
-         }
-      }
-
-   while(length >= pad_size)
-      {
-      copy_mem(out, pad_bits, pad_size);
-      length -= pad_size;
-      out += pad_size;
-
-      add_counter(m_ctr_blocks);
-      m_cipher->encrypt_n(m_counter.data(), m_pad.data(), m_ctr_blocks);
-      }
-
-   copy_mem(out, pad_bits, length);
-   m_pad_pos += length;
+         copy_mem(out, stream_bytes, stream_bytes_len);
+         out += stream_bytes_len;
+         });
    }
 
 void CTR_BE::set_iv(const uint8_t iv[], size_t iv_len)

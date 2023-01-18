@@ -13,6 +13,15 @@
 
 namespace Botan {
 
+class CTR_BE;
+
+namespace internal {
+
+template <typename T>
+void apply_keystream(CTR_BE*, size_t length, T);
+
+}
+
 /**
 * CTR-BE (Counter mode, big-endian)
 */
@@ -45,7 +54,11 @@ class CTR_BE final : public StreamCipher
       CTR_BE(std::unique_ptr<BlockCipher> cipher, size_t ctr_size);
 
       void seek(uint64_t offset) override;
+
    private:
+      template <typename T>
+      friend void internal::apply_keystream(CTR_BE*, size_t, T);
+
       void key_schedule(const uint8_t key[], size_t key_len) override;
       void add_counter(const uint64_t counter);
 

@@ -177,7 +177,7 @@ Certificate_Verify_13::Certificate_Verify_13(const std::vector<uint8_t>& buf, co
 /*
 * Verify a Certificate Verify message
 */
-bool Certificate_Verify_13::verify(const X509_Certificate& cert,
+bool Certificate_Verify_13::verify(const Public_Key& public_key,
                                    Callbacks& callbacks,
                                    const Transcript_Hash& transcript_hash) const {
    BOTAN_ASSERT_NOMSG(m_scheme.is_available());
@@ -185,13 +185,12 @@ bool Certificate_Verify_13::verify(const X509_Certificate& cert,
    // RFC 8446 4.2.3
    //    The keys found in certificates MUST [...] be of appropriate type for
    //    the signature algorithms they are used with.
-   if(m_scheme.key_algorithm_identifier() != cert.subject_public_key_algo()) {
+   if(m_scheme.key_algorithm_identifier() != public_key.algorithm_identifier()) {
       throw TLS_Exception(Alert::IllegalParameter, "Signature algorithm does not match certificate's public key");
    }
 
-   const auto key = cert.subject_public_key();
    const bool signature_valid = callbacks.tls_verify_message(
-      *key, m_scheme.padding_string(), m_scheme.format().value(), message(m_side, transcript_hash), m_signature);
+      public_key, m_scheme.padding_string(), m_scheme.format().value(), message(m_side, transcript_hash), m_signature);
 
    #if defined(BOTAN_UNSAFE_FUZZER_MODE)
    BOTAN_UNUSED(signature_valid);

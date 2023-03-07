@@ -17,8 +17,6 @@
 #include <botan/internal/tls_record.h>
 #include <botan/internal/tls_seq_numbers.h>
 
-#include <array>
-
 namespace {
 bool is_user_canceled_alert(const Botan::TLS::Alert& alert) { return alert.type() == Botan::TLS::Alert::UserCanceled; }
 
@@ -418,6 +416,10 @@ void Channel_Impl_13::expect_downgrade(const Server_Information& server_info,
 
 void Channel_Impl_13::set_record_size_limits(const uint16_t outgoing_limit, const uint16_t incoming_limit) {
    m_record_layer.set_record_size_limits(outgoing_limit, incoming_limit);
+}
+
+void Channel_Impl_13::set_certificate_type(const Certificate_Type cert_type) {
+   m_handshake_layer.set_certificate_type(cert_type);
 }
 
 }  // namespace Botan::TLS

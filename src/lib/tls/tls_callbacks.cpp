@@ -89,6 +89,14 @@ void TLS::Callbacks::tls_verify_cert_chain(const std::vector<X509_Certificate>& 
    }
 }
 
+void TLS::Callbacks::tls_verify_raw_public_key(const Public_Key& raw_public_key,
+                                               Usage_Type usage,
+                                               std::string_view hostname,
+                                               const TLS::Policy& policy) {
+   BOTAN_UNUSED(raw_public_key, usage, hostname, policy);
+   throw TLS_Exception(Alert::CertificateUnknown, "Application did not provide a means to validate the raw public key");
+}
+
 std::optional<OCSP::Response> TLS::Callbacks::tls_parse_ocsp_response(const std::vector<uint8_t>& raw_response) {
    try {
       return OCSP::Response(raw_response);

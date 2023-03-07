@@ -8,6 +8,7 @@
 */
 #include <botan/internal/tls_client_impl_13.h>
 
+#include <botan/build.h>
 #include <botan/credentials_manager.h>
 #include <botan/hash.h>
 #include <botan/tls_client.h>
@@ -392,6 +393,17 @@ void Client_Impl_13::handle(const Encrypted_Extensions& encrypted_extensions_msg
       set_record_size_limits(outgoing_limit->limit(), incoming_limit->limit());
    }
 
+   if(auto server_cert_type = exts.get<Server_Certificate_Type>()) {
+      // RFC 7250 4.2
+      //   With the server_certificate_type extension in the server hello, the
+      //   TLS server indicates the certificate type carried in the Certificate
+      //   payload.
+      //
+      // Note: TLS 1.3 carries this extension in the Encrypted Extensions
+      //       message instead of the Server Hello.
+      set_certificate_type(server_cert_type->selected_certificate_type());
+   }
+
    callbacks().tls_examine_extensions(exts, Connection_Side::Server, Handshake_Type::EncryptedExtensions);
 
    if(m_handshake_state.server_hello().extensions().has<PSK>()) {
@@ -455,7 +467,7 @@ void Client_Impl_13::handle(const Certificate_Verify_13& certificate_verify_msg)
    }
 
    bool sig_valid = certificate_verify_msg.verify(
-      m_handshake_state.server_certificate().leaf(), callbacks(), m_transcript_hash.previous());
+      m_handshake_state.server_certificate().public_key(), callbacks(), m_transcript_hash.previous());
 
    if(!sig_valid) {
       throw TLS_Exception(Alert::DecryptError, "Server certificate verification failed");
@@ -507,7 +519,7 @@ void Client_Impl_13::handle(const Finished_13& finished_msg) {
    // establishing the connection.
    callbacks().tls_session_established(Session_Summary(m_handshake_state.server_hello(),
                                                        Connection_Side::Server,
-                                                       peer_cert_chain(),
+                                                       peer_cert_chain(),  // might need adaption
                                                        m_info,
                                                        callbacks().tls_current_timestamp()));
 
@@ -563,7 +575,8 @@ void TLS::Client_Impl_13::handle(const New_Session_Ticket_13& new_session_ticket
 }
 
 std::vector<X509_Certificate> Client_Impl_13::peer_cert_chain() const {
-   if(m_handshake_state.has_server_certificate_chain()) {
+   if(m_handshake_state.has_server_certificate_msg() &&
+      m_handshake_state.server_certificate().has_certificate_chain()) {
       return m_handshake_state.server_certificate().cert_chain();
    }
 

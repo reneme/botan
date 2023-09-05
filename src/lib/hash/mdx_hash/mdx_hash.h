@@ -9,6 +9,10 @@
 
 #include <botan/internal/bit_ops.h>
 #include <botan/internal/loadstor.h>
+#include <botan/concepts.h>
+
+#include <span>
+#include <array>
 
 namespace Botan {
 
@@ -17,30 +21,31 @@ enum class MD_Endian {
    Big,
 };
 
-template<MD_Endian ENDIAN,
-         typename DIGEST_T,
-         size_t DIGEST_ELEM,
-         void init_fn(DIGEST_T[DIGEST_ELEM]),
-         void compress_fn(DIGEST_T[DIGEST_ELEM], const uint8_t[], size_t),
-         size_t BLOCK_BYTES = 64,
-         size_t DIGEST_LENGTH = DIGEST_ELEM * sizeof(DIGEST_T),
-         size_t CTR_BYTES = 8>
+template <typename T>
+concept mdx_hash_implementation =
+    concepts::contiguous_container<typename T::digest_buffer_t> &&
+    requires(typename T::digest_buffer_t& digest, std::span<const uint8_t> input, size_t blocks) {
+        { T::init(digest) } -> std::same_as<void>;
+        { T::compress_n(digest, input, blocks) } -> std::same_as<void>;
+        T::endianness;
+        T::block_bytes;
+        T::ctr_bytes;
+    } &&
+    T::block_bytes >= 64 && is_power_of_2(T::block_bytes) &&
+    T::ctr_bytes >= 8 && is_power_of_2(T::ctr_bytes) &&
+    T::ctr_bytes < T::block_bytes &&
+    sizeof(typename T::digest_buffer_t) >= 16;
+
+template<mdx_hash_implementation T>
 class MD_Hash final
    {
    public:
-      static_assert(BLOCK_BYTES >= 64 && is_power_of_2(BLOCK_BYTES));
-      static_assert(CTR_BYTES >= 8 && is_power_of_2(CTR_BYTES));
-      static_assert(CTR_BYTES < BLOCK_BYTES);
-      static_assert(DIGEST_LENGTH >= 16 && DIGEST_LENGTH <= DIGEST_ELEM * sizeof(DIGEST_T));
-
-      static const size_t BLOCK_BITS = ceil_log2(BLOCK_BYTES);
-
       MD_Hash() :
          m_count(0),
          m_position(0)
          {
-         clear_mem(m_buffer, BLOCK_BYTES);
-         init_fn(m_digest);
+         clear_mem(m_buffer.data(), m_buffer.size());
+         T::init(m_digest);
          }
 
       void add_data(const uint8_t input[], size_t length)
@@ -49,56 +54,56 @@ class MD_Hash final
 
          if(m_position > 0)
             {
-            const size_t take = std::min(length, BLOCK_BYTES - m_position);
+            const size_t take = std::min(length, T::block_bytes - m_position);
 
             copy_mem(&m_buffer[m_position], input, take);
 
-            if(m_position + take == BLOCK_BYTES)
+            if(m_position + take == T::block_bytes)
                {
-               compress_fn(m_digest, m_buffer, 1);
-               input += (BLOCK_BYTES - m_position);
-               length -= (BLOCK_BYTES - m_position);
+               T::compress(m_digest, m_buffer, 1);
+               input += (T::block_bytes - m_position);
+               length -= (T::block_bytes - m_position);
                m_position = 0;
                }
             }
 
-         const size_t full_blocks = length / BLOCK_BYTES;
-         const size_t remaining   = length % BLOCK_BYTES;
+         const size_t full_blocks = length / T::block_bytes;
+         const size_t remaining   = length % T::block_bytes;
 
          if(full_blocks > 0)
             {
-            compress_fn(m_digest, input, full_blocks);
+            T::compress(m_digest, input, full_blocks);
             }
 
-         copy_mem(&m_buffer[m_position], input + full_blocks * BLOCK_BYTES, remaining);
+         copy_mem(&m_buffer[m_position], input + full_blocks * T::block_bytes, remaining);
          m_position += remaining;
          }
 
       void final_result(uint8_t output[])
          {
-         BOTAN_ASSERT_NOMSG(m_position < BLOCK_BYTES);
-         clear_mem(&m_buffer[m_position], BLOCK_BYTES - m_position);
+         BOTAN_ASSERT_NOMSG(m_position < T::block_bytes);
+         clear_mem(&m_buffer[m_position], T::block_bytes - m_position);
          m_buffer[m_position] = 0x80;
 
-         if(m_position >= BLOCK_BYTES - CTR_BYTES)
+         if(m_position >= T::block_bytes - T::ctr_bytes)
             {
-            compress_fn(m_digest, m_buffer, 1);
-            clear_mem(m_buffer, BLOCK_BYTES);
+            T::compress(m_digest, m_buffer, 1);
+            clear_mem(m_buffer, T::block_bytes);
             }
 
          const uint64_t bit_count = m_count * 8;
 
-         if constexpr(ENDIAN == MD_Endian::Big)
-            store_be(bit_count, &m_buffer[BLOCK_BYTES - 8]);
+         if constexpr(T::endianness == MD_Endian::Big)
+            store_be(bit_count, &m_buffer[T::block_bytes - 8]);
          else
-            store_le(bit_count, &m_buffer[BLOCK_BYTES - 8]);
+            store_le(bit_count, &m_buffer[T::block_bytes - 8]);
 
-         compress_fn(m_digest, m_buffer, 1);
+         T::compress(m_digest, m_buffer, 1);
 
-         if constexpr(ENDIAN == MD_Endian::Big)
-            copy_out_be(output, DIGEST_LENGTH, m_digest);
+         if constexpr(T::endianness == MD_Endian::Big)
+            copy_out_be(output, m_digest.size(), m_digest);
          else
-            copy_out_le(output, DIGEST_LENGTH, m_digest);
+            copy_out_le(output, m_digest.size(), m_digest);
 
          clear();
          }
@@ -106,14 +111,14 @@ class MD_Hash final
       void clear()
          {
          init_fn(m_digest);
-         clear_mem(m_buffer, BLOCK_BYTES);
+         clear_mem(m_buffer, T::block_bytes);
          m_count = 0;
          m_position = 0;
          }
 
    private:
-      uint8_t m_buffer[BLOCK_BYTES];
-      DIGEST_T m_digest[DIGEST_ELEM];
+      std::array<uint8_t, T::block_bytes> m_buffer;
+      typename T::digest_buffer_t m_digest;
       uint64_t m_count;
       size_t m_position;
    };

@@ -9,6 +9,7 @@
 
 #include <botan/internal/loadstor.h>
 #include <botan/internal/rotate.h>
+#include <botan/internal/stl_util.h>
 #include <botan/internal/bit_ops.h>
 
 namespace Botan {
@@ -46,15 +47,19 @@ inline void II(uint32_t& A, uint32_t B, uint32_t C, uint32_t D, uint32_t M)
 
 }
 
-void MD5::compress_n(uint32_t digest[4], const uint8_t input[], size_t blocks)
+
+
+void MD5::compress_n(MD5::digest_buffer_t& digest, std::span<const uint8_t> input, size_t blocks);
    {
    uint32_t A = digest[0], B = digest[1], C = digest[2], D = digest[3];
 
    uint32_t M[16];
 
+   BufferSlicer in(input);
+
    for(size_t i = 0; i != blocks; ++i)
       {
-      load_le(M, input, 16);
+      load_le(M, in.take(64).data(), 16);
 
       FF< 7>(A,B,C,D,M[ 0]+0xD76AA478);   FF<12>(D,A,B,C,M[ 1]+0xE8C7B756);
       FF<17>(C,D,A,B,M[ 2]+0x242070DB);   FF<22>(B,C,D,A,M[ 3]+0xC1BDCEEE);
@@ -96,12 +101,10 @@ void MD5::compress_n(uint32_t digest[4], const uint8_t input[], size_t blocks)
       B = (digest[1] += B);
       C = (digest[2] += C);
       D = (digest[3] += D);
-
-      input += 64;
       }
    }
 
-void MD5::init(uint32_t digest[4])
+static void init(digest_buffer_t& digest)
    {
    const uint32_t MD5_INIT[4] = { 0x67452301, 0xEFCDAB89, 0x98BADCFE, 0x10325476 };
    copy_mem(digest, MD5_INIT, 4);

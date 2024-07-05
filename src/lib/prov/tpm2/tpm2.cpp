@@ -9,6 +9,7 @@
 #include <botan/tpm2.h>
 
 #include <botan/internal/fmt.h>
+#include <botan/internal/tpm2_authsession.h>
 #include <botan/internal/tpm2_util.h>
 
 #include <tss2/tss2_esys.h>
@@ -37,8 +38,14 @@ std::shared_ptr<TPM2_Context> TPM2_Context::create(std::optional<std::string> tc
          return nullptr;
       }
    }();
+
    // We cannot std::make_shared as the constructor is private
-   return std::shared_ptr<TPM2_Context>(new TPM2_Context(tcti_nameconf_ptr));
+   auto ctx = std::shared_ptr<TPM2_Context>(new TPM2_Context(tcti_nameconf_ptr));
+
+   auto auth_session = std::make_unique<TPM2_AuthSession>(ctx, "0x81000001" /*TODO: Input string handling*/);
+   ctx->set_session(auth_session);
+
+   return ctx;
 }
 
 TPM2_Context::TPM2_Context(const char* tcti_nameconf) : m_impl(std::make_unique<Impl>()) {
@@ -46,8 +53,16 @@ TPM2_Context::TPM2_Context(const char* tcti_nameconf) : m_impl(std::make_unique<
    check_tss2_rc("TPM2 Initialization", Esys_Initialize(&m_impl->m_ctx, m_impl->m_tcti_ctx, nullptr /* ABI version */));
 }
 
+void TPM2_Context::set_session(std::unique_ptr<TPM2_AuthSession>& auth_session) {
+   m_auth_session = std::move(auth_session);
+}
+
 void* TPM2_Context::inner_context_object() {
    return m_impl->m_ctx;
+}
+
+uint32_t TPM2_Context::inner_session_object() {
+   return m_auth_session->session();
 }
 
 TPM2_Context::~TPM2_Context() {

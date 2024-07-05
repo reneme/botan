@@ -15,6 +15,9 @@
 #include <optional>
 
 namespace Botan {
+
+class TPM2_AuthSession;
+
 class BOTAN_PUBLIC_API(3, 6) TPM2_Error final : public Exception {
    public:
       TPM2_Error(std::string_view location, uint32_t rc);
@@ -34,7 +37,7 @@ class BOTAN_PUBLIC_API(3, 6) TPM2_Error final : public Exception {
       uint32_t m_rc;
 };
 
-class BOTAN_PUBLIC_API(3, 6) TPM2_Context final {
+class BOTAN_PUBLIC_API(3, 6) TPM2_Context final : public std::enable_shared_from_this<TPM2_Context> {
    public:
       /**
        * @param tcti_nameconf  if set this is passed to Tss2_TctiLdr_Initialize verbatim
@@ -52,12 +55,19 @@ class BOTAN_PUBLIC_API(3, 6) TPM2_Context final {
       /// @return an ESYS_CONTEXT* for use in other TPM2 functions.
       void* inner_context_object();
 
+      /// @return the ESYS_TR session for this context
+      uint32_t inner_session_object();
+
    private:
       TPM2_Context(const char* tcti_nameconf);
+
+      void set_session(std::unique_ptr<TPM2_AuthSession>& auth_session);
 
    private:
       struct Impl;  // PImpl to avoid TPM2-TSS includes in this header
       std::unique_ptr<Impl> m_impl;
+
+      std::unique_ptr<TPM2_AuthSession> m_auth_session;
 };
 
 }  // namespace Botan

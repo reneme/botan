@@ -19,6 +19,7 @@ rng
 
 <header:internal>
 tpm2_util.h
+tpm2_authsession.h
 </header:internal>
 
 <header:public>

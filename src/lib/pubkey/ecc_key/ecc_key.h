@@ -12,8 +12,12 @@
 
 #include <botan/ec_group.h>
 #include <botan/pk_keys.h>
+#include <memory>
 
 namespace Botan {
+
+class EC_PublicKey_Data;
+class EC_PrivateKey_Data;
 
 /**
 * This class represents abstract ECC public keys. When encoding a key
@@ -37,7 +41,7 @@ class BOTAN_PUBLIC_API(2, 0) EC_PublicKey : public virtual Public_Key {
       * domain parameters of this point are not set
       * @result the public point of this key
       */
-      const EC_Point& public_point() const { return m_public_key; }
+      const EC_Point& public_point() const;
 
       AlgorithmIdentifier algorithm_identifier() const override;
 
@@ -53,7 +57,7 @@ class BOTAN_PUBLIC_API(2, 0) EC_PublicKey : public virtual Public_Key {
       * domain parameters of this point are not set
       * @result the domain parameters of this key
       */
-      const EC_Group& domain() const { return m_domain_params; }
+      const EC_Group& domain() const;
 
       /**
       * Set the domain parameter encoding to be used when encoding this key.
@@ -94,13 +98,23 @@ class BOTAN_PUBLIC_API(2, 0) EC_PublicKey : public virtual Public_Key {
 
       const BigInt& get_int_field(std::string_view field) const override;
 
+      const EC_AffinePoint& _public_key() const;
    protected:
       /**
-      * Create a public key.
-      * @param dom_par EC domain parameters
+      * Load a public key from the point.
+      *
+      * @param group EC domain parameters
       * @param pub_point public point on the curve
       */
-      EC_PublicKey(const EC_Group& dom_par, const EC_Point& pub_point);
+      EC_PublicKey(const EC_Group& group, const EC_Point& pub_point);
+
+      /**
+      * Load a public key from the point.
+      *
+      * @param group EC domain parameters
+      * @param pub_point public point on the curve
+      */
+      EC_PublicKey(const EC_Group& group, const EC_AffinePoint& pub_point);
 
       /**
       * Load a public key.
@@ -109,11 +123,10 @@ class BOTAN_PUBLIC_API(2, 0) EC_PublicKey : public virtual Public_Key {
       */
       EC_PublicKey(const AlgorithmIdentifier& alg_id, std::span<const uint8_t> key_bits);
 
-      EC_PublicKey() : m_domain_params{}, m_public_key{}, m_domain_encoding(EC_Group_Encoding::Explicit) {}
+      EC_PublicKey() = default;
 
-      EC_Group m_domain_params;
-      EC_Point m_public_key;
-      EC_Group_Encoding m_domain_encoding;
+      std::shared_ptr<EC_PublicKey_Data> m_public_key;
+      EC_Group_Encoding m_domain_encoding = EC_Group_Encoding::NamedCurve;
       EC_Point_Format m_point_encoding = EC_Point_Format::Uncompressed;
 };
 
@@ -145,6 +158,7 @@ class BOTAN_PUBLIC_API(2, 0) EC_PrivateKey : public virtual EC_PublicKey,
 
       const BigInt& get_int_field(std::string_view field) const final;
 
+      const EC_Scalar& _private_key() const;
    protected:
       /*
       * If x=0, creates a new private key in the domain
@@ -158,6 +172,24 @@ class BOTAN_PUBLIC_API(2, 0) EC_PrivateKey : public virtual EC_PublicKey,
                     const EC_Group& domain,
                     const BigInt& x,
                     bool with_modular_inverse = false);
+
+      /*
+      * Creates a new private key
+      *
+      * If with_modular_inverse is set, the public key will be calculated by
+      * multiplying the base point with the modular inverse of x (as in ECGDSA
+      * and ECKCDSA), otherwise by multiplying directly with x (as in ECDSA).
+      */
+      EC_PrivateKey(RandomNumberGenerator& rng, const EC_Group& group, bool with_modular_inverse = false);
+
+      /*
+      * Load a EC private key from the secret scalar
+      *
+      * If with_modular_inverse is set, the public key will be calculated by
+      * multiplying the base point with the modular inverse of x (as in ECGDSA
+      * and ECKCDSA), otherwise by multiplying directly with x (as in ECDSA).
+      */
+      EC_PrivateKey(const EC_Group& group, const EC_Scalar& scalar, bool with_modular_inverse = false);
 
       /*
       * Creates a new private key object from the
@@ -174,7 +206,7 @@ class BOTAN_PUBLIC_API(2, 0) EC_PrivateKey : public virtual EC_PublicKey,
 
       EC_PrivateKey() = default;
 
-      BigInt m_private_key;
+      std::shared_ptr<const EC_PrivateKey_Data> m_private_key;
 };
 
 BOTAN_DIAGNOSTIC_POP

@@ -32,8 +32,10 @@ bool SM2_PrivateKey::check_key(RandomNumberGenerator& rng, bool strong) const {
 
    // SM2 has an oddity in private key generation when compared to
    // other EC*DSA style signature algorithms described in ISO14888-3:
-   // the private key x MUST be in ]0, q-1[ instead of ]0, q[.
-   if(m_private_key < 1 || m_private_key >= m_domain_params.get_order() - 1) {
+   // the private key x MUST be in [0, q-1) instead of [0, q).
+   //
+   // The lower bound is already checked by the default impl
+   if(private_value() >= domain().get_order() - 1) {
       return false;
    }
 
@@ -46,12 +48,12 @@ bool SM2_PrivateKey::check_key(RandomNumberGenerator& rng, bool strong) const {
 
 SM2_PrivateKey::SM2_PrivateKey(const AlgorithmIdentifier& alg_id, std::span<const uint8_t> key_bits) :
       EC_PrivateKey(alg_id, key_bits) {
-   m_da_inv = domain().inverse_mod_order(m_private_key + 1);
+   m_da_inv = domain().inverse_mod_order(private_value() + 1);
 }
 
 SM2_PrivateKey::SM2_PrivateKey(RandomNumberGenerator& rng, const EC_Group& domain, const BigInt& x) :
       EC_PrivateKey(rng, domain, x) {
-   m_da_inv = domain.inverse_mod_order(m_private_key + 1);
+   m_da_inv = domain.inverse_mod_order(private_value() + 1);
 }
 
 std::vector<uint8_t> sm2_compute_za(HashFunction& hash,

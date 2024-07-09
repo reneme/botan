@@ -11,6 +11,7 @@
 
 #include <botan/ber_dec.h>
 #include <botan/der_enc.h>
+#include <botan/internal/ec_key_data.h>
 #include <botan/internal/fmt.h>
 #include <botan/internal/pk_ops_impl.h>
 
@@ -59,14 +60,14 @@ GOST_3410_PublicKey::GOST_3410_PublicKey(const AlgorithmIdentifier& alg_id, std:
    // The parameters also includes hash and cipher OIDs
    BER_Decoder(alg_id.parameters()).start_sequence().decode(ecc_param_id);
 
-   m_domain_params = EC_Group::from_OID(ecc_param_id);
+   auto group = EC_Group::from_OID(ecc_param_id);
 
-   const size_t p_bits = m_domain_params.get_p_bits();
+   const size_t p_bits = group.get_p_bits();
    if(p_bits != 256 && p_bits != 512) {
       throw Decoding_Error(fmt("GOST-34.10-2012 is not defined for parameters of size {}", p_bits));
    }
 
-   secure_vector<uint8_t> bits;
+   std::vector<uint8_t> bits;
    BER_Decoder(key_bits).decode(bits, ASN1_Type::OctetString);
 
    if(bits.size() != 2 * (p_bits / 8)) {
@@ -76,22 +77,18 @@ GOST_3410_PublicKey::GOST_3410_PublicKey(const AlgorithmIdentifier& alg_id, std:
    const size_t part_size = bits.size() / 2;
 
    // Keys are stored in little endian format (WTF)
-   for(size_t i = 0; i != part_size / 2; ++i) {
-      std::swap(bits[i], bits[part_size - 1 - i]);
-      std::swap(bits[part_size + i], bits[2 * part_size - 1 - i]);
-   }
+   std::vector<uint8_t> encoding;
+   encoding.reserve(bits.size() + 1);
+   encoding.push_back(0x04);
+   encoding.insert(encoding.end(), bits.rbegin() + part_size, bits.rend());
+   encoding.insert(encoding.end(), bits.rbegin(), bits.rend() - part_size);
 
-   BigInt x(bits.data(), part_size);
-   BigInt y(&bits[part_size], part_size);
-
-   m_public_key = domain().point(x, y);
-
-   BOTAN_ASSERT(m_public_key.on_the_curve(), "Loaded GOST 34.10 public key is on the curve");
+   m_public_key = std::make_shared<EC_PublicKey_Data>(group, encoding);
 }
 
 GOST_3410_PrivateKey::GOST_3410_PrivateKey(RandomNumberGenerator& rng, const EC_Group& domain, const BigInt& x) :
       EC_PrivateKey(rng, domain, x) {
-   const size_t p_bits = m_domain_params.get_p_bits();
+   const size_t p_bits = domain.get_p_bits();
    if(p_bits != 256 && p_bits != 512) {
       throw Decoding_Error(fmt("GOST-34.10-2012 is not defined for parameters of size {}", p_bits));
    }

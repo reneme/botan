@@ -117,9 +117,7 @@ EC_Scalar gost_msg_to_scalar(const EC_Group& group, std::span<const uint8_t> msg
 class GOST_3410_Signature_Operation final : public PK_Ops::Signature_with_Hash {
    public:
       GOST_3410_Signature_Operation(const GOST_3410_PrivateKey& gost_3410, std::string_view emsa) :
-            PK_Ops::Signature_with_Hash(emsa),
-            m_group(gost_3410.domain()),
-            m_x(EC_Scalar::from_bigint(m_group, gost_3410.private_value())) {}
+            PK_Ops::Signature_with_Hash(emsa), m_group(gost_3410.domain()), m_x(gost_3410._private_key()) {}
 
       size_t signature_length() const override { return 2 * m_group.get_order_bytes(); }
 
@@ -198,12 +196,12 @@ std::string gost_hash_from_algid(const AlgorithmIdentifier& alg_id) {
 class GOST_3410_Verification_Operation final : public PK_Ops::Verification_with_Hash {
    public:
       GOST_3410_Verification_Operation(const GOST_3410_PublicKey& gost, std::string_view padding) :
-            PK_Ops::Verification_with_Hash(padding), m_group(gost.domain()), m_gy_mul(m_group, gost.public_point()) {}
+            PK_Ops::Verification_with_Hash(padding), m_group(gost.domain()), m_gy_mul(gost._public_key()) {}
 
       GOST_3410_Verification_Operation(const GOST_3410_PublicKey& gost, const AlgorithmIdentifier& alg_id) :
             PK_Ops::Verification_with_Hash(gost_hash_from_algid(alg_id)),
             m_group(gost.domain()),
-            m_gy_mul(m_group, gost.public_point()) {}
+            m_gy_mul(gost._public_key()) {}
 
       bool verify(std::span<const uint8_t> msg, std::span<const uint8_t> sig) override;
 

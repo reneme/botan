@@ -96,16 +96,25 @@ class BOTAN_PUBLIC_API(2, 2) SM2_PrivateKey final : public SM2_PublicKey,
                                                                std::string_view params,
                                                                std::string_view provider) const override;
 
-      const BigInt& get_da_inv() const { return m_da_inv; }
+      BOTAN_DEPRECATED("Deprecated no replacement") const BigInt& get_da_inv() const { return m_da_inv_legacy; }
+
+      const EC_Scalar& _get_da_inv() const { return m_da_inv; }
 
    private:
-      BigInt m_da_inv;
+      EC_Scalar m_da_inv;
+      BigInt m_da_inv_legacy;
 };
 
 BOTAN_DIAGNOSTIC_POP
 
 class HashFunction;
 
+/*
+* This is deprecated because it's not clear what it is useful for
+*
+* Open an issue on GH if you are using this
+*/
+BOTAN_DEPRECATED("Deprecated unclear usage")
 std::vector<uint8_t> BOTAN_PUBLIC_API(2, 5)
    sm2_compute_za(HashFunction& hash, std::string_view user_id, const EC_Group& domain, const EC_Point& pubkey);
 

@@ -12,6 +12,7 @@
 #include <botan/internal/tpm2_authsession.h>
 #include <botan/internal/tpm2_util.h>
 
+#include <algorithm>
 #include <tss2/tss2_esys.h>
 #include <tss2/tss2_tcti.h>
 #include <tss2/tss2_tctildr.h>
@@ -42,7 +43,7 @@ std::shared_ptr<TPM2_Context> TPM2_Context::create(std::optional<std::string> tc
    // We cannot std::make_shared as the constructor is private
    auto ctx = std::shared_ptr<TPM2_Context>(new TPM2_Context(tcti_nameconf_ptr));
 
-   auto auth_session = std::make_unique<TPM2_AuthSession>(ctx, "0x81000001" /*TODO: Input string handling*/);
+   auto auth_session = std::make_unique<TPM2_AuthSession>(ctx, "0x81000001" /*SRK*/);
    ctx->set_session(auth_session);
 
    return ctx;
@@ -63,6 +64,40 @@ void* TPM2_Context::inner_context_object() {
 
 uint32_t TPM2_Context::inner_session_object() {
    return m_auth_session->session();
+}
+
+uint32_t TPM2_Context::spk_handle() const {
+   return m_auth_session->spk_handle();
+}
+
+std::vector<uint32_t> TPM2_Context::persistent_handles() const {
+   std::vector<uint32_t> handles;
+
+   TPMI_YES_NO more_data;
+   TPMS_CAPABILITY_DATA* capability_data = nullptr;
+
+   check_tss2_rc("Esys_GetCapability",
+                 Esys_GetCapability(m_impl->m_ctx,
+                                    ESYS_TR_NONE,
+                                    ESYS_TR_NONE,
+                                    ESYS_TR_NONE,
+                                    TPM2_CAP_HANDLES,
+                                    TPM2_PERSISTENT_FIRST,
+                                    TPM2_MAX_CAP_HANDLES,
+                                    &more_data,
+                                    &capability_data));
+
+   for(size_t i = 0; i < capability_data->data.handles.count; i++) {
+      handles.push_back(capability_data->data.handles.handle[i]);
+   }
+   Esys_Free(capability_data);
+   return handles;
+}
+
+bool TPM2_Context::in_persistent_handles(uint32_t persistent_handle) const {
+   auto persistent_handles = this->persistent_handles();
+   return std::find(persistent_handles.begin(), persistent_handles.end(), persistent_handle) !=
+          persistent_handles.end();
 }
 
 TPM2_Context::~TPM2_Context() {

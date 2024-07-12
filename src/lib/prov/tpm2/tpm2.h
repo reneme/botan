@@ -13,6 +13,7 @@
 
 #include <memory>
 #include <optional>
+#include <vector>
 
 namespace Botan {
 
@@ -57,6 +58,14 @@ class BOTAN_PUBLIC_API(3, 6) TPM2_Context final : public std::enable_shared_from
 
       /// @return the ESYS_TR session for this context
       uint32_t inner_session_object();
+
+      /// @return the SPK handle as TR
+      uint32_t spk_handle() const;
+
+      std::vector<uint32_t> persistent_handles() const;
+
+      /// @return true if @param persistent_handle is in the list of persistent handles
+      bool in_persistent_handles(uint32_t persistent_handle) const;
 
    private:
       TPM2_Context(const char* tcti_nameconf);

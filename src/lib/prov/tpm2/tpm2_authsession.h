@@ -21,7 +21,7 @@ class TPM2_AuthSession {
    public:
       /**
          * @param ctx  The TPM2_Context to use for the session
-         * @param spk_handle The SPK to use for session establishment
+         * @param spk_handle The SPKs TPM2_HANDLE to use for session establishment
          */
       TPM2_AuthSession(std::shared_ptr<TPM2_Context> ctx, std::string_view spk_handle);
 
@@ -29,9 +29,11 @@ class TPM2_AuthSession {
 
       ESYS_TR session() const { return m_session; }
 
+      ESYS_TR spk_handle() const { return m_spk_handle; }
+
    private:
       std::shared_ptr<TPM2_Context> m_ctx;
-      const std::string_view m_spk_handle;
+      ESYS_TR m_spk_handle;
       ESYS_TR m_session;
 };
 

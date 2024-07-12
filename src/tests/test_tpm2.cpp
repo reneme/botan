@@ -8,8 +8,10 @@
 
 #include <botan/internal/loadstor.h>
 #include <botan/internal/stl_util.h>
+#include <iostream>
 
 #if defined(BOTAN_HAS_TPM2)
+   #include <botan/tpm2_keys.h>
    #include <botan/tpm2_rng.h>
 #endif
 
@@ -17,6 +19,8 @@ namespace Botan_Tests {
 
 #if defined(BOTAN_HAS_TPM2)
 namespace {
+
+const std::string use_tpm2_emulator = "swtpm";
 
 bool not_zero_64(std::span<const uint8_t> in) {
    Botan::BufferSlicer bs(in);
@@ -32,8 +36,7 @@ bool not_zero_64(std::span<const uint8_t> in) {
 }
 
 std::vector<Test::Result> test_tpm2_rng() {
-   std::string use_tpm2_emulator = "swtpm";
-   auto ctx = Botan::TPM2_Context::create(std::move(use_tpm2_emulator));
+   auto ctx = Botan::TPM2_Context::create(use_tpm2_emulator);
 
    auto rng = Botan::TPM2_RNG(ctx);
 
@@ -77,9 +80,35 @@ std::vector<Test::Result> test_tpm2_rng() {
             }),
    };
 }
+
+std::vector<Test::Result> test_tpm2_keys() {
+   auto ctx = Botan::TPM2_Context::create(use_tpm2_emulator);
+
+   return {CHECK("Key Creation", [&](Test::Result& result) {
+      {
+         auto key = Botan::TPM2_Key(ctx, 8, "password");
+         result.test_eq("Algo", key.algo_name(), "RSA");
+         result.test_is_eq("Handle", key.handle(), 0x81000008);
+         // key goes out of scope
+      }
+
+      result.test_is_eq("Key made persistent",
+                        std::find(ctx->persistent_handles().begin(), ctx->persistent_handles().end(), 0x81000008) !=
+                           ctx->persistent_handles().end(),
+                        true);
+      // // TODO load key with wrong PW - this will only throw once a sig_op is needed
+      // result.test_throws("Key supplied with wrong PW", [&] { Botan::TPM2_Key(ctx, 8, "password_wrong"); });
+
+      // load key with right PW
+      auto key = Botan::TPM2_Key(ctx, 8, "password");
+      result.test_eq("Algo", key.algo_name(), "RSA");
+      result.test_is_eq("Handle", key.handle(), 0x81000008);
+   })};
+}
+
 }  // namespace
 
-BOTAN_REGISTER_TEST_FN("tpm2", "tpm2_rng", test_tpm2_rng);
+BOTAN_REGISTER_TEST_FN("tpm2", "tpm2", test_tpm2_rng, test_tpm2_keys);
 #endif
 
 }  // namespace Botan_Tests

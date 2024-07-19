@@ -9,10 +9,13 @@
 #include <botan/tpm2.h>
 
 #include <botan/internal/fmt.h>
+#include <botan/internal/loadstor.h>
+#include <botan/internal/stl_util.h>
 #include <botan/internal/tpm2_authsession.h>
 #include <botan/internal/tpm2_util.h>
 
 #include <algorithm>
+#include <array>
 #include <tss2/tss2_esys.h>
 #include <tss2/tss2_tcti.h>
 #include <tss2/tss2_tctildr.h>
@@ -68,6 +71,40 @@ uint32_t TPM2_Context::inner_session_object() {
 
 uint32_t TPM2_Context::spk_handle() const {
    return m_auth_session->spk_handle();
+}
+
+std::string TPM2_Context::vendor() const {
+   std::array<TPM2_PT, 4> properties = {
+      TPM2_PT_VENDOR_STRING_1, TPM2_PT_VENDOR_STRING_2, TPM2_PT_VENDOR_STRING_3, TPM2_PT_VENDOR_STRING_4};
+   std::array<uint8_t, properties.size() * sizeof(TPM2_PT) + 1 /* ensure zero-termination */> vendor_string{};
+
+   BufferStuffer bs(vendor_string);
+
+   // The vendor name is transported in several uint32_t fields that are
+   // loaded as big-endian bytes and concatenated to form the vendor string.
+   for(auto prop : properties) {
+      TPMI_YES_NO more_data;
+      TPMS_CAPABILITY_DATA* capability_data;
+
+      check_tss2_rc("Esys_GetCapability",
+                    Esys_GetCapability(m_impl->m_ctx,
+                                       ESYS_TR_NONE,
+                                       ESYS_TR_NONE,
+                                       ESYS_TR_NONE,
+                                       TPM2_CAP_TPM_PROPERTIES,
+                                       prop,
+                                       1,
+                                       &more_data,
+                                       &capability_data));
+
+      BOTAN_STATE_CHECK(capability_data->capability == TPM2_CAP_TPM_PROPERTIES &&
+                        capability_data->data.tpmProperties.count > 0);
+      bs.append(store_be(capability_data->data.tpmProperties.tpmProperty[0].value));
+      Esys_Free(capability_data);
+   }
+
+   BOTAN_ASSERT_NOMSG(bs.remaining_capacity() == 1);  // the ensured zero-termination
+   return std::string(reinterpret_cast<const char*>(vendor_string.data()));
 }
 
 std::vector<uint32_t> TPM2_Context::persistent_handles() const {

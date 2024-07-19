@@ -6,6 +6,7 @@
 */
 #include "tests.h"
 
+#include <botan/internal/fmt.h>
 #include <botan/internal/loadstor.h>
 #include <botan/internal/stl_util.h>
 #include <iostream>
@@ -20,7 +21,7 @@ namespace Botan_Tests {
 #if defined(BOTAN_HAS_TPM2)
 namespace {
 
-const std::string use_tpm2_emulator = "swtpm";
+const std::string use_tpm2_emulator = "tabrmd";
 
 bool not_zero_64(std::span<const uint8_t> in) {
    Botan::BufferSlicer bs(in);
@@ -35,8 +36,26 @@ bool not_zero_64(std::span<const uint8_t> in) {
    return true;
 }
 
-std::vector<Test::Result> test_tpm2_rng() {
+std::shared_ptr<Botan::TPM2_Context> get_tpm2_context() {
    auto ctx = Botan::TPM2_Context::create(use_tpm2_emulator);
+   if(ctx->vendor() != "SW   TPM") {
+      return {};
+   }
+
+   return ctx;
+}
+
+Test::Result bail_out() {
+   Test::Result result("TPM2 test bail out");
+   result.test_failure("Not sure we're on a simulated TPM2, cautiously refusing any action.");
+   return result;
+}
+
+std::vector<Test::Result> test_tpm2_rng() {
+   auto ctx = get_tpm2_context();
+   if(!ctx) {
+      return {bail_out()};
+   }
 
    auto rng = Botan::TPM2_RNG(ctx);
 
@@ -82,7 +101,10 @@ std::vector<Test::Result> test_tpm2_rng() {
 }
 
 std::vector<Test::Result> test_tpm2_keys() {
-   auto ctx = Botan::TPM2_Context::create(use_tpm2_emulator);
+   auto ctx = get_tpm2_context();
+   if(!ctx) {
+      return {bail_out()};
+   }
 
    return {CHECK("Key Creation", [&](Test::Result& result) {
       {

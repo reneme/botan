@@ -185,7 +185,7 @@ class EC_Group_Data final : public std::enable_shared_from_this<EC_Group_Data> {
 
       std::unique_ptr<EC_Scalar_Data> scalar_from_bytes_mod_order(std::span<const uint8_t> bytes) const;
 
-      std::unique_ptr<EC_Scalar_Data> scalar_from_bigint(const BigInt& bn) const;
+      std::unique_ptr<EC_Scalar_Data> scalar_from_bigint(BigInt bn) const;
 
       std::unique_ptr<EC_Scalar_Data> scalar_random(RandomNumberGenerator& rng) const;
 

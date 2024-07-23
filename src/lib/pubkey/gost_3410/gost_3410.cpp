@@ -83,7 +83,7 @@ GOST_3410_PublicKey::GOST_3410_PublicKey(const AlgorithmIdentifier& alg_id, std:
    encoding.insert(encoding.end(), bits.rbegin() + part_size, bits.rend());
    encoding.insert(encoding.end(), bits.rbegin(), bits.rend() - part_size);
 
-   m_public_key = std::make_shared<EC_PublicKey_Data>(group, encoding);
+   m_public_key = std::make_shared<EC_PublicKey_Data>(std::move(group), encoding);
 }
 
 GOST_3410_PrivateKey::GOST_3410_PrivateKey(RandomNumberGenerator& rng, const EC_Group& domain, const BigInt& x) :

@@ -23,7 +23,7 @@ class EC_PublicKey_Data final {
       EC_PublicKey_Data(EC_Group group, EC_AffinePoint pt) :
             m_group(std::move(group)), m_point(std::move(pt)), m_legacy_point(m_point.to_legacy_point()) {}
 
-      EC_PublicKey_Data(const EC_Group& group, std::span<const uint8_t> bytes);
+      EC_PublicKey_Data(EC_Group group, std::span<const uint8_t> bytes);
 
       const EC_Group& group() const { return m_group; }
 
@@ -39,13 +39,13 @@ class EC_PublicKey_Data final {
 
 class EC_PrivateKey_Data final {
    public:
-      EC_PrivateKey_Data(const EC_Group& group, RandomNumberGenerator& rng);
+      EC_PrivateKey_Data(EC_Group group, RandomNumberGenerator& rng);
 
-      EC_PrivateKey_Data(const EC_Group& group, const BigInt& x);
+      EC_PrivateKey_Data(EC_Group group, BigInt x);
 
-      EC_PrivateKey_Data(const EC_Group& group, const EC_Scalar& x);
+      EC_PrivateKey_Data(EC_Group group, EC_Scalar x);
 
-      EC_PrivateKey_Data(const EC_Group& group, std::span<const uint8_t> bytes);
+      EC_PrivateKey_Data(EC_Group group, std::span<const uint8_t> bytes);
 
       std::shared_ptr<EC_PublicKey_Data> public_key(RandomNumberGenerator& rng, bool with_modular_inverse) const;
 

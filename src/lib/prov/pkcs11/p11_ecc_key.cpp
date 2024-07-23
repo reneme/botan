@@ -48,14 +48,14 @@ PKCS11_EC_PublicKey::PKCS11_EC_PublicKey(Session& session, ObjectHandle handle) 
 
    EC_Group group(ec_parameters);
    auto pt = decode_public_point(group, pt_bytes);
-   m_public_key = std::make_shared<EC_PublicKey_Data>(group, pt);
+   m_public_key = std::make_shared<EC_PublicKey_Data>(std::move(group), std::move(pt));
 }
 
 PKCS11_EC_PublicKey::PKCS11_EC_PublicKey(Session& session, const EC_PublicKeyImportProperties& props) :
       Object(session, props) {
    EC_Group group(props.ec_params());
    auto pt = decode_public_point(group, props.ec_point());
-   m_public_key = std::make_shared<EC_PublicKey_Data>(group, pt);
+   m_public_key = std::make_shared<EC_PublicKey_Data>(std::move(group), std::move(pt));
 }
 
 EC_PrivateKeyImportProperties::EC_PrivateKeyImportProperties(const std::vector<uint8_t>& ec_params,

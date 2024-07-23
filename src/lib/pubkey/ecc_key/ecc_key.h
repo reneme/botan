@@ -107,7 +107,7 @@ class BOTAN_PUBLIC_API(2, 0) EC_PublicKey : public virtual Public_Key {
       * @param group EC domain parameters
       * @param pub_point public point on the curve
       */
-      EC_PublicKey(const EC_Group& group, const EC_Point& pub_point);
+      EC_PublicKey(EC_Group group, const EC_Point& pub_point);
 
       /**
       * Load a public key from the point.
@@ -115,7 +115,7 @@ class BOTAN_PUBLIC_API(2, 0) EC_PublicKey : public virtual Public_Key {
       * @param group EC domain parameters
       * @param pub_point public point on the curve
       */
-      EC_PublicKey(const EC_Group& group, const EC_AffinePoint& pub_point);
+      EC_PublicKey(EC_Group group, EC_AffinePoint pub_point);
 
       /**
       * Load a public key.
@@ -170,10 +170,7 @@ class BOTAN_PUBLIC_API(2, 0) EC_PrivateKey : public virtual EC_PublicKey,
       * x (as in ECGDSA and ECKCDSA), otherwise by
       * multiplying directly with x (as in ECDSA).
       */
-      EC_PrivateKey(RandomNumberGenerator& rng,
-                    const EC_Group& domain,
-                    const BigInt& x,
-                    bool with_modular_inverse = false);
+      EC_PrivateKey(RandomNumberGenerator& rng, EC_Group domain, BigInt x, bool with_modular_inverse = false);
 
       /*
       * Creates a new private key
@@ -182,7 +179,7 @@ class BOTAN_PUBLIC_API(2, 0) EC_PrivateKey : public virtual EC_PublicKey,
       * multiplying the base point with the modular inverse of x (as in ECGDSA
       * and ECKCDSA), otherwise by multiplying directly with x (as in ECDSA).
       */
-      EC_PrivateKey(RandomNumberGenerator& rng, const EC_Group& group, bool with_modular_inverse = false);
+      EC_PrivateKey(RandomNumberGenerator& rng, EC_Group group, bool with_modular_inverse = false);
 
       /*
       * Load a EC private key from the secret scalar
@@ -191,7 +188,7 @@ class BOTAN_PUBLIC_API(2, 0) EC_PrivateKey : public virtual EC_PublicKey,
       * multiplying the base point with the modular inverse of x (as in ECGDSA
       * and ECKCDSA), otherwise by multiplying directly with x (as in ECDSA).
       */
-      EC_PrivateKey(const EC_Group& group, const EC_Scalar& scalar, bool with_modular_inverse = false);
+      EC_PrivateKey(EC_Group group, EC_Scalar scalar, bool with_modular_inverse = false);
 
       /*
       * Creates a new private key object from the

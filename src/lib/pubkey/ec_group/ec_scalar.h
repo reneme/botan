@@ -86,7 +86,7 @@ class BOTAN_UNSTABLE_API EC_Scalar final {
       *
       * Throws an exception if the provided bn is negative or too large
       */
-      static EC_Scalar from_bigint(const EC_Group& group, const BigInt& bn);
+      static EC_Scalar from_bigint(const EC_Group& group, BigInt bn);
 
       /**
       * Compute the elliptic curve scalar multiplication (g*k) where g is the

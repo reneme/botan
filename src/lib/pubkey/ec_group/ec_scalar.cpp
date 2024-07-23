@@ -58,9 +58,9 @@ EC_Scalar EC_Scalar::one(const EC_Group& group) {
    return EC_Scalar(group._data()->scalar_one());
 }
 
-EC_Scalar EC_Scalar::from_bigint(const EC_Group& group, const BigInt& bn) {
+EC_Scalar EC_Scalar::from_bigint(const EC_Group& group, BigInt bn) {
    BOTAN_ARG_CHECK(bn.is_positive() && bn <= group._data()->order(), "EC_Scalar::from_bigint out of range");
-   return EC_Scalar(group._data()->scalar_from_bigint(bn));
+   return EC_Scalar(group._data()->scalar_from_bigint(std::move(bn)));
 }
 
 BigInt EC_Scalar::to_bigint() const {

@@ -93,9 +93,9 @@ std::unique_ptr<EC_Scalar_Data> EC_Group_Data::scalar_one() const {
    return std::make_unique<EC_Scalar_Data_BN>(shared_from_this(), BigInt::one());
 }
 
-std::unique_ptr<EC_Scalar_Data> EC_Group_Data::scalar_from_bigint(const BigInt& bn) const {
+std::unique_ptr<EC_Scalar_Data> EC_Group_Data::scalar_from_bigint(BigInt bn) const {
    // Assumed to have been already checked as in range
-   return std::make_unique<EC_Scalar_Data_BN>(shared_from_this(), bn);
+   return std::make_unique<EC_Scalar_Data_BN>(shared_from_this(), std::move(bn));
 }
 
 std::unique_ptr<EC_Scalar_Data> EC_Group_Data::gk_x_mod_order(const EC_Scalar_Data& scalar,

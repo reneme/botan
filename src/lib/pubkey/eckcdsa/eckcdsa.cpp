@@ -119,9 +119,8 @@ class ECKCDSA_Signature_Operation final : public PK_Ops::Signature {
             m_group(eckcdsa.domain()),
             m_x(eckcdsa._private_key()),
             m_hash(eckcdsa_signature_hash(padding)),
-            m_prefix_used(false) {
-         m_prefix = eckcdsa_prefix(eckcdsa._public_key(), m_hash->hash_block_size());
-      }
+            m_prefix(eckcdsa_prefix(eckcdsa._public_key(), m_hash->hash_block_size())),
+            m_prefix_used(false) {}
 
       void update(std::span<const uint8_t> input) override {
          if(!m_prefix_used) {
@@ -190,17 +189,15 @@ class ECKCDSA_Verification_Operation final : public PK_Ops::Verification {
             m_group(eckcdsa.domain()),
             m_gy_mul(eckcdsa._public_key()),
             m_hash(eckcdsa_signature_hash(padding)),
-            m_prefix_used(false) {
-         m_prefix = eckcdsa_prefix(eckcdsa._public_key(), m_hash->hash_block_size());
-      }
+            m_prefix(eckcdsa_prefix(eckcdsa._public_key(), m_hash->hash_block_size())),
+            m_prefix_used(false) {}
 
       ECKCDSA_Verification_Operation(const ECKCDSA_PublicKey& eckcdsa, const AlgorithmIdentifier& alg_id) :
             m_group(eckcdsa.domain()),
             m_gy_mul(eckcdsa._public_key()),
             m_hash(eckcdsa_signature_hash(alg_id)),
-            m_prefix_used(false) {
-         m_prefix = eckcdsa_prefix(eckcdsa._public_key(), m_hash->hash_block_size());
-      }
+            m_prefix(eckcdsa_prefix(eckcdsa._public_key(), m_hash->hash_block_size())),
+            m_prefix_used(false) {}
 
       void update(std::span<const uint8_t> msg) override;
 
@@ -213,8 +210,8 @@ class ECKCDSA_Verification_Operation final : public PK_Ops::Verification {
 
       const EC_Group m_group;
       const EC_Group::Mul2Table m_gy_mul;
-      std::vector<uint8_t> m_prefix;
       std::unique_ptr<HashFunction> m_hash;
+      std::vector<uint8_t> m_prefix;
       bool m_prefix_used;
 };
 

@@ -199,7 +199,7 @@ auto as_span(tpm2_buffer auto& data) {
 template <tpm2_buffer T>
 T copy_into(std::span<const uint8_t> data) {
    T result;
-   BOTAN_ASSERT_NOMSG(data.size() <= std::numeric_limits<decltype(result.size)>::max());
+   BOTAN_ASSERT_NOMSG(data.size() <= sizeof(result.buffer));
    result.size = static_cast<decltype(result.size)>(data.size());
    copy_mem(as_span(result), data);
    return result;

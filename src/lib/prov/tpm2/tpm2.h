@@ -11,6 +11,7 @@
 
 #include <botan/exceptn.h>
 
+#include <array>
 #include <memory>
 #include <optional>
 #include <vector>
@@ -51,7 +52,8 @@ class BOTAN_PUBLIC_API(3, 6) TPM2_Context final : public std::enable_shared_from
        * @param conf  if set this is passed to Tss2_TctiLdr_Initialize_Ex verbatim
        *              otherwise a nullptr is passed.
        */
-      static std::shared_ptr<TPM2_Context> create(std::optional<std::string> tcti = {}, std::optional<std::string> conf = {});
+      static std::shared_ptr<TPM2_Context> create(std::optional<std::string> tcti = {},
+                                                  std::optional<std::string> conf = {});
 
       TPM2_Context(const TPM2_Context&) = delete;
       TPM2_Context(TPM2_Context&& ctx) noexcept = default;
@@ -60,14 +62,14 @@ class BOTAN_PUBLIC_API(3, 6) TPM2_Context final : public std::enable_shared_from
       TPM2_Context& operator=(const TPM2_Context&) = delete;
       TPM2_Context& operator=(TPM2_Context&& ctx) noexcept = default;
 
+      void set_sessions(std::optional<uint32_t> session1,
+                        std::optional<uint32_t> session2,
+                        std::optional<uint32_t> session3);
+
+      uint32_t session_handle(size_t idx) const { return m_session_handles[idx]; }
+
       /// @return an ESYS_CONTEXT* for use in other TPM2 functions.
       void* inner_context_object();
-
-      /// @return the ESYS_TR session for this context
-      uint32_t inner_session_object();
-
-      /// @return the SPK handle as TR
-      uint32_t spk_handle() const;
 
       /// @return the Vendor of the TPM2
       std::string vendor() const;
@@ -77,17 +79,17 @@ class BOTAN_PUBLIC_API(3, 6) TPM2_Context final : public std::enable_shared_from
       /// @return true if @param persistent_handle is in the list of persistent handles
       bool in_persistent_handles(uint32_t persistent_handle) const;
 
+      void set_session(std::unique_ptr<TPM2_AuthSession> session);
+
    private:
       TPM2_Context(const char* tcti_nameconf);
       TPM2_Context(const char* tcti_name, const char* tcti_conf);
-
-      void set_session(std::unique_ptr<TPM2_AuthSession>& auth_session);
 
    private:
       struct Impl;  // PImpl to avoid TPM2-TSS includes in this header
       std::unique_ptr<Impl> m_impl;
 
-      std::unique_ptr<TPM2_AuthSession> m_auth_session;
+      std::array<uint32_t, 3> m_session_handles;
 };
 
 }  // namespace Botan

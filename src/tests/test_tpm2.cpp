@@ -6,9 +6,11 @@
 */
 #include "tests.h"
 
+#include <botan/pubkey.h>
 #include <botan/internal/fmt.h>
 #include <botan/internal/loadstor.h>
 #include <botan/internal/stl_util.h>
+#include <botan/internal/tpm2_authsession.h>
 #include <iostream>
 
 #if defined(BOTAN_HAS_TPM2)
@@ -54,6 +56,9 @@ std::vector<Test::Result> test_tpm2_rng() {
    if(!ctx) {
       return {bail_out()};
    }
+
+   auto session = std::make_unique<Botan::TPM2_AuthSession>(ctx);
+   ctx->set_sessions(session->session(), std::nullopt, std::nullopt);
 
    auto rng = Botan::TPM2_RNG(ctx);
 
@@ -104,26 +109,60 @@ std::vector<Test::Result> test_tpm2_keys() {
       return {bail_out()};
    }
 
-   return {CHECK("Key Creation", [&](Test::Result& result) {
-      {
-         auto key = Botan::TPM2_Key(ctx, 8, "password");
-         result.test_eq("Algo", key.algo_name(), "RSA");
-         result.test_is_eq("Handle", key.handle(), 0x81000008);
-         // key goes out of scope
-      }
+   return {
+      CHECK("Key Creation and Usage",
+            [&](Test::Result& result) {
+               {
+                  std::cout << "###########################################\n";
+                  std::cout << "create key\n";
+                  std::cout << "###########################################\n";
 
-      result.test_is_eq("Key made persistent",
-                        std::find(ctx->persistent_handles().begin(), ctx->persistent_handles().end(), 0x81000008) !=
-                           ctx->persistent_handles().end(),
-                        true);
-      // // TODO load key with wrong PW - this will only throw once a sig_op is needed
-      // result.test_throws("Key supplied with wrong PW", [&] { Botan::TPM2_Key(ctx, 8, "password_wrong"); });
+                  auto key = Botan::TPM2_Key(ctx, 8, "password");
+                  result.test_eq("Algo", key.algo_name(), "RSA");
+                  result.test_is_eq("Handle", key.handle(), 0x81000008);
+                  // key goes out of scope
+               }
 
-      // load key with right PW
-      auto key = Botan::TPM2_Key(ctx, 8, "password");
-      result.test_eq("Algo", key.algo_name(), "RSA");
-      result.test_is_eq("Handle", key.handle(), 0x81000008);
-   })};
+               const auto persistent_handles = ctx->persistent_handles();
+               result.confirm("Key made persistent",
+                              std::find(persistent_handles.begin(), persistent_handles.end(), 0x81000008) !=
+                                 persistent_handles.end());
+
+               // // TODO load key with wrong PW - this will only throw once a sig_op is needed
+               // result.test_throws("Key supplied with wrong PW", [&] { Botan::TPM2_Key(ctx, 8, "password_wrong"); });
+
+               std::cout << "###########################################\n";
+               std::cout << "load key\n";
+               std::cout << "###########################################\n";
+
+               // load key with right PW
+               auto key = Botan::TPM2_Key(ctx, 8, "password");
+               result.test_eq("Algo", key.algo_name(), "RSA");
+               result.test_is_eq("Handle", key.handle(), 0x81000008);
+
+               Botan::Null_RNG null_rng;
+               Botan::PK_Signer signer(key, null_rng /* TPM takes care of this */, "PSS(SHA-256)");
+
+               std::cout << "###########################################\n";
+               std::cout << "start signing\n";
+               std::cout << "###########################################\n";
+
+               auto session = std::make_unique<Botan::TPM2_AuthSession>(ctx);
+               ctx->set_sessions(session->session(), std::nullopt, std::nullopt);
+
+               auto message = Botan::hex_decode("deadbeef");
+               const auto signature = signer.sign_message(message, null_rng);
+               result.test_gt("signature is not empty", signature.size(), 0);
+
+               std::cout << "###########################################\n";
+               std::cout << "start verifying\n";
+               std::cout << "###########################################\n";
+
+               auto public_key = key.public_key();
+               Botan::PK_Verifier verifier(*public_key, "PSS(SHA-256)");
+               result.confirm("Signature is valid", verifier.verify_message(message, signature));
+            }),
+   };
 }
 
 }  // namespace

@@ -36,12 +36,7 @@ struct TPM2_Context::Impl {
 
 std::shared_ptr<TPM2_Context> TPM2_Context::create(const std::string& tcti_nameconf) {
    // We cannot std::make_shared as the constructor is private
-   auto ctx = std::shared_ptr<TPM2_Context>(new TPM2_Context(tcti_nameconf.c_str()));
-
-   auto auth_session = std::make_unique<TPM2_AuthSession>(ctx, "0x81000001" /*SRK*/);
-   ctx->set_session(auth_session);
-
-   return ctx;
+   return std::shared_ptr<TPM2_Context>(new TPM2_Context(tcti_nameconf.c_str()));
 }
 
 std::shared_ptr<TPM2_Context> TPM2_Context::create(std::optional<std::string> tcti, std::optional<std::string> conf) {
@@ -49,38 +44,36 @@ std::shared_ptr<TPM2_Context> TPM2_Context::create(std::optional<std::string> tc
    const auto conf_ptr = conf.has_value() ? conf->c_str() : nullptr;
 
    // We cannot std::make_shared as the constructor is private
-   auto ctx = std::shared_ptr<TPM2_Context>(new TPM2_Context(tcti_ptr, conf_ptr));
-
-   auto auth_session = std::make_unique<TPM2_AuthSession>(ctx, "0x81000001" /*SRK*/);
-   ctx->set_session(auth_session);
-
-   return ctx;
+   return std::shared_ptr<TPM2_Context>(new TPM2_Context(tcti_ptr, conf_ptr));
 }
 
-TPM2_Context::TPM2_Context(const char* tcti_nameconf) : m_impl(std::make_unique<Impl>()) {
+TPM2_Context::TPM2_Context(const char* tcti_nameconf) :
+      m_impl(std::make_unique<Impl>()), m_session_handles{ESYS_TR_NONE, ESYS_TR_NONE, ESYS_TR_NONE} {
    check_tss2_rc("TCTI Initialization", Tss2_TctiLdr_Initialize(tcti_nameconf, &m_impl->m_tcti_ctx));
    check_tss2_rc("TPM2 Initialization", Esys_Initialize(&m_impl->m_ctx, m_impl->m_tcti_ctx, nullptr /* ABI version */));
 }
 
-TPM2_Context::TPM2_Context(const char* tcti_name, const char* tcti_conf) : m_impl(std::make_unique<Impl>()) {
+TPM2_Context::TPM2_Context(const char* tcti_name, const char* tcti_conf) :
+      m_impl(std::make_unique<Impl>()), m_session_handles{ESYS_TR_NONE, ESYS_TR_NONE, ESYS_TR_NONE} {
    check_tss2_rc("TCTI Initialization", Tss2_TctiLdr_Initialize_Ex(tcti_name, tcti_conf, &m_impl->m_tcti_ctx));
    check_tss2_rc("TPM2 Initialization", Esys_Initialize(&m_impl->m_ctx, m_impl->m_tcti_ctx, nullptr /* ABI version */));
 }
 
-void TPM2_Context::set_session(std::unique_ptr<TPM2_AuthSession>& auth_session) {
-   m_auth_session = std::move(auth_session);
+void TPM2_Context::set_sessions(std::optional<uint32_t> session1,
+                                std::optional<uint32_t> session2,
+                                std::optional<uint32_t> session3) {
+   auto set_session = [this](auto& session, size_t idx) {
+      if(session.has_value()) {
+         m_session_handles[idx] = session.value();
+      }
+   };
+   set_session(session1, 0);
+   set_session(session2, 1);
+   set_session(session3, 2);
 }
 
 void* TPM2_Context::inner_context_object() {
    return m_impl->m_ctx;
-}
-
-uint32_t TPM2_Context::inner_session_object() {
-   return m_auth_session->session();
-}
-
-uint32_t TPM2_Context::spk_handle() const {
-   return m_auth_session->spk_handle();
 }
 
 std::string TPM2_Context::vendor() const {
@@ -117,8 +110,6 @@ std::string TPM2_Context::vendor() const {
 }
 
 std::vector<uint32_t> TPM2_Context::persistent_handles() const {
-   std::vector<uint32_t> handles;
-
    TPMI_YES_NO more_data;
    unique_esys_ptr<TPMS_CAPABILITY_DATA> capability_data;
 
@@ -133,11 +124,10 @@ std::vector<uint32_t> TPM2_Context::persistent_handles() const {
                                     &more_data,
                                     out_ptr(capability_data)));
 
-   for(size_t i = 0; i < capability_data->data.handles.count; i++) {
-      handles.push_back(capability_data->data.handles.handle[i]);
-   }
+   // TODO: Check if we have `more_data`
 
-   return handles;
+   return {capability_data->data.handles.handle,
+           capability_data->data.handles.handle + capability_data->data.handles.count};
 }
 
 bool TPM2_Context::in_persistent_handles(uint32_t persistent_handle) const {

@@ -15,25 +15,21 @@
 namespace Botan {
 
 class TPM2_AuthSession {
-      //Always establishes a salted HMAC session under the SPK. Shall only be used within TPM2_Context
+      //Always establishes an HMAC session. Shall only be used within TPM2_Context
       // TODO: Constructors
 
    public:
       /**
          * @param ctx  The TPM2_Context to use for the session
-         * @param spk_handle The SPKs TPM2_HANDLE to use for session establishment
          */
-      TPM2_AuthSession(std::shared_ptr<TPM2_Context> ctx, std::string_view spk_handle);
+      TPM2_AuthSession(std::shared_ptr<TPM2_Context> ctx);
 
       ~TPM2_AuthSession();
 
       ESYS_TR session() const { return m_session; }
 
-      ESYS_TR spk_handle() const { return m_spk_handle; }
-
    private:
       std::shared_ptr<TPM2_Context> m_ctx;
-      ESYS_TR m_spk_handle;
       ESYS_TR m_session;
 };
 

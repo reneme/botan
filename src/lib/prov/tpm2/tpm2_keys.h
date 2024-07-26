@@ -32,6 +32,8 @@ class BOTAN_PUBLIC_API(3, 6) TPM2_Key final : public Private_Key {
 
       uint32_t handle() const { return m_persistent_key_handle; }
 
+      uint32_t transient_handle() const { return m_transient_key_handle; }
+
       std::string algo_name() const override { return "RSA"; }  // TODO: Other types
 
       std::unique_ptr<Public_Key> public_key() const override;
@@ -62,6 +64,8 @@ class BOTAN_PUBLIC_API(3, 6) TPM2_Key final : public Private_Key {
                                                              std::string_view provider) const override;
 
       // TODO: Key Deletion
+
+      std::shared_ptr<TPM2_Context> _context() const { return m_ctx; }
 
    private:
       void create_new(uint32_t key_handle, const std::string& auth_val);

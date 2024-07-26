@@ -32,15 +32,12 @@ void TPM2_RNG::fill_bytes_with_input(std::span<uint8_t> output, std::span<const 
 
    BufferStuffer out(output);
    while(!out.full()) {
-      TPM2B_DIGEST* digest = nullptr;
+      unique_esys_ptr<TPM2B_DIGEST> digest = nullptr;
       const auto requested_bytes = std::min(sizeof(digest->buffer), out.remaining_capacity());
       check_tss2_rc(
          "GetRandom",
          Esys_GetRandom(
-            inner(m_ctx), m_ctx->inner_session_object(), ESYS_TR_NONE, ESYS_TR_NONE, requested_bytes, &digest));
-
-      // Ensure Esys_Free(digest) is called even if assertions fail and we leave this block
-      auto clean_buffer = scoped_cleanup([&digest] { Esys_Free(digest); });
+            inner(m_ctx), m_ctx->inner_session_object(), ESYS_TR_NONE, ESYS_TR_NONE, requested_bytes, out_ptr(digest)));
 
       BOTAN_ASSERT_NOMSG(digest->size == requested_bytes);
       out.append({digest->buffer, digest->size});

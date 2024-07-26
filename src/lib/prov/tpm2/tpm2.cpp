@@ -84,7 +84,7 @@ std::string TPM2_Context::vendor() const {
    // loaded as big-endian bytes and concatenated to form the vendor string.
    for(auto prop : properties) {
       TPMI_YES_NO more_data;
-      TPMS_CAPABILITY_DATA* capability_data;
+      unique_esys_ptr<TPMS_CAPABILITY_DATA> capability_data;
 
       check_tss2_rc("Esys_GetCapability",
                     Esys_GetCapability(m_impl->m_ctx,
@@ -95,12 +95,11 @@ std::string TPM2_Context::vendor() const {
                                        prop,
                                        1,
                                        &more_data,
-                                       &capability_data));
+                                       out_ptr(capability_data)));
 
       BOTAN_STATE_CHECK(capability_data->capability == TPM2_CAP_TPM_PROPERTIES &&
                         capability_data->data.tpmProperties.count > 0);
       bs.append(store_be(capability_data->data.tpmProperties.tpmProperty[0].value));
-      Esys_Free(capability_data);
    }
 
    BOTAN_ASSERT_NOMSG(bs.remaining_capacity() == 1);  // the ensured zero-termination
@@ -111,7 +110,7 @@ std::vector<uint32_t> TPM2_Context::persistent_handles() const {
    std::vector<uint32_t> handles;
 
    TPMI_YES_NO more_data;
-   TPMS_CAPABILITY_DATA* capability_data = nullptr;
+   unique_esys_ptr<TPMS_CAPABILITY_DATA> capability_data;
 
    check_tss2_rc("Esys_GetCapability",
                  Esys_GetCapability(m_impl->m_ctx,
@@ -122,12 +121,12 @@ std::vector<uint32_t> TPM2_Context::persistent_handles() const {
                                     TPM2_PERSISTENT_FIRST,
                                     TPM2_MAX_CAP_HANDLES,
                                     &more_data,
-                                    &capability_data));
+                                    out_ptr(capability_data)));
 
    for(size_t i = 0; i < capability_data->data.handles.count; i++) {
       handles.push_back(capability_data->data.handles.handle[i]);
    }
-   Esys_Free(capability_data);
+
    return handles;
 }
 

@@ -8,6 +8,7 @@
 
 #include <botan/tpm2_keys.h>
 
+#include <botan/internal/stl_util.h>
 #include <botan/internal/tpm2_util.h>
 
 #include <iostream>
@@ -37,6 +38,7 @@ TPM2B_SENSITIVE_CREATE in_sensitive_from_auth_val(const std::string& auth_val_vi
 
    return {.size = 0, .sensitive = {.userAuth = auth_val, .data = {.size = 0, .buffer = {0}}}};
 }
+
 }  // namespace
 
 namespace Botan {
@@ -56,11 +58,11 @@ TPM2_Key::TPM2_Key(std::shared_ptr<TPM2_Context> ctx, size_t key_persistent_id, 
 }
 
 void TPM2_Key::create_new(uint32_t key_handle, const std::string& auth_val) {
-   TPM2B_PRIVATE* out_private = nullptr;
-   TPM2B_PUBLIC* out_public = nullptr;
-   TPM2B_CREATION_DATA* creation_data = nullptr;
-   TPM2B_DIGEST* creation_hash = nullptr;
-   TPMT_TK_CREATION* creation_ticket = nullptr;
+   unique_esys_ptr<TPM2B_PRIVATE> out_private;
+   unique_esys_ptr<TPM2B_PUBLIC> out_public;
+   unique_esys_ptr<TPM2B_CREATION_DATA> creation_data;
+   unique_esys_ptr<TPM2B_DIGEST> creation_hash;
+   unique_esys_ptr<TPMT_TK_CREATION> creation_ticket;
 
    TPM2B_DATA outside_info = {.size = 0, .buffer = {0}};
    TPML_PCR_SELECTION creation_pcr = {.count = 0};
@@ -78,11 +80,11 @@ void TPM2_Key::create_new(uint32_t key_handle, const std::string& auth_val) {
                              &rsa_sign_template,
                              &outside_info,
                              &creation_pcr,
-                             &out_private,
-                             &out_public,
-                             &creation_data,
-                             &creation_hash,
-                             &creation_ticket));
+                             out_ptr(out_private),
+                             out_ptr(out_public),
+                             out_ptr(creation_data),
+                             out_ptr(creation_hash),
+                             out_ptr(creation_ticket)));
 
    // Load the signing key
    check_tss2_rc("Esys_Load",
@@ -91,8 +93,8 @@ void TPM2_Key::create_new(uint32_t key_handle, const std::string& auth_val) {
                            m_ctx->inner_session_object(),
                            ESYS_TR_NONE,
                            ESYS_TR_NONE,
-                           out_private,
-                           out_public,
+                           out_private.get(),
+                           out_public.get(),
                            &m_transient_key_handle));
 
    // Authenticate it via authVal
@@ -114,13 +116,6 @@ void TPM2_Key::create_new(uint32_t key_handle, const std::string& auth_val) {
 
    check_tss2_rc("Esys_TR_GetTpmHandle",
                  Esys_TR_GetTpmHandle(inner(m_ctx), persistent_handle_out, &m_persistent_key_handle));
-
-   // Free resources we don't need anymore
-   Esys_Free(out_private);
-   Esys_Free(out_public);
-   Esys_Free(creation_data);
-   Esys_Free(creation_hash);
-   Esys_Free(creation_ticket);
 }
 
 void TPM2_Key::load_existing(uint32_t key_handle, const std::string& auth_val) {

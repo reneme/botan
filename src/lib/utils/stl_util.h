@@ -415,6 +415,36 @@ auto to_underlying(T e) noexcept {
    return static_cast<std::underlying_type_t<T>>(e);
 }
 
+// TODO: C++23 - use std::out_ptr
+template <typename T>
+[[nodiscard]] constexpr auto out_ptr(T& outptr) noexcept {
+   class out_ptr_t {
+      private:
+         using raw_type_t = typename T::element_type;
+
+      public:
+         constexpr ~out_ptr_t() noexcept {
+            m_ptr.reset(m_rawptr);
+            m_rawptr = nullptr;
+         }
+
+         constexpr out_ptr_t(T& outptr) noexcept : m_ptr(outptr), m_rawptr(nullptr) {}
+
+         out_ptr_t(const out_ptr_t&) = delete;
+         out_ptr_t(out_ptr_t&&) = delete;
+         out_ptr_t& operator=(const out_ptr_t&) = delete;
+         out_ptr_t& operator=(out_ptr_t&&) = delete;
+
+         [[nodiscard]] constexpr operator raw_type_t**() && noexcept { return &m_rawptr; }
+
+      private:
+         T& m_ptr;
+         raw_type_t* m_rawptr;
+   };
+
+   return out_ptr_t{outptr};
+}
+
 }  // namespace Botan
 
 #endif

@@ -29,6 +29,13 @@ inline ESYS_CONTEXT* inner(const std::shared_ptr<TPM2_Context>& ctx) {
    return static_cast<ESYS_CONTEXT*>(inner);
 }
 
+struct esys_liberator {
+      void operator()(void* handle) { Esys_Free(handle); }
+};
+
+template <typename T>
+using unique_esys_ptr = std::unique_ptr<T, esys_liberator>;
+
 }  // namespace Botan
 
 #endif

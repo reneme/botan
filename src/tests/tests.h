@@ -65,6 +65,8 @@ class Test_Options {
                    const std::string& data_dir,
                    const std::string& pkcs11_lib,
                    const std::string& provider,
+                   const std::string& tpm2_tcti_name,
+                   const std::string& tpm2_tcti_conf,
                    const std::string& drbg_seed,
                    const std::string& xml_results_dir,
                    const std::vector<std::string>& report_properties,
@@ -82,6 +84,8 @@ class Test_Options {
             m_data_dir(data_dir),
             m_pkcs11_lib(pkcs11_lib),
             m_provider(provider),
+            m_tpm2_tcti_name(tpm2_tcti_name),
+            m_tpm2_tcti_conf(tpm2_tcti_conf),
             m_drbg_seed(drbg_seed),
             m_xml_results_dir(xml_results_dir),
             m_report_properties(report_properties),
@@ -104,6 +108,10 @@ class Test_Options {
       const std::string& pkcs11_lib() const { return m_pkcs11_lib; }
 
       const std::string& provider() const { return m_provider; }
+
+      const std::optional<std::string>& tpm2_tcti_name() const { return m_tpm2_tcti_name; }
+
+      const std::optional<std::string>& tpm2_tcti_conf() const { return m_tpm2_tcti_conf; }
 
       const std::string& drbg_seed() const { return m_drbg_seed; }
 
@@ -135,6 +143,8 @@ class Test_Options {
       std::string m_data_dir;
       std::string m_pkcs11_lib;
       std::string m_provider;
+      std::optional<std::string> m_tpm2_tcti_name;
+      std::optional<std::string> m_tpm2_tcti_conf;
       std::string m_drbg_seed;
       std::string m_xml_results_dir;
       std::vector<std::string> m_report_properties;

@@ -34,17 +34,22 @@ struct TPM2_Context::Impl {
       ESYS_CONTEXT* m_ctx;
 };
 
-std::shared_ptr<TPM2_Context> TPM2_Context::create(std::optional<std::string> tcti_nameconf) {
-   const auto tcti_nameconf_ptr = [&]() -> const char* {
-      if(tcti_nameconf.has_value()) {
-         return tcti_nameconf->c_str();
-      } else {
-         return nullptr;
-      }
-   }();
+std::shared_ptr<TPM2_Context> TPM2_Context::create(const std::string& tcti_nameconf) {
+   // We cannot std::make_shared as the constructor is private
+   auto ctx = std::shared_ptr<TPM2_Context>(new TPM2_Context(tcti_nameconf.c_str()));
+
+   auto auth_session = std::make_unique<TPM2_AuthSession>(ctx, "0x81000001" /*SRK*/);
+   ctx->set_session(auth_session);
+
+   return ctx;
+}
+
+std::shared_ptr<TPM2_Context> TPM2_Context::create(std::optional<std::string> tcti, std::optional<std::string> conf) {
+   const auto tcti_ptr = tcti.has_value() ? tcti->c_str() : nullptr;
+   const auto conf_ptr = conf.has_value() ? conf->c_str() : nullptr;
 
    // We cannot std::make_shared as the constructor is private
-   auto ctx = std::shared_ptr<TPM2_Context>(new TPM2_Context(tcti_nameconf_ptr));
+   auto ctx = std::shared_ptr<TPM2_Context>(new TPM2_Context(tcti_ptr, conf_ptr));
 
    auto auth_session = std::make_unique<TPM2_AuthSession>(ctx, "0x81000001" /*SRK*/);
    ctx->set_session(auth_session);
@@ -54,6 +59,11 @@ std::shared_ptr<TPM2_Context> TPM2_Context::create(std::optional<std::string> tc
 
 TPM2_Context::TPM2_Context(const char* tcti_nameconf) : m_impl(std::make_unique<Impl>()) {
    check_tss2_rc("TCTI Initialization", Tss2_TctiLdr_Initialize(tcti_nameconf, &m_impl->m_tcti_ctx));
+   check_tss2_rc("TPM2 Initialization", Esys_Initialize(&m_impl->m_ctx, m_impl->m_tcti_ctx, nullptr /* ABI version */));
+}
+
+TPM2_Context::TPM2_Context(const char* tcti_name, const char* tcti_conf) : m_impl(std::make_unique<Impl>()) {
+   check_tss2_rc("TCTI Initialization", Tss2_TctiLdr_Initialize_Ex(tcti_name, tcti_conf, &m_impl->m_tcti_ctx));
    check_tss2_rc("TPM2 Initialization", Esys_Initialize(&m_impl->m_ctx, m_impl->m_tcti_ctx, nullptr /* ABI version */));
 }
 

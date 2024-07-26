@@ -41,10 +41,17 @@ class BOTAN_PUBLIC_API(3, 6) TPM2_Error final : public Exception {
 class BOTAN_PUBLIC_API(3, 6) TPM2_Context final : public std::enable_shared_from_this<TPM2_Context> {
    public:
       /**
-       * @param tcti_nameconf  if set this is passed to Tss2_TctiLdr_Initialize verbatim
-       *                       otherwise a nullptr is passed.
+       * @param tcti_nameconf  this is passed to Tss2_TctiLdr_Initialize verbatim
        */
-      static std::shared_ptr<TPM2_Context> create(std::optional<std::string> tcti_nameconf = {});
+      static std::shared_ptr<TPM2_Context> create(const std::string& tcti_nameconf);
+
+      /**
+       * @param tcti  if set this is passed to Tss2_TctiLdr_Initialize_Ex verbatim
+       *              otherwise a nullptr is passed.
+       * @param conf  if set this is passed to Tss2_TctiLdr_Initialize_Ex verbatim
+       *              otherwise a nullptr is passed.
+       */
+      static std::shared_ptr<TPM2_Context> create(std::optional<std::string> tcti = {}, std::optional<std::string> conf = {});
 
       TPM2_Context(const TPM2_Context&) = delete;
       TPM2_Context(TPM2_Context&& ctx) noexcept = default;
@@ -72,6 +79,7 @@ class BOTAN_PUBLIC_API(3, 6) TPM2_Context final : public std::enable_shared_from
 
    private:
       TPM2_Context(const char* tcti_nameconf);
+      TPM2_Context(const char* tcti_name, const char* tcti_conf);
 
       void set_session(std::unique_ptr<TPM2_AuthSession>& auth_session);
 

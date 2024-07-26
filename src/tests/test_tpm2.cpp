@@ -21,7 +21,8 @@ namespace Botan_Tests {
 #if defined(BOTAN_HAS_TPM2)
 namespace {
 
-const std::string use_tpm2_emulator = "tabrmd";
+const std::string tcti_name = "tabrmd";
+const std::string tcti_conf = "bus_name=net.randombit.botan.tabrmd,bus_type=session";
 
 bool not_zero_64(std::span<const uint8_t> in) {
    Botan::BufferSlicer bs(in);
@@ -37,7 +38,7 @@ bool not_zero_64(std::span<const uint8_t> in) {
 }
 
 std::shared_ptr<Botan::TPM2_Context> get_tpm2_context() {
-   auto ctx = Botan::TPM2_Context::create(use_tpm2_emulator);
+   auto ctx = Botan::TPM2_Context::create(tcti_name, tcti_conf);
    if(ctx->vendor() != "SW   TPM") {
       return {};
    }

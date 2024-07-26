@@ -187,8 +187,30 @@ PublicInfo read_public_info(const std::shared_ptr<TPM2_Context>& ctx, ESYS_TR ha
 }
 
 template <typename T>
-std::span<const uint8_t> from_tpm2_buffer(const T& tpm_buffer) {
-   return std::span{tpm_buffer.buffer, tpm_buffer.size};
+concept tpm2_buffer = requires(T t) {
+   { t.buffer } -> std::convertible_to<const uint8_t*>;
+   { t.size } -> std::convertible_to<size_t>;
+};
+
+auto as_span(tpm2_buffer auto& data) {
+   return std::span{data.buffer, data.size};
+}
+
+template <tpm2_buffer T>
+T copy_into(std::span<const uint8_t> data) {
+   T result;
+   BOTAN_ASSERT_NOMSG(data.size() <= std::numeric_limits<decltype(result.size)>::max());
+   result.size = static_cast<decltype(result.size)>(data.size());
+   copy_mem(as_span(result), data);
+   return result;
+}
+
+template <concepts::resizable_byte_buffer OutT>
+OutT copy_into(const tpm2_buffer auto& data) {
+   OutT result;
+   result.resize(data.size);
+   copy_mem(result, as_span(data));
+   return result;
 }
 
 }  // namespace
@@ -213,7 +235,7 @@ AlgorithmIdentifier TPM2_Key::algorithm_identifier() const {
 std::vector<uint8_t> TPM2_Key::public_key_bits() const {
    auto public_info = read_public_info<TPM2_ALG_RSA>(m_ctx, m_transient_key_handle);
 
-   const BigInt n = BigInt(from_tpm2_buffer(public_info.pub->publicArea.unique.rsa));
+   const BigInt n = BigInt(as_span(public_info.pub->publicArea.unique.rsa));
    const BigInt e = [&]() -> BigInt {
       const auto exponent = public_info.pub->publicArea.parameters.rsaDetail.exponent;
       // TPM2 may report 0 when the exponent is 'the default' (2^16 + 1)
@@ -307,26 +329,10 @@ std::pair<TPMT_SIG_SCHEME, std::unique_ptr<Botan::HashFunction>> prepare_padding
            std::move(hash)};
 }
 
-TPM2B_DIGEST make_tpm2b_digest(HashFunction& hash) {
-   TPM2B_DIGEST dgst;
-   const auto digest_size = hash.output_length();
-   BOTAN_ASSERT_NOMSG(digest_size <= std::numeric_limits<decltype(dgst.size)>::max());
-   dgst.size = static_cast<uint16_t>(digest_size);
-   hash.final(std::span{dgst.buffer, sizeof(dgst.buffer)});
-   return dgst;
-}
-
-template <concepts::resizable_byte_buffer T, typename TPM2B>
-T copy_tpm2b_data(const TPM2B& data) {
-   BOTAN_ASSERT_NOMSG(sizeof(data.buffer) >= data.size);
-   T result;
-   result.assign(data.buffer, data.buffer + data.size);
-   return result;
-}
-
 class TPM2_Signature_Operation : public PK_Ops::Signature {
    public:
-      TPM2_Signature_Operation(const TPM2_Key& key, std::string_view padding) : m_key(key) {
+      TPM2_Signature_Operation(std::shared_ptr<TPM2_Context> ctx, const TPM2_Key& key, std::string_view padding) :
+            m_ctx(std::move(ctx)), m_key(key) {
          std::tie(m_scheme, m_hash) = prepare_padding_mechanism(padding);
          BOTAN_ASSERT_NONNULL(m_hash);
       }
@@ -337,23 +343,18 @@ class TPM2_Signature_Operation : public PK_Ops::Signature {
       }
 
       std::vector<uint8_t> sign(RandomNumberGenerator& /* rng */) override {
-         const auto digest = make_tpm2b_digest(*m_hash);
-
          unique_esys_ptr<TPMT_TK_HASHCHECK> validation;
          unique_esys_ptr<TPM2B_DIGEST> tpm_digest;
 
-         TPM2B_MAX_BUFFER data;
-         BOTAN_ASSERT_NOMSG(m_msg.size() <= sizeof(data.buffer));
-         data.size = static_cast<uint16_t>(m_msg.size());
-         copy_mem(std::span{data.buffer, data.size}, m_msg);
+         const auto data = copy_into<TPM2B_MAX_BUFFER>(m_msg);
 
          check_tss2_rc(
             "Esys_Hash",
             Esys_Hash(
-               inner(m_key._context()),
-               m_key._context()->session_handle(0),
-               m_key._context()->session_handle(1),
-               m_key._context()->session_handle(2),
+               inner(m_ctx),
+               m_ctx->session_handle(0),
+               m_ctx->session_handle(1),
+               m_ctx->session_handle(2),
                &data,
                m_scheme.details.any.hashAlg,
                ESYS_TR_RH_NULL,  // TODO: options: TPM2_RH_OWNER, TPM2_RH_ENDORSEMENT, TPM2_RH_PLATFORM, TPM2_RH_NULL
@@ -361,15 +362,16 @@ class TPM2_Signature_Operation : public PK_Ops::Signature {
                out_ptr(validation)));
 
          // TODO: Remove, just for debugging
-         BOTAN_ASSERT_NOMSG(CT::is_equal(digest.buffer, tpm_digest->buffer, tpm_digest->size).as_bool());
+         BOTAN_ASSERT_NOMSG(
+            CT::is_equal(m_hash->final_stdvec().data(), tpm_digest->buffer, tpm_digest->size).as_bool());
 
          unique_esys_ptr<TPMT_SIGNATURE> signature;
          check_tss2_rc("Esys_Sign",
-                       Esys_Sign(inner(m_key._context()),
+                       Esys_Sign(inner(m_ctx),
                                  m_key.transient_handle(),
-                                 m_key._context()->session_handle(0),
-                                 m_key._context()->session_handle(1),
-                                 m_key._context()->session_handle(2),
+                                 m_ctx->session_handle(0),
+                                 m_ctx->session_handle(1),
+                                 m_ctx->session_handle(2),
                                  tpm_digest.get(),
                                  &m_scheme,
                                  validation.get(),
@@ -388,14 +390,15 @@ class TPM2_Signature_Operation : public PK_Ops::Signature {
 
          BOTAN_ASSERT_NOMSG(sig.hash == m_scheme.details.any.hashAlg);
 
-         return copy_tpm2b_data<std::vector<uint8_t>>(sig.sig);
+         return copy_into<std::vector<uint8_t>>(sig.sig);
       }
 
-      size_t signature_length() const override { return 512; /* TODO */ }
+      size_t signature_length() const override { return m_key.key_length(); }
 
       std::string hash_function() const override { return m_hash->name(); }
 
    private:
+      std::shared_ptr<TPM2_Context> m_ctx;
       const TPM2_Key& m_key;
       TPMT_SIG_SCHEME m_scheme;
       std::vector<uint8_t> m_msg;
@@ -409,7 +412,7 @@ std::unique_ptr<PK_Ops::Signature> TPM2_Key::create_signature_op(RandomNumberGen
                                                                  std::string_view provider) const {
    BOTAN_UNUSED(rng);
    BOTAN_UNUSED(provider);
-   return std::make_unique<TPM2_Signature_Operation>(*this, params);
+   return std::make_unique<TPM2_Signature_Operation>(m_ctx, *this, params);
 }
 
 }  // namespace Botan

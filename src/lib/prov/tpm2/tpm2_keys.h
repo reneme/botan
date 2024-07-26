@@ -65,8 +65,6 @@ class BOTAN_PUBLIC_API(3, 6) TPM2_Key final : public Private_Key {
 
       // TODO: Key Deletion
 
-      std::shared_ptr<TPM2_Context> _context() const { return m_ctx; }
-
    private:
       void create_new(uint32_t key_handle, const std::string& auth_val);
       void load_existing(uint32_t key_handle, const std::string& auth_val);

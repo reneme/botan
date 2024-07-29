@@ -23,10 +23,10 @@ class BOTAN_PUBLIC_API(3, 6) Key final : public Private_Key {
       * If the key already exists, it will be loaded from the TPM.
       * @param ctx  The TPM2 context
       * @param key_persistent_id  The persistent id of the key
-      * @param auth_val  The authorization value for the key
+      * @param auth_value  The authorization value for the key
       * TODO: Maybe create these only via the context?
       */
-      Key(std::shared_ptr<Context> ctx, uint32_t key_persistent_id, const std::string& auth_val);
+      Key(std::shared_ptr<Context> ctx, uint32_t key_persistent_id, std::span<const uint8_t> auth_value);
 
       ~Key() override;
 
@@ -67,7 +67,6 @@ class BOTAN_PUBLIC_API(3, 6) Key final : public Private_Key {
 
    private:
       void create_new(uint32_t key_handle, const std::string& auth_val);
-      void load_existing(uint32_t key_handle, const std::string& auth_val);
 
    private:
       std::shared_ptr<Context> m_ctx;

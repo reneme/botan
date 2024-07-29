@@ -52,13 +52,65 @@ TPM2B_SENSITIVE_CREATE in_sensitive_from_auth_val(const std::string& auth_val_vi
 
 namespace Botan::TPM2 {
 
-Key::Key(std::shared_ptr<Context> ctx, uint32_t key_persistent_id, const std::string& auth_val) :
+namespace {
+
+template <typename T>
+concept tpm2_buffer = requires(T t) {
+   { t.buffer } -> std::convertible_to<const uint8_t*>;
+   { t.size } -> std::convertible_to<size_t>;
+};
+
+auto as_span(tpm2_buffer auto& data) {
+   return std::span{data.buffer, data.size};
+}
+
+template <tpm2_buffer T>
+T copy_into(std::span<const uint8_t> data) {
+   T result;
+   BOTAN_ASSERT_NOMSG(data.size() <= sizeof(result.buffer));
+   result.size = static_cast<decltype(result.size)>(data.size());
+   copy_mem(as_span(result), data);
+   return result;
+}
+
+template <concepts::resizable_byte_buffer OutT>
+OutT copy_into(const tpm2_buffer auto& data) {
+   OutT result;
+   result.resize(data.size);
+   copy_mem(result, as_span(data));
+   return result;
+}
+
+template <tpm2_buffer T>
+T init_empty() {
+   T result;
+   result.size = 0;
+   return result;
+}
+
+}  // namespace
+
+Key::Key(std::shared_ptr<Context> ctx, uint32_t key_persistent_id, std::span<const uint8_t> auth_value) :
       m_ctx(std::move(ctx)) {
    BOTAN_ARG_CHECK(TPM2_PERSISTENT_FIRST <= key_persistent_id && key_persistent_id <= TPM2_PERSISTENT_LAST,
                    "key_persistent_id out of range");
    m_is_persistent = m_ctx->in_persistent_handles(key_persistent_id);
    BOTAN_STATE_CHECK(m_is_persistent);
-   load_existing(key_persistent_id, auth_val);
+
+   // Load the key
+   check_tss2_rc("Esys_TR_FromTPMPublic",
+                 Esys_TR_FromTPMPublic(inner(m_ctx),
+                                       key_persistent_id,
+                                       m_ctx->session_handle(0),
+                                       m_ctx->session_handle(1),
+                                       m_ctx->session_handle(2),
+                                       &m_transient_key_handle));
+
+   const auto user_auth = copy_into<TPM2B_AUTH>(auth_value);
+   check_tss2_rc("Esys_TR_SetAuth", Esys_TR_SetAuth(inner(m_ctx), m_transient_key_handle, &user_auth));
+
+   check_tss2_rc("Esys_TR_GetTpmHandle",
+                 Esys_TR_GetTpmHandle(inner(m_ctx), m_transient_key_handle, &m_persistent_key_handle));
 }
 
 void Key::create_new(uint32_t /* key_handle */, const std::string& /* auth_val */) {
@@ -127,25 +179,6 @@ void Key::create_new(uint32_t /* key_handle */, const std::string& /* auth_val *
    //               Esys_TR_GetTpmHandle(inner(m_ctx), persistent_handle_out, &m_persistent_key_handle));
 }
 
-void Key::load_existing(uint32_t key_handle, const std::string& auth_val) {
-   // Load the key
-   check_tss2_rc("Esys_TR_FromTPMPublic",
-                 Esys_TR_FromTPMPublic(inner(m_ctx),
-                                       key_handle,
-                                       m_ctx->session_handle(0),
-                                       m_ctx->session_handle(1),
-                                       m_ctx->session_handle(2),
-                                       &m_transient_key_handle));
-
-   // Authenticate it via auth_val
-   const auto in_sensitive = in_sensitive_from_auth_val(auth_val);
-   check_tss2_rc("Esys_TR_SetAuth",
-                 Esys_TR_SetAuth(inner(m_ctx), m_transient_key_handle, &in_sensitive.sensitive.userAuth));
-
-   check_tss2_rc("Esys_TR_GetTpmHandle",
-                 Esys_TR_GetTpmHandle(inner(m_ctx), m_transient_key_handle, &m_persistent_key_handle));
-}
-
 Key::~Key() {
    if(!m_is_persistent) {
       // No need to flush after TR_FromTPMPublic
@@ -178,40 +211,6 @@ PublicInfo read_public_info(const std::shared_ptr<Context>& ctx, ESYS_TR handle)
    BOTAN_STATE_CHECK(result.pub->publicArea.type == expected_type);
    BOTAN_ASSERT_NONNULL(result.pub);
 
-   return result;
-}
-
-template <typename T>
-concept tpm2_buffer = requires(T t) {
-   { t.buffer } -> std::convertible_to<const uint8_t*>;
-   { t.size } -> std::convertible_to<size_t>;
-};
-
-auto as_span(tpm2_buffer auto& data) {
-   return std::span{data.buffer, data.size};
-}
-
-template <tpm2_buffer T>
-T copy_into(std::span<const uint8_t> data) {
-   T result;
-   BOTAN_ASSERT_NOMSG(data.size() <= sizeof(result.buffer));
-   result.size = static_cast<decltype(result.size)>(data.size());
-   copy_mem(as_span(result), data);
-   return result;
-}
-
-template <concepts::resizable_byte_buffer OutT>
-OutT copy_into(const tpm2_buffer auto& data) {
-   OutT result;
-   result.resize(data.size);
-   copy_mem(result, as_span(data));
-   return result;
-}
-
-template <tpm2_buffer T>
-T init_empty() {
-   T result;
-   result.size = 0;
    return result;
 }
 

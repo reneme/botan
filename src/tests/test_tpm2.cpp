@@ -113,15 +113,15 @@ std::vector<Test::Result> test_tpm2_rsa() {
    ctx->set_sessions(session->session(), std::nullopt, std::nullopt);
 
    constexpr uint32_t persistent_key_id = TPM2_PERSISTENT_FIRST + 8;
-   const char* password = "password";
+   const std::vector<uint8_t> password = {'p', 'a', 's', 's', 'w', 'o', 'r', 'd'};
 
-   auto load_persistent_key = [&](Test::Result& result, const std::string& password) {
+   auto load_persistent_key = [&](Test::Result& result, std::span<const uint8_t> auth_value) {
       const auto persistent_handles = ctx->persistent_handles();
       result.confirm("Persistent key available",
                      std::find(persistent_handles.begin(), persistent_handles.end(), persistent_key_id) !=
                         persistent_handles.end());
 
-      auto key = Botan::TPM2::Key(ctx, persistent_key_id, password);
+      auto key = Botan::TPM2::Key(ctx, persistent_key_id, auth_value);
       result.test_eq("Algo", key.algo_name(), "RSA");
       result.test_is_eq("Handle", key.handle(), persistent_key_id);
       return key;
@@ -153,7 +153,7 @@ std::vector<Test::Result> test_tpm2_rsa() {
 
       CHECK("Wrong password is not accepted during signing",
             [&](Test::Result& result) {
-               auto key = load_persistent_key(result, "wrong password");
+               auto key = load_persistent_key(result, Botan::hex_decode("deadbeef"));
 
                Botan::Null_RNG null_rng;
                Botan::PK_Signer signer(key, null_rng /* TPM takes care of this */, "PSS(SHA-256)");

@@ -25,5 +25,5 @@ tpm2_authsession.h
 <header:public>
 tpm2.h
 tpm2_rng.h
-tpm2_keys.h
+tpm2_rsa.h
 </header:public>

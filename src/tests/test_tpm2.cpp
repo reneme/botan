@@ -14,8 +14,8 @@
 #include <iostream>
 
 #if defined(BOTAN_HAS_TPM2)
-   #include <botan/tpm2_keys.h>
    #include <botan/tpm2_rng.h>
+   #include <botan/tpm2_rsa.h>
 #endif
 
 namespace Botan_Tests {
@@ -121,9 +121,9 @@ std::vector<Test::Result> test_tpm2_rsa() {
                      std::find(persistent_handles.begin(), persistent_handles.end(), persistent_key_id) !=
                         persistent_handles.end());
 
-      auto key = Botan::TPM2::Key(ctx, persistent_key_id, auth_value);
+      auto key = Botan::TPM2::RSA_PrivateKey(ctx, persistent_key_id, auth_value);
       result.test_eq("Algo", key.algo_name(), "RSA");
-      result.test_is_eq("Handle", key.handle(), persistent_key_id);
+      result.test_is_eq("Handle", key.persistent_handle(), persistent_key_id);
       return key;
    };
 

@@ -322,11 +322,12 @@ class RSA_Signature_Operation : public PK_Ops::Signature {
                                               m_ctx->session_handle(2),
                                               &data));
          }
+         BOTAN_ASSERT_NOMSG(slicer.empty());
       }
 
       std::vector<uint8_t> sign(RandomNumberGenerator& /* rng */) override {
          unique_esys_ptr<TPMT_TK_HASHCHECK> validation;
-         unique_esys_ptr<TPM2B_DIGEST> tpm_digest;
+         unique_esys_ptr<TPM2B_DIGEST> digest;
 
          const auto nodata = init_empty<TPM2B_MAX_BUFFER>();
          check_tss2_rc("Esys_SequenceComplete",
@@ -337,7 +338,7 @@ class RSA_Signature_Operation : public PK_Ops::Signature {
                                              m_ctx->session_handle(2),
                                              &nodata,
                                              ESYS_TR_RH_NULL,
-                                             out_ptr(tpm_digest),
+                                             out_ptr(digest),
                                              out_ptr(validation)));
 
          unique_esys_ptr<TPMT_SIGNATURE> signature;
@@ -347,7 +348,7 @@ class RSA_Signature_Operation : public PK_Ops::Signature {
                                  m_ctx->session_handle(0),
                                  m_ctx->session_handle(1),
                                  m_ctx->session_handle(2),
-                                 tpm_digest.get(),
+                                 digest.get(),
                                  &m_scheme,
                                  validation.get(),
                                  out_ptr(signature)));
@@ -381,7 +382,113 @@ class RSA_Signature_Operation : public PK_Ops::Signature {
       ESYS_TR m_sequence_handle;
 };
 
+class RSA_Verification_Operation : public PK_Ops::Verification {
+   public:
+      RSA_Verification_Operation(std::shared_ptr<Context> ctx, const RSA_PublicKey& key, std::string_view padding) :
+            m_ctx(std::move(ctx)),
+            m_key(key),
+            m_scheme(prepare_padding_mechanism(padding)),
+            m_sequence_handle(ESYS_TR_NONE) {
+         const auto noauth = init_empty<TPM2B_AUTH>();
+         check_tss2_rc("Esys_HashSequenceStart",
+                       Esys_HashSequenceStart(inner(m_ctx),
+                                              m_ctx->session_handle(0),
+                                              m_ctx->session_handle(1),
+                                              m_ctx->session_handle(2),
+                                              &noauth,
+                                              m_scheme.details.any.hashAlg,
+                                              &m_sequence_handle));
+      }
+
+      void update(std::span<const uint8_t> msg) override {
+         BufferSlicer slicer(msg);
+         while(slicer.remaining() > 0) {
+            const size_t chunk = std::min(slicer.remaining(), size_t(TPM2_MAX_DIGEST_BUFFER));
+            const auto data = copy_into<TPM2B_MAX_BUFFER>(slicer.take(chunk));
+            check_tss2_rc("Esys_SequenceUpdate",
+                          Esys_SequenceUpdate(inner(m_ctx),
+                                              m_sequence_handle,
+                                              m_ctx->session_handle(0),
+                                              m_ctx->session_handle(1),
+                                              m_ctx->session_handle(2),
+                                              &data));
+         }
+      }
+
+      bool is_valid_signature(std::span<const uint8_t> sig) override {
+         unique_esys_ptr<TPMT_TK_HASHCHECK> validation;
+         unique_esys_ptr<TPM2B_DIGEST> digest;
+
+         const auto nodata = init_empty<TPM2B_MAX_BUFFER>();
+         check_tss2_rc("Esys_SequenceComplete",
+                       Esys_SequenceComplete(inner(m_ctx),
+                                             m_sequence_handle,
+                                             m_ctx->session_handle(0),
+                                             m_ctx->session_handle(1),
+                                             m_ctx->session_handle(2),
+                                             &nodata,
+                                             ESYS_TR_RH_NULL,
+                                             out_ptr(digest),
+                                             out_ptr(validation)));
+
+         const auto signature = [&]() -> TPMT_SIGNATURE {
+            TPMT_SIGNATURE signature;
+            signature.sigAlg = m_scheme.scheme;
+
+            signature.signature.any.hashAlg = m_scheme.details.any.hashAlg;
+            if(signature.sigAlg == TPM2_ALG_RSASSA) {
+               signature.signature.rsassa.sig.size = sig.size();
+               copy_mem(std::span{signature.signature.rsassa.sig.buffer, sig.size()}, sig);
+               return signature;
+            } else if(signature.sigAlg == TPM2_ALG_RSAPSS) {
+               signature.signature.rsapss.sig.size = sig.size();
+               copy_mem(std::span{signature.signature.rsapss.sig.buffer, sig.size()}, sig);
+               return signature;
+            }
+
+            throw Invalid_State(fmt("Requested an unexpected signature scheme {}", signature.sigAlg));
+         }();
+
+         unique_esys_ptr<TPMT_TK_VERIFIED> result;
+         const auto rc = Esys_VerifySignature(inner(m_ctx),
+                                              m_key.transient_handle(),
+                                              m_ctx->session_handle(0),
+                                              m_ctx->session_handle(1),
+                                              m_ctx->session_handle(2),
+                                              digest.get(),
+                                              &signature,
+                                              out_ptr(result));
+
+         TSS2_RC_INFO info;
+         check_tss2_rc("Tss2_RC_DecodeInfo", Tss2_RC_DecodeInfo(rc, &info));
+
+         if(info.error == TPM2_RC_SIGNATURE) {
+            return false;
+         }
+
+         check_tss2_rc("Esys_VerifySignature", rc);
+
+         return true;
+      }
+
+      std::string hash_function() const override {
+         return std::string(get_tpm2_hash_name(m_scheme.details.any.hashAlg));
+      }
+
+   private:
+      std::shared_ptr<Context> m_ctx;
+      const RSA_PublicKey& m_key;
+      TPMT_SIG_SCHEME m_scheme;
+      ESYS_TR m_sequence_handle;
+};
+
 }  // namespace
+
+std::unique_ptr<PK_Ops::Verification> RSA_PublicKey::create_verification_op(std::string_view params,
+                                                                            std::string_view provider) const {
+   BOTAN_UNUSED(provider);
+   return std::make_unique<RSA_Verification_Operation>(context(), *this, params);
+}
 
 std::unique_ptr<PK_Ops::Signature> RSA_PrivateKey::create_signature_op(RandomNumberGenerator& rng,
                                                                        std::string_view params,

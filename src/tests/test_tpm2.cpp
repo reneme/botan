@@ -103,6 +103,22 @@ std::vector<Test::Result> test_tpm2_rng() {
    };
 }
 
+template <typename KeyT>
+KeyT load_persistent(Test::Result& result,
+                     const std::shared_ptr<Botan::TPM2::Context>& ctx,
+                     uint32_t persistent_key_id,
+                     std::span<const uint8_t> auth_value) {
+   const auto persistent_handles = ctx->persistent_handles();
+   result.confirm(
+      "Persistent key available",
+      std::find(persistent_handles.begin(), persistent_handles.end(), persistent_key_id) != persistent_handles.end());
+
+   auto key = KeyT(ctx, persistent_key_id, auth_value);
+   result.test_eq("Algo", key.algo_name(), "RSA" /* TODO ECC support*/);
+   result.test_is_eq("Handle", key.persistent_handle(), persistent_key_id);
+   return key;
+}
+
 std::vector<Test::Result> test_tpm2_rsa() {
    auto ctx = get_tpm2_context();
    if(!ctx) {
@@ -115,22 +131,10 @@ std::vector<Test::Result> test_tpm2_rsa() {
    constexpr uint32_t persistent_key_id = TPM2_PERSISTENT_FIRST + 8;
    const std::vector<uint8_t> password = {'p', 'a', 's', 's', 'w', 'o', 'r', 'd'};
 
-   auto load_persistent_key = [&](Test::Result& result, std::span<const uint8_t> auth_value) {
-      const auto persistent_handles = ctx->persistent_handles();
-      result.confirm("Persistent key available",
-                     std::find(persistent_handles.begin(), persistent_handles.end(), persistent_key_id) !=
-                        persistent_handles.end());
-
-      auto key = Botan::TPM2::RSA_PrivateKey(ctx, persistent_key_id, auth_value);
-      result.test_eq("Algo", key.algo_name(), "RSA");
-      result.test_is_eq("Handle", key.persistent_handle(), persistent_key_id);
-      return key;
-   };
-
    return {
       CHECK("Sign a message",
             [&](Test::Result& result) {
-               auto key = load_persistent_key(result, password);
+               auto key = load_persistent<Botan::TPM2::RSA_PrivateKey>(result, ctx, persistent_key_id, password);
 
                Botan::Null_RNG null_rng;
                Botan::PK_Signer signer(key, null_rng /* TPM takes care of this */, "PSS(SHA-256)");
@@ -153,7 +157,8 @@ std::vector<Test::Result> test_tpm2_rsa() {
 
       CHECK("Wrong password is not accepted during signing",
             [&](Test::Result& result) {
-               auto key = load_persistent_key(result, Botan::hex_decode("deadbeef"));
+               auto key = load_persistent<Botan::TPM2::RSA_PrivateKey>(
+                  result, ctx, persistent_key_id, Botan::hex_decode("deadbeef"));
 
                Botan::Null_RNG null_rng;
                Botan::PK_Signer signer(key, null_rng /* TPM takes care of this */, "PSS(SHA-256)");
@@ -161,6 +166,31 @@ std::vector<Test::Result> test_tpm2_rsa() {
                const auto message = Botan::hex_decode("baadcafe");
                result.test_throws<Botan::TPM2::Error>("Wrong password is not accepted during signing",
                                                       [&] { signer.sign_message(message, null_rng); });
+            }),
+
+      CHECK("verify signature",
+            [&](Test::Result& result) {
+               const auto message = Botan::hex_decode("baadcafe");
+               const auto signature = [&] {
+                  auto key = load_persistent<Botan::TPM2::RSA_PrivateKey>(result, ctx, persistent_key_id, password);
+
+                  Botan::Null_RNG null_rng;
+                  Botan::PK_Signer signer(key, null_rng /* TPM takes care of this */, "PSS(SHA-256)");
+
+                  return signer.sign_message(message, null_rng);
+               }();
+
+               auto key = load_persistent<Botan::TPM2::RSA_PublicKey>(result, ctx, persistent_key_id, password);
+
+               Botan::PK_Verifier verifier(key, "PSS(SHA-256)");
+               result.confirm("verification successful", verifier.verify_message(message, signature));
+
+               // change the message
+               auto rng = Test::new_rng(__func__);
+               auto mutated_signature = Test::mutate_vec(signature, *rng);
+
+               Botan::PK_Verifier verifier2(key, "PSS(SHA-256)");
+               result.confirm("verification failed", !verifier2.verify_message(message, mutated_signature));
             }),
    };
 }

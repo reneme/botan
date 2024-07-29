@@ -53,7 +53,7 @@ class BOTAN_PUBLIC_API(3, 6) RSA_PublicKey : public virtual Object,
                     uint32_t persistent_object_handle,
                     std::span<const uint8_t> auth_value);
 
-      virtual ~RSA_PublicKey() = default;
+      ~RSA_PublicKey() override = default;
       RSA_PublicKey(const RSA_PublicKey&) = delete;
       RSA_PublicKey& operator=(const RSA_PublicKey&) = delete;
       RSA_PublicKey(RSA_PublicKey&& other) noexcept = default;
@@ -63,10 +63,8 @@ class BOTAN_PUBLIC_API(3, 6) RSA_PublicKey : public virtual Object,
          throw Not_Implemented("Cannot generate a new TPM-based keypair from this asymmetric key");
       }
 
-      bool supports_operation(PublicKeyOperation op) const override {
-         return op == PublicKeyOperation::Signature || op == PublicKeyOperation::Encryption ||
-                op == PublicKeyOperation::KeyEncapsulation;
-      }
+      std::unique_ptr<PK_Ops::Verification> create_verification_op(std::string_view params,
+                                                                   std::string_view provider) const override;
 
    protected:
       uint32_t expected_public_info_type() const final;
@@ -82,7 +80,7 @@ class BOTAN_PUBLIC_API(3, 6) RSA_PrivateKey final : public virtual Object,
       RSA_PrivateKey(std::shared_ptr<Context> ctx,
                      uint32_t persistent_object_handle,
                      std::span<const uint8_t> auth_value);
-      virtual ~RSA_PrivateKey() = default;
+      ~RSA_PrivateKey() override = default;
       RSA_PrivateKey(const RSA_PrivateKey&) = delete;
       RSA_PrivateKey& operator=(const RSA_PrivateKey&) = delete;
       RSA_PrivateKey(RSA_PrivateKey&& other) noexcept = default;

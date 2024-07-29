@@ -103,44 +103,37 @@ std::vector<Test::Result> test_tpm2_rng() {
    };
 }
 
-std::vector<Test::Result> test_tpm2_keys() {
+std::vector<Test::Result> test_tpm2_rsa() {
    auto ctx = get_tpm2_context();
    if(!ctx) {
       return {bail_out()};
    }
 
+   auto session = std::make_unique<Botan::TPM2::AuthSession>(ctx);
+   ctx->set_sessions(session->session(), std::nullopt, std::nullopt);
+
+   constexpr uint32_t persistent_key_id = TPM2_PERSISTENT_FIRST + 8;
+   const char* password = "password";
+
+   auto load_persistent_key = [&](Test::Result& result, const std::string& password) {
+      const auto persistent_handles = ctx->persistent_handles();
+      result.confirm("Persistent key available",
+                     std::find(persistent_handles.begin(), persistent_handles.end(), persistent_key_id) !=
+                        persistent_handles.end());
+
+      auto key = Botan::TPM2::Key(ctx, persistent_key_id, password);
+      result.test_eq("Algo", key.algo_name(), "RSA");
+      result.test_is_eq("Handle", key.handle(), persistent_key_id);
+      return key;
+   };
+
    return {
-      CHECK("Key Creation and Usage",
+      CHECK("Sign a message",
             [&](Test::Result& result) {
-               {
-                  std::cout << "###########################################\n";
-                  std::cout << "create key\n";
-                  std::cout << "###########################################\n";
-
-                  auto key = Botan::TPM2::Key(ctx, 8, "password");
-                  result.test_eq("Algo", key.algo_name(), "RSA");
-                  result.test_is_eq("Handle", key.handle(), 0x81000008);
-                  // key goes out of scope
-               }
-
-               const auto persistent_handles = ctx->persistent_handles();
-               result.confirm("Key made persistent",
-                              std::find(persistent_handles.begin(), persistent_handles.end(), 0x81000008) !=
-                                 persistent_handles.end());
-
-               // // TODO load key with wrong PW - this will only throw once a sig_op is needed
-               // result.test_throws("Key supplied with wrong PW", [&] { Botan::TPM2::Key(ctx, 8, "password_wrong"); });
-
-               // load key with right PW
-               auto key = Botan::TPM2::Key(ctx, 8, "password");
-               result.test_eq("Algo", key.algo_name(), "RSA");
-               result.test_is_eq("Handle", key.handle(), 0x81000008);
+               auto key = load_persistent_key(result, password);
 
                Botan::Null_RNG null_rng;
                Botan::PK_Signer signer(key, null_rng /* TPM takes care of this */, "PSS(SHA-256)");
-
-               auto session = std::make_unique<Botan::TPM2::AuthSession>(ctx);
-               ctx->set_sessions(session->session(), std::nullopt, std::nullopt);
 
                // create a message that is larger than the TPM2 max buffer size
                const auto message = [] {
@@ -151,7 +144,7 @@ std::vector<Test::Result> test_tpm2_keys() {
                   return result;
                }();
                const auto signature = signer.sign_message(message, null_rng);
-               result.test_gt("signature is not empty", signature.size(), 0);
+               result.require("signature is not empty", !signature.empty());
 
                auto public_key = key.public_key();
                Botan::PK_Verifier verifier(*public_key, "PSS(SHA-256)");
@@ -162,7 +155,7 @@ std::vector<Test::Result> test_tpm2_keys() {
 
 }  // namespace
 
-BOTAN_REGISTER_TEST_FN("tpm2", "tpm2", test_tpm2_rng, test_tpm2_keys);
+BOTAN_REGISTER_TEST_FN("tpm2", "tpm2", test_tpm2_rng, test_tpm2_rsa);
 #endif
 
 }  // namespace Botan_Tests

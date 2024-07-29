@@ -52,17 +52,13 @@ TPM2B_SENSITIVE_CREATE in_sensitive_from_auth_val(const std::string& auth_val_vi
 
 namespace Botan::TPM2 {
 
-Key::Key(std::shared_ptr<Context> ctx, size_t key_persistent_id, const std::string& auth_val) : m_ctx(std::move(ctx)) {
-   TPMI_DH_PERSISTENT persistent_handle = TPM2_PERSISTENT_FIRST + key_persistent_id;
-   BOTAN_ASSERT_NOMSG(persistent_handle <= TPM2_PERSISTENT_LAST);
-
-   m_is_loaded = m_ctx->in_persistent_handles(persistent_handle);
-
-   if(!m_is_loaded) {
-      create_new(persistent_handle, auth_val);
-   } else {
-      load_existing(persistent_handle, auth_val);
-   }
+Key::Key(std::shared_ptr<Context> ctx, uint32_t key_persistent_id, const std::string& auth_val) :
+      m_ctx(std::move(ctx)) {
+   BOTAN_ARG_CHECK(TPM2_PERSISTENT_FIRST <= key_persistent_id && key_persistent_id <= TPM2_PERSISTENT_LAST,
+                   "key_persistent_id out of range");
+   m_is_persistent = m_ctx->in_persistent_handles(key_persistent_id);
+   BOTAN_STATE_CHECK(m_is_persistent);
+   load_existing(key_persistent_id, auth_val);
 }
 
 void Key::create_new(uint32_t /* key_handle */, const std::string& /* auth_val */) {
@@ -151,7 +147,7 @@ void Key::load_existing(uint32_t key_handle, const std::string& auth_val) {
 }
 
 Key::~Key() {
-   if(!m_is_loaded) {
+   if(!m_is_persistent) {
       // No need to flush after TR_FromTPMPublic
       check_tss2_rc("Esys_FlushContext", Esys_FlushContext(inner(m_ctx), m_transient_key_handle));
    }

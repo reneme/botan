@@ -26,7 +26,7 @@ class BOTAN_PUBLIC_API(3, 6) Key final : public Private_Key {
       * @param auth_val  The authorization value for the key
       * TODO: Maybe create these only via the context?
       */
-      Key(std::shared_ptr<Context> ctx, size_t key_persistent_id, const std::string& auth_val);
+      Key(std::shared_ptr<Context> ctx, uint32_t key_persistent_id, const std::string& auth_val);
 
       ~Key() override;
 
@@ -75,7 +75,7 @@ class BOTAN_PUBLIC_API(3, 6) Key final : public Private_Key {
       uint32_t m_persistent_key_handle;          // Represents a TPM2_HANDLE
       uint32_t m_transient_key_handle = 0xfffU;  // Represents a ESYS_TR initialized to ESYS_TR_NONE
 
-      bool m_is_loaded = false;
+      bool m_is_persistent = false;
 };
 
 }  // namespace Botan::TPM2

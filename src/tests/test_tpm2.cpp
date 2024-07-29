@@ -150,6 +150,18 @@ std::vector<Test::Result> test_tpm2_rsa() {
                Botan::PK_Verifier verifier(*public_key, "PSS(SHA-256)");
                result.confirm("Signature is valid", verifier.verify_message(message, signature));
             }),
+
+      CHECK("Wrong password is not accepted during signing",
+            [&](Test::Result& result) {
+               auto key = load_persistent_key(result, "wrong password");
+
+               Botan::Null_RNG null_rng;
+               Botan::PK_Signer signer(key, null_rng /* TPM takes care of this */, "PSS(SHA-256)");
+
+               const auto message = Botan::hex_decode("baadcafe");
+               result.test_throws<Botan::TPM2::Error>("Wrong password is not accepted during signing",
+                                                      [&] { signer.sign_message(message, null_rng); });
+            }),
    };
 }
 

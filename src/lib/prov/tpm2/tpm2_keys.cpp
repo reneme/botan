@@ -212,6 +212,13 @@ OutT copy_into(const tpm2_buffer auto& data) {
    return result;
 }
 
+template <tpm2_buffer T>
+T init_empty() {
+   T result;
+   result.size = 0;
+   return result;
+}
+
 }  // namespace
 
 std::unique_ptr<Public_Key> Key::public_key() const {
@@ -260,38 +267,56 @@ bool Key::check_key(RandomNumberGenerator&, bool) const {
 
 namespace {
 
-TPMI_ALG_HASH get_tpm2_hash_type(const std::unique_ptr<HashFunction>& hash) {
-   if(!hash) {
+TPMI_ALG_HASH get_tpm2_hash_type(const std::optional<std::string>& hash_name) {
+   if(!hash_name) {
       return TPM2_ALG_NULL;
-   }
-
-   const std::string hash_name = hash->name();
-   if(hash_name == "SHA-1") {
+   } else if(*hash_name == "SHA-1") {
       return TPM2_ALG_SHA1;
-   } else if(hash_name == "SHA-256") {
+   } else if(*hash_name == "SHA-256") {
       return TPM2_ALG_SHA256;
-   } else if(hash_name == "SHA-384") {
+   } else if(*hash_name == "SHA-384") {
       return TPM2_ALG_SHA384;
-   } else if(hash_name == "SHA-512") {
+   } else if(*hash_name == "SHA-512") {
       return TPM2_ALG_SHA512;
-   } else if(hash_name == "SHA-3(256)") {
+   } else if(*hash_name == "SHA-3(256)") {
       return TPM2_ALG_SHA3_256;
-   } else if(hash_name == "SHA-3(384)") {
+   } else if(*hash_name == "SHA-3(384)") {
       return TPM2_ALG_SHA3_384;
-   } else if(hash_name == "SHA-3(512)") {
+   } else if(*hash_name == "SHA-3(512)") {
       return TPM2_ALG_SHA3_512;
    }
 
-   throw Not_Implemented("TPM2 signing with hash " + hash_name);
+   throw Not_Implemented("TPM2 signing with hash " + *hash_name);
 }
 
-std::pair<TPMT_SIG_SCHEME, std::unique_ptr<Botan::HashFunction>> prepare_padding_mechanism(std::string_view padding) {
-   SCAN_Name req(padding);  // "PSS(SHA-256)"
-   auto hash = [&]() -> std::unique_ptr<HashFunction> {
+std::string_view get_tpm2_hash_name(TPMI_ALG_HASH hash_type) {
+   switch(hash_type) {
+      case TPM2_ALG_SHA1:
+         return "SHA-1";
+      case TPM2_ALG_SHA256:
+         return "SHA-256";
+      case TPM2_ALG_SHA384:
+         return "SHA-384";
+      case TPM2_ALG_SHA512:
+         return "SHA-512";
+      case TPM2_ALG_SHA3_256:
+         return "SHA-3(256)";
+      case TPM2_ALG_SHA3_384:
+         return "SHA-3(384)";
+      case TPM2_ALG_SHA3_512:
+         return "SHA-3(512)";
+      default:
+         throw Invalid_Argument("unknown TPM2 hash algorithm: " + std::to_string(hash_type));
+   }
+}
+
+TPMT_SIG_SCHEME prepare_padding_mechanism(std::string_view padding) {
+   SCAN_Name req(padding);
+   auto hash = [&]() -> std::optional<std::string> {
       if(req.arg_count() > 0) {
-         return HashFunction::create(req.arg(0));
+         return req.arg(0);
       } else {
-         return nullptr;
+         return std::nullopt;
       }
    }();
 
@@ -321,48 +346,60 @@ std::pair<TPMT_SIG_SCHEME, std::unique_ptr<Botan::HashFunction>> prepare_padding
       throw Not_Implemented("RSA signing with padding scheme " + req.algo_name());
    }();
 
-   return {TPMT_SIG_SCHEME{
-              .scheme = scheme,
-              .details = {.any = {.hashAlg = get_tpm2_hash_type(hash)}},
-           },
-           std::move(hash)};
+   return {
+      .scheme = scheme,
+      .details = {.any = {.hashAlg = get_tpm2_hash_type(hash)}},
+   };
 }
 
 class TPM2_Signature_Operation : public PK_Ops::Signature {
    public:
       TPM2_Signature_Operation(std::shared_ptr<Context> ctx, const Key& key, std::string_view padding) :
-            m_ctx(std::move(ctx)), m_key(key) {
-         std::tie(m_scheme, m_hash) = prepare_padding_mechanism(padding);
-         BOTAN_ASSERT_NONNULL(m_hash);
+            m_ctx(std::move(ctx)),
+            m_key(key),
+            m_scheme(prepare_padding_mechanism(padding)),
+            m_sequence_handle(ESYS_TR_NONE) {
+         const auto noauth = init_empty<TPM2B_AUTH>();
+         check_tss2_rc("Esys_HashSequenceStart",
+                       Esys_HashSequenceStart(inner(m_ctx),
+                                              m_ctx->session_handle(0),
+                                              m_ctx->session_handle(1),
+                                              m_ctx->session_handle(2),
+                                              &noauth,
+                                              m_scheme.details.any.hashAlg,
+                                              &m_sequence_handle));
       }
 
       void update(std::span<const uint8_t> msg) override {
-         m_msg = concat(m_msg, msg);
-         m_hash->update(msg);
+         BufferSlicer slicer(msg);
+         while(slicer.remaining() > 0) {
+            const size_t chunk = std::min(slicer.remaining(), size_t(TPM2_MAX_DIGEST_BUFFER));
+            const auto data = copy_into<TPM2B_MAX_BUFFER>(slicer.take(chunk));
+            check_tss2_rc("Esys_SequenceUpdate",
+                          Esys_SequenceUpdate(inner(m_ctx),
+                                              m_sequence_handle,
+                                              m_ctx->session_handle(0),
+                                              m_ctx->session_handle(1),
+                                              m_ctx->session_handle(2),
+                                              &data));
+         }
       }
 
       std::vector<uint8_t> sign(RandomNumberGenerator& /* rng */) override {
          unique_esys_ptr<TPMT_TK_HASHCHECK> validation;
          unique_esys_ptr<TPM2B_DIGEST> tpm_digest;
 
-         const auto data = copy_into<TPM2B_MAX_BUFFER>(m_msg);
-
-         check_tss2_rc(
-            "Esys_Hash",
-            Esys_Hash(
-               inner(m_ctx),
-               m_ctx->session_handle(0),
-               m_ctx->session_handle(1),
-               m_ctx->session_handle(2),
-               &data,
-               m_scheme.details.any.hashAlg,
-               ESYS_TR_RH_NULL,  // TODO: options: TPM2_RH_OWNER, TPM2_RH_ENDORSEMENT, TPM2_RH_PLATFORM, TPM2_RH_NULL
-               out_ptr(tpm_digest),
-               out_ptr(validation)));
-
-         // TODO: Remove, just for debugging
-         BOTAN_ASSERT_NOMSG(
-            CT::is_equal(m_hash->final_stdvec().data(), tpm_digest->buffer, tpm_digest->size).as_bool());
+         const auto nodata = init_empty<TPM2B_MAX_BUFFER>();
+         check_tss2_rc("Esys_SequenceComplete",
+                       Esys_SequenceComplete(inner(m_ctx),
+                                             m_sequence_handle,
+                                             m_ctx->session_handle(0),
+                                             m_ctx->session_handle(1),
+                                             m_ctx->session_handle(2),
+                                             &nodata,
+                                             ESYS_TR_RH_NULL,
+                                             out_ptr(tpm_digest),
+                                             out_ptr(validation)));
 
          unique_esys_ptr<TPMT_SIGNATURE> signature;
          check_tss2_rc("Esys_Sign",
@@ -394,14 +431,15 @@ class TPM2_Signature_Operation : public PK_Ops::Signature {
 
       size_t signature_length() const override { return m_key.key_length(); }
 
-      std::string hash_function() const override { return m_hash->name(); }
+      std::string hash_function() const override {
+         return std::string(get_tpm2_hash_name(m_scheme.details.any.hashAlg));
+      }
 
    private:
       std::shared_ptr<Context> m_ctx;
       const Key& m_key;
       TPMT_SIG_SCHEME m_scheme;
-      std::vector<uint8_t> m_msg;
-      std::unique_ptr<HashFunction> m_hash;
+      ESYS_TR m_sequence_handle;
 };
 
 }  // namespace

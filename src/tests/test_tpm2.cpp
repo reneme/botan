@@ -131,10 +131,6 @@ std::vector<Test::Result> test_tpm2_keys() {
                // // TODO load key with wrong PW - this will only throw once a sig_op is needed
                // result.test_throws("Key supplied with wrong PW", [&] { Botan::TPM2::Key(ctx, 8, "password_wrong"); });
 
-               std::cout << "###########################################\n";
-               std::cout << "load key\n";
-               std::cout << "###########################################\n";
-
                // load key with right PW
                auto key = Botan::TPM2::Key(ctx, 8, "password");
                result.test_eq("Algo", key.algo_name(), "RSA");
@@ -143,20 +139,19 @@ std::vector<Test::Result> test_tpm2_keys() {
                Botan::Null_RNG null_rng;
                Botan::PK_Signer signer(key, null_rng /* TPM takes care of this */, "PSS(SHA-256)");
 
-               std::cout << "###########################################\n";
-               std::cout << "start signing\n";
-               std::cout << "###########################################\n";
-
                auto session = std::make_unique<Botan::TPM2::AuthSession>(ctx);
                ctx->set_sessions(session->session(), std::nullopt, std::nullopt);
 
-               auto message = Botan::hex_decode("deadbeef");
+               // create a message that is larger than the TPM2 max buffer size
+               const auto message = [] {
+                  std::vector<uint8_t> result(TPM2_MAX_DIGEST_BUFFER + 5);
+                  for(size_t i = 0; i < result.size(); ++i) {
+                     result[i] = static_cast<uint8_t>(i);
+                  }
+                  return result;
+               }();
                const auto signature = signer.sign_message(message, null_rng);
                result.test_gt("signature is not empty", signature.size(), 0);
-
-               std::cout << "###########################################\n";
-               std::cout << "start verifying\n";
-               std::cout << "###########################################\n";
 
                auto public_key = key.public_key();
                Botan::PK_Verifier verifier(*public_key, "PSS(SHA-256)");

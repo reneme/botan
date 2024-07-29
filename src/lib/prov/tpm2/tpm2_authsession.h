@@ -12,27 +12,27 @@
 
 #include <tss2/tss2_esys.h>
 
-namespace Botan {
+namespace Botan::TPM2 {
 
-class TPM2_AuthSession {
-      //Always establishes an HMAC session. Shall only be used within TPM2_Context
+class AuthSession {
+      //Always establishes an HMAC session. Shall only be used within Context
       // TODO: Constructors
 
    public:
       /**
-         * @param ctx  The TPM2_Context to use for the session
+         * @param ctx  The Context to use for the session
          */
-      TPM2_AuthSession(std::shared_ptr<TPM2_Context> ctx);
+      AuthSession(std::shared_ptr<Context> ctx);
 
-      ~TPM2_AuthSession();
+      ~AuthSession();
 
       ESYS_TR session() const { return m_session; }
 
    private:
-      std::shared_ptr<TPM2_Context> m_ctx;
+      std::shared_ptr<Context> m_ctx;
       ESYS_TR m_session;
 };
 
-}  // namespace Botan
+}  // namespace Botan::TPM2
 
 #endif

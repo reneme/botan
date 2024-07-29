@@ -50,10 +50,9 @@ TPM2B_SENSITIVE_CREATE in_sensitive_from_auth_val(const std::string& auth_val_vi
 
 }  // namespace
 
-namespace Botan {
+namespace Botan::TPM2 {
 
-TPM2_Key::TPM2_Key(std::shared_ptr<TPM2_Context> ctx, size_t key_persistent_id, const std::string& auth_val) :
-      m_ctx(std::move(ctx)) {
+Key::Key(std::shared_ptr<Context> ctx, size_t key_persistent_id, const std::string& auth_val) : m_ctx(std::move(ctx)) {
    TPMI_DH_PERSISTENT persistent_handle = TPM2_PERSISTENT_FIRST + key_persistent_id;
    BOTAN_ASSERT_NOMSG(persistent_handle <= TPM2_PERSISTENT_LAST);
 
@@ -66,7 +65,7 @@ TPM2_Key::TPM2_Key(std::shared_ptr<TPM2_Context> ctx, size_t key_persistent_id, 
    }
 }
 
-void TPM2_Key::create_new(uint32_t /* key_handle */, const std::string& /* auth_val */) {
+void Key::create_new(uint32_t /* key_handle */, const std::string& /* auth_val */) {
    throw Not_Implemented("key management is NYI");  //TODO: Implement
 
    // unique_esys_ptr<TPM2B_PRIVATE> out_private;
@@ -132,7 +131,7 @@ void TPM2_Key::create_new(uint32_t /* key_handle */, const std::string& /* auth_
    //               Esys_TR_GetTpmHandle(inner(m_ctx), persistent_handle_out, &m_persistent_key_handle));
 }
 
-void TPM2_Key::load_existing(uint32_t key_handle, const std::string& auth_val) {
+void Key::load_existing(uint32_t key_handle, const std::string& auth_val) {
    // Load the key
    check_tss2_rc("Esys_TR_FromTPMPublic",
                  Esys_TR_FromTPMPublic(inner(m_ctx),
@@ -151,7 +150,7 @@ void TPM2_Key::load_existing(uint32_t key_handle, const std::string& auth_val) {
                  Esys_TR_GetTpmHandle(inner(m_ctx), m_transient_key_handle, &m_persistent_key_handle));
 }
 
-TPM2_Key::~TPM2_Key() {
+Key::~Key() {
    if(!m_is_loaded) {
       // No need to flush after TR_FromTPMPublic
       check_tss2_rc("Esys_FlushContext", Esys_FlushContext(inner(m_ctx), m_transient_key_handle));
@@ -168,7 +167,7 @@ struct PublicInfo {
 };
 
 template <TPMI_ALG_PUBLIC expected_type>
-PublicInfo read_public_info(const std::shared_ptr<TPM2_Context>& ctx, ESYS_TR handle) {
+PublicInfo read_public_info(const std::shared_ptr<Context>& ctx, ESYS_TR handle) {
    PublicInfo result;
 
    check_tss2_rc("Esys_ReadPublic",
@@ -215,24 +214,24 @@ OutT copy_into(const tpm2_buffer auto& data) {
 
 }  // namespace
 
-std::unique_ptr<Public_Key> TPM2_Key::public_key() const {
+std::unique_ptr<Public_Key> Key::public_key() const {
    // TODO: Probably this should return an TPM2_RSA_PublicKey at one point
    return std::make_unique<RSA_PublicKey>(algorithm_identifier(), public_key_bits());
 }
 
-size_t TPM2_Key::estimated_strength() const {
+size_t Key::estimated_strength() const {
    return if_work_factor(key_length());
 }
 
-size_t TPM2_Key::key_length() const {
+size_t Key::key_length() const {
    return read_public_info<TPM2_ALG_RSA>(m_ctx, m_transient_key_handle).pub->publicArea.parameters.rsaDetail.keyBits;
 }
 
-AlgorithmIdentifier TPM2_Key::algorithm_identifier() const {
+AlgorithmIdentifier Key::algorithm_identifier() const {
    return AlgorithmIdentifier(object_identifier(), AlgorithmIdentifier::USE_NULL_PARAM);
 }
 
-std::vector<uint8_t> TPM2_Key::public_key_bits() const {
+std::vector<uint8_t> Key::public_key_bits() const {
    auto public_info = read_public_info<TPM2_ALG_RSA>(m_ctx, m_transient_key_handle);
 
    const BigInt n = BigInt(as_span(public_info.pub->publicArea.unique.rsa));
@@ -247,15 +246,15 @@ std::vector<uint8_t> TPM2_Key::public_key_bits() const {
    return output;
 }
 
-std::vector<uint8_t> TPM2_Key::raw_public_key_bits() const {
+std::vector<uint8_t> Key::raw_public_key_bits() const {
    throw Not_Implemented("An RSA public key does not provide a raw binary representation.");
 }
 
-secure_vector<uint8_t> TPM2_Key::private_key_bits() const {
-   throw Not_Implemented("TPM2_Key::private_key_bits");
+secure_vector<uint8_t> Key::private_key_bits() const {
+   throw Not_Implemented("Key::private_key_bits");
 }
 
-bool TPM2_Key::check_key(RandomNumberGenerator&, bool) const {
+bool Key::check_key(RandomNumberGenerator&, bool) const {
    return true;  // does not make sense on a TPM key
 }
 
@@ -331,7 +330,7 @@ std::pair<TPMT_SIG_SCHEME, std::unique_ptr<Botan::HashFunction>> prepare_padding
 
 class TPM2_Signature_Operation : public PK_Ops::Signature {
    public:
-      TPM2_Signature_Operation(std::shared_ptr<TPM2_Context> ctx, const TPM2_Key& key, std::string_view padding) :
+      TPM2_Signature_Operation(std::shared_ptr<Context> ctx, const Key& key, std::string_view padding) :
             m_ctx(std::move(ctx)), m_key(key) {
          std::tie(m_scheme, m_hash) = prepare_padding_mechanism(padding);
          BOTAN_ASSERT_NONNULL(m_hash);
@@ -398,8 +397,8 @@ class TPM2_Signature_Operation : public PK_Ops::Signature {
       std::string hash_function() const override { return m_hash->name(); }
 
    private:
-      std::shared_ptr<TPM2_Context> m_ctx;
-      const TPM2_Key& m_key;
+      std::shared_ptr<Context> m_ctx;
+      const Key& m_key;
       TPMT_SIG_SCHEME m_scheme;
       std::vector<uint8_t> m_msg;
       std::unique_ptr<HashFunction> m_hash;
@@ -407,12 +406,12 @@ class TPM2_Signature_Operation : public PK_Ops::Signature {
 
 }  // namespace
 
-std::unique_ptr<PK_Ops::Signature> TPM2_Key::create_signature_op(RandomNumberGenerator& rng,
-                                                                 std::string_view params,
-                                                                 std::string_view provider) const {
+std::unique_ptr<PK_Ops::Signature> Key::create_signature_op(RandomNumberGenerator& rng,
+                                                            std::string_view params,
+                                                            std::string_view provider) const {
    BOTAN_UNUSED(rng);
    BOTAN_UNUSED(provider);
    return std::make_unique<TPM2_Signature_Operation>(m_ctx, *this, params);
 }
 
-}  // namespace Botan
+}  // namespace Botan::TPM2

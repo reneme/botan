@@ -9,11 +9,9 @@
 #include <botan/internal/tpm2_authsession.h>
 #include <botan/internal/tpm2_util.h>
 
-#include <string>
+namespace Botan::TPM2 {
 
-namespace Botan {
-
-TPM2_AuthSession::TPM2_AuthSession(std::shared_ptr<TPM2_Context> ctx) : m_ctx(std::move(ctx)) {
+AuthSession::AuthSession(std::shared_ptr<Context> ctx) : m_ctx(std::move(ctx)) {
    // Start an authorization session
    const TPMT_SYM_DEF auth_sym = {.algorithm = TPM2_ALG_AES, .keyBits = {.aes = 128}, .mode = {.aes = TPM2_ALG_CFB}};
    const TPMI_ALG_HASH auth_hash = TPM2_ALG_SHA256;  //TODO: Sensible parameters
@@ -35,10 +33,10 @@ TPM2_AuthSession::TPM2_AuthSession(std::shared_ptr<TPM2_Context> ctx) : m_ctx(st
                  Esys_TRSess_SetAttributes(inner(m_ctx), m_session, sessionAttributes, 0xFF));
 }
 
-TPM2_AuthSession::~TPM2_AuthSession() {
+AuthSession::~AuthSession() {
    if(m_session != ESYS_TR_NONE) {
       check_tss2_rc("Esys_FlushContext", Esys_FlushContext(inner(m_ctx), m_session));
       m_session = ESYS_TR_NONE;
    }
 }
-}  // namespace Botan
+}  // namespace Botan::TPM2

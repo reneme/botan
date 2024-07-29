@@ -14,9 +14,9 @@
 #include <source_location>
 #include <tss2/tss2_esys.h>
 
-namespace Botan {
+namespace Botan::TPM2 {
 
-void TPM2_RNG::fill_bytes_with_input(std::span<uint8_t> output, std::span<const uint8_t> input) {
+void RNG::fill_bytes_with_input(std::span<uint8_t> output, std::span<const uint8_t> input) {
    constexpr size_t MAX_STIR_RANDOM_SIZE = 128;  // From specification of tpm2-tool's tpm2_stirrandom
 
    BufferSlicer in(input);
@@ -49,4 +49,4 @@ void TPM2_RNG::fill_bytes_with_input(std::span<uint8_t> output, std::span<const 
    }
 }
 
-}  // namespace Botan
+}  // namespace Botan::TPM2

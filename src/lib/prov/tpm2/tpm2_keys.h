@@ -13,9 +13,9 @@
 
 #include <utility>
 
-namespace Botan {
+namespace Botan::TPM2 {
 
-class BOTAN_PUBLIC_API(3, 6) TPM2_Key final : public Private_Key {
+class BOTAN_PUBLIC_API(3, 6) Key final : public Private_Key {
       //TODO: Constructors
 
    public:
@@ -26,9 +26,9 @@ class BOTAN_PUBLIC_API(3, 6) TPM2_Key final : public Private_Key {
       * @param auth_val  The authorization value for the key
       * TODO: Maybe create these only via the context?
       */
-      TPM2_Key(std::shared_ptr<TPM2_Context> ctx, size_t key_persistent_id, const std::string& auth_val);
+      Key(std::shared_ptr<Context> ctx, size_t key_persistent_id, const std::string& auth_val);
 
-      ~TPM2_Key() override;
+      ~Key() override;
 
       uint32_t handle() const { return m_persistent_key_handle; }
 
@@ -70,7 +70,7 @@ class BOTAN_PUBLIC_API(3, 6) TPM2_Key final : public Private_Key {
       void load_existing(uint32_t key_handle, const std::string& auth_val);
 
    private:
-      std::shared_ptr<TPM2_Context> m_ctx;
+      std::shared_ptr<Context> m_ctx;
 
       uint32_t m_persistent_key_handle;          // Represents a TPM2_HANDLE
       uint32_t m_transient_key_handle = 0xfffU;  // Represents a ESYS_TR initialized to ESYS_TR_NONE
@@ -78,6 +78,6 @@ class BOTAN_PUBLIC_API(3, 6) TPM2_Key final : public Private_Key {
       bool m_is_loaded = false;
 };
 
-}  // namespace Botan
+}  // namespace Botan::TPM2
 
 #endif

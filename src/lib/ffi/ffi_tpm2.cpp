@@ -25,7 +25,7 @@ using namespace Botan_FFI;
  * but the TPM2_Context is meant to be used as a shared pointer.
  */
 struct botan_tpm2_ctx_wrapper {
-      std::shared_ptr<Botan::TPM2_Context> ctx;
+      std::shared_ptr<Botan::TPM2::Context> ctx;
 };
 
 BOTAN_FFI_DECLARE_STRUCT(botan_tpm2_ctx_struct, botan_tpm2_ctx_wrapper, 0xD2B95E15);
@@ -47,7 +47,7 @@ int botan_tpm2_ctx_init(botan_tpm2_ctx_t* ctx_out, const char* tcti_nameconf) {
          }
       }();
 
-      ctx->ctx = Botan::TPM2_Context::create(std::move(tcti));
+      ctx->ctx = Botan::TPM2::Context::create(std::move(tcti));
       *ctx_out = new botan_tpm2_ctx_struct(std::move(ctx));
       return BOTAN_FFI_SUCCESS;
    });
@@ -78,7 +78,7 @@ int botan_tpm2_rng_init(botan_rng_t* rng_out, botan_tpm2_ctx_t ctx) {
          return BOTAN_FFI_ERROR_NULL_POINTER;
       }
 
-      *rng_out = new botan_rng_struct(std::make_unique<Botan::TPM2_RNG>(ctx_wrapper.ctx));
+      *rng_out = new botan_rng_struct(std::make_unique<Botan::TPM2::RNG>(ctx_wrapper.ctx));
       return BOTAN_FFI_SUCCESS;
    });
 #else

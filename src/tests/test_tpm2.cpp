@@ -36,8 +36,8 @@ bool not_zero_64(std::span<const uint8_t> in) {
    return true;
 }
 
-std::shared_ptr<Botan::TPM2_Context> get_tpm2_context() {
-   auto ctx = Botan::TPM2_Context::create(Test::options().tpm2_tcti_name(), Test::options().tpm2_tcti_conf());
+std::shared_ptr<Botan::TPM2::Context> get_tpm2_context() {
+   auto ctx = Botan::TPM2::Context::create(Test::options().tpm2_tcti_name(), Test::options().tpm2_tcti_conf());
    if(ctx->vendor() != "SW   TPM") {
       return {};
    }
@@ -57,10 +57,10 @@ std::vector<Test::Result> test_tpm2_rng() {
       return {bail_out()};
    }
 
-   auto session = std::make_unique<Botan::TPM2_AuthSession>(ctx);
+   auto session = std::make_unique<Botan::TPM2::AuthSession>(ctx);
    ctx->set_sessions(session->session(), std::nullopt, std::nullopt);
 
-   auto rng = Botan::TPM2_RNG(ctx);
+   auto rng = Botan::TPM2::RNG(ctx);
 
    return {
       CHECK("Basic functionalities",
@@ -117,7 +117,7 @@ std::vector<Test::Result> test_tpm2_keys() {
                   std::cout << "create key\n";
                   std::cout << "###########################################\n";
 
-                  auto key = Botan::TPM2_Key(ctx, 8, "password");
+                  auto key = Botan::TPM2::Key(ctx, 8, "password");
                   result.test_eq("Algo", key.algo_name(), "RSA");
                   result.test_is_eq("Handle", key.handle(), 0x81000008);
                   // key goes out of scope
@@ -129,14 +129,14 @@ std::vector<Test::Result> test_tpm2_keys() {
                                  persistent_handles.end());
 
                // // TODO load key with wrong PW - this will only throw once a sig_op is needed
-               // result.test_throws("Key supplied with wrong PW", [&] { Botan::TPM2_Key(ctx, 8, "password_wrong"); });
+               // result.test_throws("Key supplied with wrong PW", [&] { Botan::TPM2::Key(ctx, 8, "password_wrong"); });
 
                std::cout << "###########################################\n";
                std::cout << "load key\n";
                std::cout << "###########################################\n";
 
                // load key with right PW
-               auto key = Botan::TPM2_Key(ctx, 8, "password");
+               auto key = Botan::TPM2::Key(ctx, 8, "password");
                result.test_eq("Algo", key.algo_name(), "RSA");
                result.test_is_eq("Handle", key.handle(), 0x81000008);
 
@@ -147,7 +147,7 @@ std::vector<Test::Result> test_tpm2_keys() {
                std::cout << "start signing\n";
                std::cout << "###########################################\n";
 
-               auto session = std::make_unique<Botan::TPM2_AuthSession>(ctx);
+               auto session = std::make_unique<Botan::TPM2::AuthSession>(ctx);
                ctx->set_sessions(session->session(), std::nullopt, std::nullopt);
 
                auto message = Botan::hex_decode("deadbeef");

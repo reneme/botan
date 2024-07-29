@@ -16,13 +16,13 @@
 #include <optional>
 #include <vector>
 
-namespace Botan {
+namespace Botan::TPM2 {
 
-class TPM2_AuthSession;
+class AuthSession;
 
-class BOTAN_PUBLIC_API(3, 6) TPM2_Error final : public Exception {
+class BOTAN_PUBLIC_API(3, 6) Error final : public Exception {
    public:
-      TPM2_Error(std::string_view location, uint32_t rc);
+      Error(std::string_view location, uint32_t rc);
 
       ErrorType error_type() const noexcept override { return ErrorType::TPMError; }
 
@@ -39,12 +39,12 @@ class BOTAN_PUBLIC_API(3, 6) TPM2_Error final : public Exception {
       uint32_t m_rc;
 };
 
-class BOTAN_PUBLIC_API(3, 6) TPM2_Context final : public std::enable_shared_from_this<TPM2_Context> {
+class BOTAN_PUBLIC_API(3, 6) Context final : public std::enable_shared_from_this<Context> {
    public:
       /**
        * @param tcti_nameconf  this is passed to Tss2_TctiLdr_Initialize verbatim
        */
-      static std::shared_ptr<TPM2_Context> create(const std::string& tcti_nameconf);
+      static std::shared_ptr<Context> create(const std::string& tcti_nameconf);
 
       /**
        * @param tcti  if set this is passed to Tss2_TctiLdr_Initialize_Ex verbatim
@@ -52,15 +52,15 @@ class BOTAN_PUBLIC_API(3, 6) TPM2_Context final : public std::enable_shared_from
        * @param conf  if set this is passed to Tss2_TctiLdr_Initialize_Ex verbatim
        *              otherwise a nullptr is passed.
        */
-      static std::shared_ptr<TPM2_Context> create(std::optional<std::string> tcti = {},
-                                                  std::optional<std::string> conf = {});
+      static std::shared_ptr<Context> create(std::optional<std::string> tcti = {},
+                                             std::optional<std::string> conf = {});
 
-      TPM2_Context(const TPM2_Context&) = delete;
-      TPM2_Context(TPM2_Context&& ctx) noexcept = default;
-      ~TPM2_Context();
+      Context(const Context&) = delete;
+      Context(Context&& ctx) noexcept = default;
+      ~Context();
 
-      TPM2_Context& operator=(const TPM2_Context&) = delete;
-      TPM2_Context& operator=(TPM2_Context&& ctx) noexcept = default;
+      Context& operator=(const Context&) = delete;
+      Context& operator=(Context&& ctx) noexcept = default;
 
       void set_sessions(std::optional<uint32_t> session1,
                         std::optional<uint32_t> session2,
@@ -79,11 +79,11 @@ class BOTAN_PUBLIC_API(3, 6) TPM2_Context final : public std::enable_shared_from
       /// @return true if @param persistent_handle is in the list of persistent handles
       bool in_persistent_handles(uint32_t persistent_handle) const;
 
-      void set_session(std::unique_ptr<TPM2_AuthSession> session);
+      void set_session(std::unique_ptr<AuthSession> session);
 
    private:
-      TPM2_Context(const char* tcti_nameconf);
-      TPM2_Context(const char* tcti_name, const char* tcti_conf);
+      Context(const char* tcti_nameconf);
+      Context(const char* tcti_name, const char* tcti_conf);
 
    private:
       struct Impl;  // PImpl to avoid TPM2-TSS includes in this header
@@ -92,6 +92,6 @@ class BOTAN_PUBLIC_API(3, 6) TPM2_Context final : public std::enable_shared_from
       std::array<uint32_t, 3> m_session_handles;
 };
 
-}  // namespace Botan
+}  // namespace Botan::TPM2
 
 #endif

@@ -20,48 +20,48 @@
 #include <tss2/tss2_tcti.h>
 #include <tss2/tss2_tctildr.h>
 
-namespace Botan {
+namespace Botan::TPM2 {
 
-TPM2_Error::TPM2_Error(std::string_view location, uint32_t rc) :
+Error::Error(std::string_view location, uint32_t rc) :
       Exception(fmt("TPM2 Exception in {}: Code {} ({})", location, rc, Tss2_RC_Decode(rc))), m_rc(rc) {}
 
-std::string TPM2_Error::error_message() const {
+std::string Error::error_message() const {
    return Tss2_RC_Decode(m_rc);
 }
 
-struct TPM2_Context::Impl {
+struct Context::Impl {
       TSS2_TCTI_CONTEXT* m_tcti_ctx;
       ESYS_CONTEXT* m_ctx;
 };
 
-std::shared_ptr<TPM2_Context> TPM2_Context::create(const std::string& tcti_nameconf) {
+std::shared_ptr<Context> Context::create(const std::string& tcti_nameconf) {
    // We cannot std::make_shared as the constructor is private
-   return std::shared_ptr<TPM2_Context>(new TPM2_Context(tcti_nameconf.c_str()));
+   return std::shared_ptr<Context>(new Context(tcti_nameconf.c_str()));
 }
 
-std::shared_ptr<TPM2_Context> TPM2_Context::create(std::optional<std::string> tcti, std::optional<std::string> conf) {
+std::shared_ptr<Context> Context::create(std::optional<std::string> tcti, std::optional<std::string> conf) {
    const auto tcti_ptr = tcti.has_value() ? tcti->c_str() : nullptr;
    const auto conf_ptr = conf.has_value() ? conf->c_str() : nullptr;
 
    // We cannot std::make_shared as the constructor is private
-   return std::shared_ptr<TPM2_Context>(new TPM2_Context(tcti_ptr, conf_ptr));
+   return std::shared_ptr<Context>(new Context(tcti_ptr, conf_ptr));
 }
 
-TPM2_Context::TPM2_Context(const char* tcti_nameconf) :
+Context::Context(const char* tcti_nameconf) :
       m_impl(std::make_unique<Impl>()), m_session_handles{ESYS_TR_NONE, ESYS_TR_NONE, ESYS_TR_NONE} {
    check_tss2_rc("TCTI Initialization", Tss2_TctiLdr_Initialize(tcti_nameconf, &m_impl->m_tcti_ctx));
    check_tss2_rc("TPM2 Initialization", Esys_Initialize(&m_impl->m_ctx, m_impl->m_tcti_ctx, nullptr /* ABI version */));
 }
 
-TPM2_Context::TPM2_Context(const char* tcti_name, const char* tcti_conf) :
+Context::Context(const char* tcti_name, const char* tcti_conf) :
       m_impl(std::make_unique<Impl>()), m_session_handles{ESYS_TR_NONE, ESYS_TR_NONE, ESYS_TR_NONE} {
    check_tss2_rc("TCTI Initialization", Tss2_TctiLdr_Initialize_Ex(tcti_name, tcti_conf, &m_impl->m_tcti_ctx));
    check_tss2_rc("TPM2 Initialization", Esys_Initialize(&m_impl->m_ctx, m_impl->m_tcti_ctx, nullptr /* ABI version */));
 }
 
-void TPM2_Context::set_sessions(std::optional<uint32_t> session1,
-                                std::optional<uint32_t> session2,
-                                std::optional<uint32_t> session3) {
+void Context::set_sessions(std::optional<uint32_t> session1,
+                           std::optional<uint32_t> session2,
+                           std::optional<uint32_t> session3) {
    auto set_session = [this](auto& session, size_t idx) {
       if(session.has_value()) {
          m_session_handles[idx] = session.value();
@@ -72,11 +72,11 @@ void TPM2_Context::set_sessions(std::optional<uint32_t> session1,
    set_session(session3, 2);
 }
 
-void* TPM2_Context::inner_context_object() {
+void* Context::inner_context_object() {
    return m_impl->m_ctx;
 }
 
-std::string TPM2_Context::vendor() const {
+std::string Context::vendor() const {
    std::array<TPM2_PT, 4> properties = {
       TPM2_PT_VENDOR_STRING_1, TPM2_PT_VENDOR_STRING_2, TPM2_PT_VENDOR_STRING_3, TPM2_PT_VENDOR_STRING_4};
    std::array<uint8_t, properties.size() * sizeof(TPM2_PT) + 1 /* ensure zero-termination */> vendor_string{};
@@ -109,7 +109,7 @@ std::string TPM2_Context::vendor() const {
    return std::string(reinterpret_cast<const char*>(vendor_string.data()));
 }
 
-std::vector<uint32_t> TPM2_Context::persistent_handles() const {
+std::vector<uint32_t> Context::persistent_handles() const {
    TPMI_YES_NO more_data;
    unique_esys_ptr<TPMS_CAPABILITY_DATA> capability_data;
 
@@ -130,15 +130,15 @@ std::vector<uint32_t> TPM2_Context::persistent_handles() const {
            capability_data->data.handles.handle + capability_data->data.handles.count};
 }
 
-bool TPM2_Context::in_persistent_handles(uint32_t persistent_handle) const {
+bool Context::in_persistent_handles(uint32_t persistent_handle) const {
    auto persistent_handles = this->persistent_handles();
    return std::find(persistent_handles.begin(), persistent_handles.end(), persistent_handle) !=
           persistent_handles.end();
 }
 
-TPM2_Context::~TPM2_Context() {
+Context::~Context() {
    Esys_Finalize(&m_impl->m_ctx);
    Tss2_TctiLdr_Finalize(&m_impl->m_tcti_ctx);
 }
 
-}  // namespace Botan
+}  // namespace Botan::TPM2

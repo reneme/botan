@@ -13,10 +13,10 @@
 
 #include <botan/tpm2.h>
 
-namespace Botan {
-class BOTAN_PUBLIC_API(3, 6) TPM2_RNG final : public Hardware_RNG {
+namespace Botan::TPM2 {
+class BOTAN_PUBLIC_API(3, 6) RNG final : public Hardware_RNG {
    public:
-      TPM2_RNG(std::shared_ptr<TPM2_Context> ctx) : m_ctx(std::move(ctx)) {}
+      RNG(std::shared_ptr<Context> ctx) : m_ctx(std::move(ctx)) {}
 
       bool accepts_input() const override { return true; }
 
@@ -28,9 +28,9 @@ class BOTAN_PUBLIC_API(3, 6) TPM2_RNG final : public Hardware_RNG {
       void fill_bytes_with_input(std::span<uint8_t> output, std::span<const uint8_t> input) override;
 
    private:
-      std::shared_ptr<TPM2_Context> m_ctx;
+      std::shared_ptr<Context> m_ctx;
 };
 
-}  // namespace Botan
+}  // namespace Botan::TPM2
 
 #endif

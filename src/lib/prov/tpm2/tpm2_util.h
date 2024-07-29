@@ -11,6 +11,7 @@
 
 #include <botan/concepts.h>
 #include <botan/tpm2.h>
+#include <botan/tpm2_object.h>
 
 #include <tss2/tss2_esys.h>
 #include <tss2/tss2_rc.h>
@@ -81,9 +82,50 @@ struct PublicInfo {
 };
 
 struct ObjectHandles {
-      std::optional<TPM2_HANDLE> persistent = std::nullopt;
+      std::optional<TPM2_HANDLE> persistent = 0;
       ESYS_TR transient = ESYS_TR_NONE;
 };
+
+class ObjectSetter {
+   public:
+      constexpr ObjectSetter(Object& object, bool persistent = false) :
+            m_object(object), m_persistent(persistent), m_handle(persistent ? 0 : ESYS_TR_NONE) {}
+
+      constexpr ~ObjectSetter() noexcept {
+         if(!was_written()) {
+            return;
+         }
+
+         if(m_persistent) {
+            m_object.handles().persistent = m_handle;
+         } else {
+            m_object.handles().transient = m_handle;
+         }
+      }
+
+      ObjectSetter(const ObjectSetter&) = delete;
+      ObjectSetter(ObjectSetter&&) = delete;
+      ObjectSetter& operator=(const ObjectSetter&) = delete;
+      ObjectSetter& operator=(ObjectSetter&&) = delete;
+
+      [[nodiscard]] constexpr operator uint32_t*() && noexcept { return &m_handle; }
+
+   private:
+      bool was_written() const { return m_handle != (m_persistent ? 0 : ESYS_TR_NONE); }
+
+   private:
+      Object& m_object;
+      bool m_persistent;
+      uint32_t m_handle;
+};
+
+constexpr auto out_transient_handle(Object& object) {
+   return ObjectSetter{object, false};
+}
+
+constexpr auto out_persistent_handle(Object& object) {
+   return ObjectSetter{object, true};
+}
 
 }  // namespace Botan::TPM2
 

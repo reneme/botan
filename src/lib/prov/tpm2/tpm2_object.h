@@ -17,10 +17,11 @@ namespace Botan::TPM2 {
 
 struct PublicInfo;
 struct ObjectHandles;
+class ObjectSetter;
 
 class BOTAN_PUBLIC_API(3, 6) Object {
    public:
-      Object(std::shared_ptr<Context> ctx, uint32_t persistent_object_handle, std::span<const uint8_t> auth_value);
+      Object(std::shared_ptr<Context> ctx);
 
       virtual ~Object();
       Object(const Object&) = delete;
@@ -28,23 +29,25 @@ class BOTAN_PUBLIC_API(3, 6) Object {
       Object(Object&& other) noexcept;
       Object& operator=(Object&& other) noexcept;
 
+      const std::shared_ptr<Context>& context() const { return m_ctx; }
+
       bool is_persistent() const;
 
       uint32_t persistent_handle() const;
       uint32_t transient_handle() const;
 
-   protected:
-      const std::shared_ptr<Context>& context() const { return m_ctx; }
+      PublicInfo& _public_info(std::optional<uint32_t> expected_type = {}) const;
 
-      ObjectHandles& handles() const { return *m_handles; }
-
-      PublicInfo& public_info() const;
-      virtual uint32_t expected_public_info_type() const = 0;
+   private:
+      friend class ObjectSetter;
+      ObjectHandles& handles();
 
    private:
       std::shared_ptr<Context> m_ctx;
       std::unique_ptr<ObjectHandles> m_handles;
       mutable std::unique_ptr<PublicInfo> m_public_info;
 };
+
 }  // namespace Botan::TPM2
+
 #endif

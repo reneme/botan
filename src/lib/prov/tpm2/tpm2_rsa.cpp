@@ -127,48 +127,73 @@ BigInt e(const PublicInfo& pi) {
    return (exponent == 0) ? 65537 : exponent;
 }
 
-}  // namespace
+Object make_persistent_object(const std::shared_ptr<Context>& ctx,
+                              uint32_t persistent_object_handle,
+                              std::span<const uint8_t> auth_value) {
+   BOTAN_ARG_CHECK(
+      TPM2_PERSISTENT_FIRST <= persistent_object_handle && persistent_object_handle <= TPM2_PERSISTENT_LAST,
+      "persistent_object_handle out of range");
+   const bool is_persistent = ctx->in_persistent_handles(persistent_object_handle);
+   BOTAN_STATE_CHECK(is_persistent);
 
-RSA_PublicKey::RSA_PublicKey(std::shared_ptr<Context> ctx,
-                             uint32_t persistent_object_handle,
-                             std::span<const uint8_t> auth_value) :
-      Object(std::move(ctx), persistent_object_handle, auth_value),
-      Botan::RSA_PublicKey(n(public_info()), e(public_info())) {}
+   Object object(ctx);
 
-uint32_t RSA_PublicKey::expected_public_info_type() const {
-   return TPM2_ALG_RSA;
+   check_tss2_rc("Esys_TR_FromTPMPublic",
+                 Esys_TR_FromTPMPublic(inner(ctx),
+                                       persistent_object_handle,
+                                       ctx->session_handle(0),
+                                       ctx->session_handle(1),
+                                       ctx->session_handle(2),
+                                       out_transient_handle(object)));
+
+   const auto user_auth = copy_into<TPM2B_AUTH>(auth_value);
+   check_tss2_rc("Esys_TR_SetAuth", Esys_TR_SetAuth(inner(ctx), object.transient_handle(), &user_auth));
+
+   check_tss2_rc("Esys_TR_GetTpmHandle",
+                 Esys_TR_GetTpmHandle(inner(ctx), object.transient_handle(), out_persistent_handle(object)));
+
+   return object;
 }
 
-RSA_PrivateKey::RSA_PrivateKey(std::shared_ptr<Context> ctx,
-                               uint32_t persistent_object_handle,
-                               std::span<const uint8_t> auth_value) :
-      Object(std::move(ctx), persistent_object_handle, auth_value),
-      Botan::RSA_PublicKey(n(public_info()), e(public_info())) {}
+}  // namespace
+
+RSA_PublicKey RSA_PublicKey::from_persistent(const std::shared_ptr<Context>& ctx,
+                                             uint32_t persistent_object_handle,
+                                             std::span<const uint8_t> auth_value) {
+   return make_persistent_object(ctx, persistent_object_handle, auth_value);
+}
+
+RSA_PublicKey::RSA_PublicKey(Object object) :
+      Botan::RSA_PublicKey(n(object._public_info(TPM2_ALG_RSA)), e(object._public_info(TPM2_ALG_RSA))),
+      m_handle(std::move(object)) {}
+
+RSA_PrivateKey RSA_PrivateKey::from_persistent(const std::shared_ptr<Context>& ctx,
+                                               uint32_t persistent_object_handle,
+                                               std::span<const uint8_t> auth_value) {
+   return make_persistent_object(ctx, persistent_object_handle, auth_value);
+}
+
+RSA_PrivateKey::RSA_PrivateKey(Object object) :
+      Botan::RSA_PublicKey(n(object._public_info(TPM2_ALG_RSA)), e(object._public_info(TPM2_ALG_RSA))),
+      m_handle(std::move(object)) {}
 
 std::unique_ptr<Public_Key> RSA_PrivateKey::public_key() const {
    // TODO: Probably this should return an TPM2_RSA_PublicKey at one point
    return std::make_unique<Botan::RSA_PublicKey>(algorithm_identifier(), public_key_bits());
 }
 
-uint32_t RSA_PrivateKey::expected_public_info_type() const {
-   return TPM2_ALG_RSA;
-}
-
 namespace {
 
 class RSA_Signature_Operation : public PK_Ops::Signature {
    public:
-      RSA_Signature_Operation(std::shared_ptr<Context> ctx, const RSA_PrivateKey& key, std::string_view padding) :
-            m_ctx(std::move(ctx)),
-            m_key(key),
-            m_scheme(prepare_padding_mechanism(padding)),
-            m_sequence_handle(ESYS_TR_NONE) {
+      RSA_Signature_Operation(const Object& object, std::string_view padding) :
+            m_object(object), m_scheme(prepare_padding_mechanism(padding)), m_sequence_handle(ESYS_TR_NONE) {
          const auto noauth = init_empty<TPM2B_AUTH>();
          check_tss2_rc("Esys_HashSequenceStart",
-                       Esys_HashSequenceStart(inner(m_ctx),
-                                              m_ctx->session_handle(0),
-                                              m_ctx->session_handle(1),
-                                              m_ctx->session_handle(2),
+                       Esys_HashSequenceStart(inner(m_object.context()),
+                                              m_object.context()->session_handle(0),
+                                              m_object.context()->session_handle(1),
+                                              m_object.context()->session_handle(2),
                                               &noauth,
                                               m_scheme.details.any.hashAlg,
                                               &m_sequence_handle));
@@ -180,11 +205,11 @@ class RSA_Signature_Operation : public PK_Ops::Signature {
             const size_t chunk = std::min(slicer.remaining(), size_t(TPM2_MAX_DIGEST_BUFFER));
             const auto data = copy_into<TPM2B_MAX_BUFFER>(slicer.take(chunk));
             check_tss2_rc("Esys_SequenceUpdate",
-                          Esys_SequenceUpdate(inner(m_ctx),
+                          Esys_SequenceUpdate(inner(m_object.context()),
                                               m_sequence_handle,
-                                              m_ctx->session_handle(0),
-                                              m_ctx->session_handle(1),
-                                              m_ctx->session_handle(2),
+                                              m_object.context()->session_handle(0),
+                                              m_object.context()->session_handle(1),
+                                              m_object.context()->session_handle(2),
                                               &data));
          }
          BOTAN_ASSERT_NOMSG(slicer.empty());
@@ -196,11 +221,11 @@ class RSA_Signature_Operation : public PK_Ops::Signature {
 
          const auto nodata = init_empty<TPM2B_MAX_BUFFER>();
          check_tss2_rc("Esys_SequenceComplete",
-                       Esys_SequenceComplete(inner(m_ctx),
+                       Esys_SequenceComplete(inner(m_object.context()),
                                              m_sequence_handle,
-                                             m_ctx->session_handle(0),
-                                             m_ctx->session_handle(1),
-                                             m_ctx->session_handle(2),
+                                             m_object.context()->session_handle(0),
+                                             m_object.context()->session_handle(1),
+                                             m_object.context()->session_handle(2),
                                              &nodata,
                                              ESYS_TR_RH_NULL,
                                              out_ptr(digest),
@@ -208,11 +233,11 @@ class RSA_Signature_Operation : public PK_Ops::Signature {
 
          unique_esys_ptr<TPMT_SIGNATURE> signature;
          check_tss2_rc("Esys_Sign",
-                       Esys_Sign(inner(m_ctx),
-                                 m_key.transient_handle(),
-                                 m_ctx->session_handle(0),
-                                 m_ctx->session_handle(1),
-                                 m_ctx->session_handle(2),
+                       Esys_Sign(inner(m_object.context()),
+                                 m_object.transient_handle(),
+                                 m_object.context()->session_handle(0),
+                                 m_object.context()->session_handle(1),
+                                 m_object.context()->session_handle(2),
                                  digest.get(),
                                  &m_scheme,
                                  validation.get(),
@@ -234,32 +259,30 @@ class RSA_Signature_Operation : public PK_Ops::Signature {
          return copy_into<std::vector<uint8_t>>(sig.sig);
       }
 
-      size_t signature_length() const override { return m_key.key_length(); }
+      size_t signature_length() const override {
+         return m_object._public_info(TPM2_ALG_RSA).pub->publicArea.parameters.rsaDetail.keyBits / 8;
+      }
 
       std::string hash_function() const override {
          return std::string(get_tpm2_hash_name(m_scheme.details.any.hashAlg));
       }
 
    private:
-      std::shared_ptr<Context> m_ctx;
-      const RSA_PrivateKey& m_key;
+      const Object& m_object;
       TPMT_SIG_SCHEME m_scheme;
       ESYS_TR m_sequence_handle;
 };
 
 class RSA_Verification_Operation : public PK_Ops::Verification {
    public:
-      RSA_Verification_Operation(std::shared_ptr<Context> ctx, const RSA_PublicKey& key, std::string_view padding) :
-            m_ctx(std::move(ctx)),
-            m_key(key),
-            m_scheme(prepare_padding_mechanism(padding)),
-            m_sequence_handle(ESYS_TR_NONE) {
+      RSA_Verification_Operation(const Object& object, std::string_view padding) :
+            m_object(object), m_scheme(prepare_padding_mechanism(padding)), m_sequence_handle(ESYS_TR_NONE) {
          const auto noauth = init_empty<TPM2B_AUTH>();
          check_tss2_rc("Esys_HashSequenceStart",
-                       Esys_HashSequenceStart(inner(m_ctx),
-                                              m_ctx->session_handle(0),
-                                              m_ctx->session_handle(1),
-                                              m_ctx->session_handle(2),
+                       Esys_HashSequenceStart(inner(m_object.context()),
+                                              m_object.context()->session_handle(0),
+                                              m_object.context()->session_handle(1),
+                                              m_object.context()->session_handle(2),
                                               &noauth,
                                               m_scheme.details.any.hashAlg,
                                               &m_sequence_handle));
@@ -271,11 +294,11 @@ class RSA_Verification_Operation : public PK_Ops::Verification {
             const size_t chunk = std::min(slicer.remaining(), size_t(TPM2_MAX_DIGEST_BUFFER));
             const auto data = copy_into<TPM2B_MAX_BUFFER>(slicer.take(chunk));
             check_tss2_rc("Esys_SequenceUpdate",
-                          Esys_SequenceUpdate(inner(m_ctx),
+                          Esys_SequenceUpdate(inner(m_object.context()),
                                               m_sequence_handle,
-                                              m_ctx->session_handle(0),
-                                              m_ctx->session_handle(1),
-                                              m_ctx->session_handle(2),
+                                              m_object.context()->session_handle(0),
+                                              m_object.context()->session_handle(1),
+                                              m_object.context()->session_handle(2),
                                               &data));
          }
       }
@@ -286,11 +309,11 @@ class RSA_Verification_Operation : public PK_Ops::Verification {
 
          const auto nodata = init_empty<TPM2B_MAX_BUFFER>();
          check_tss2_rc("Esys_SequenceComplete",
-                       Esys_SequenceComplete(inner(m_ctx),
+                       Esys_SequenceComplete(inner(m_object.context()),
                                              m_sequence_handle,
-                                             m_ctx->session_handle(0),
-                                             m_ctx->session_handle(1),
-                                             m_ctx->session_handle(2),
+                                             m_object.context()->session_handle(0),
+                                             m_object.context()->session_handle(1),
+                                             m_object.context()->session_handle(2),
                                              &nodata,
                                              ESYS_TR_RH_NULL,
                                              out_ptr(digest),
@@ -315,11 +338,11 @@ class RSA_Verification_Operation : public PK_Ops::Verification {
          }();
 
          unique_esys_ptr<TPMT_TK_VERIFIED> result;
-         const auto rc = Esys_VerifySignature(inner(m_ctx),
-                                              m_key.transient_handle(),
-                                              m_ctx->session_handle(0),
-                                              m_ctx->session_handle(1),
-                                              m_ctx->session_handle(2),
+         const auto rc = Esys_VerifySignature(inner(m_object.context()),
+                                              m_object.transient_handle(),
+                                              m_object.context()->session_handle(0),
+                                              m_object.context()->session_handle(1),
+                                              m_object.context()->session_handle(2),
                                               digest.get(),
                                               &signature,
                                               out_ptr(result));
@@ -341,8 +364,7 @@ class RSA_Verification_Operation : public PK_Ops::Verification {
       }
 
    private:
-      std::shared_ptr<Context> m_ctx;
-      const RSA_PublicKey& m_key;
+      const Object& m_object;
       TPMT_SIG_SCHEME m_scheme;
       ESYS_TR m_sequence_handle;
 };
@@ -352,7 +374,7 @@ class RSA_Verification_Operation : public PK_Ops::Verification {
 std::unique_ptr<PK_Ops::Verification> RSA_PublicKey::create_verification_op(std::string_view params,
                                                                             std::string_view provider) const {
    BOTAN_UNUSED(provider);
-   return std::make_unique<RSA_Verification_Operation>(context(), *this, params);
+   return std::make_unique<RSA_Verification_Operation>(m_handle, params);
 }
 
 std::unique_ptr<PK_Ops::Signature> RSA_PrivateKey::create_signature_op(RandomNumberGenerator& rng,
@@ -360,7 +382,7 @@ std::unique_ptr<PK_Ops::Signature> RSA_PrivateKey::create_signature_op(RandomNum
                                                                        std::string_view provider) const {
    BOTAN_UNUSED(rng);
    BOTAN_UNUSED(provider);
-   return std::make_unique<RSA_Signature_Operation>(context(), *this, params);
+   return std::make_unique<RSA_Signature_Operation>(m_handle, params);
 }
 
 }  // namespace Botan::TPM2

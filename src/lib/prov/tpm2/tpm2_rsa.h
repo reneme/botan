@@ -18,13 +18,13 @@ namespace Botan::TPM2 {
 struct PublicInfo;
 struct ObjectHandles;
 
-class BOTAN_PUBLIC_API(3, 6) RSA_PublicKey : public virtual Object,
-                                             public virtual Botan::RSA_PublicKey {
+class BOTAN_PUBLIC_API(3, 6) RSA_PublicKey : public Botan::RSA_PublicKey {
    public:
-      RSA_PublicKey(std::shared_ptr<Context> ctx,
-                    uint32_t persistent_object_handle,
-                    std::span<const uint8_t> auth_value);
+      static RSA_PublicKey from_persistent(const std::shared_ptr<Context>& ctx,
+                                           uint32_t persistent_object_handle,
+                                           std::span<const uint8_t> auth_value);
 
+   public:
       ~RSA_PublicKey() override = default;
       RSA_PublicKey(const RSA_PublicKey&) = delete;
       RSA_PublicKey& operator=(const RSA_PublicKey&) = delete;
@@ -35,23 +35,29 @@ class BOTAN_PUBLIC_API(3, 6) RSA_PublicKey : public virtual Object,
          throw Not_Implemented("Cannot generate a new TPM-based keypair from this asymmetric key");
       }
 
+      const Object& handles() const { return m_handle; }
+
       std::unique_ptr<PK_Ops::Verification> create_verification_op(std::string_view params,
                                                                    std::string_view provider) const override;
 
    protected:
-      uint32_t expected_public_info_type() const final;
+      RSA_PublicKey(Object object);
+
+   private:
+      Object m_handle;
 };
 
 BOTAN_DIAGNOSTIC_PUSH
 BOTAN_DIAGNOSTIC_IGNORE_INHERITED_VIA_DOMINANCE
 
-class BOTAN_PUBLIC_API(3, 6) RSA_PrivateKey final : public virtual Object,
-                                                    public virtual Botan::RSA_PublicKey,
+class BOTAN_PUBLIC_API(3, 6) RSA_PrivateKey final : public virtual Botan::RSA_PublicKey,
                                                     public virtual Private_Key {
    public:
-      RSA_PrivateKey(std::shared_ptr<Context> ctx,
-                     uint32_t persistent_object_handle,
-                     std::span<const uint8_t> auth_value);
+      static RSA_PrivateKey from_persistent(const std::shared_ptr<Context>& ctx,
+                                            uint32_t persistent_object_handle,
+                                            std::span<const uint8_t> auth_value);
+
+   public:
       ~RSA_PrivateKey() override = default;
       RSA_PrivateKey(const RSA_PrivateKey&) = delete;
       RSA_PrivateKey& operator=(const RSA_PrivateKey&) = delete;
@@ -64,12 +70,17 @@ class BOTAN_PUBLIC_API(3, 6) RSA_PrivateKey final : public virtual Object,
          throw Not_Implemented("cannot export private key bits from a TPM2 key");
       }
 
+      const Object& handles() const { return m_handle; }
+
       std::unique_ptr<PK_Ops::Signature> create_signature_op(RandomNumberGenerator& rng,
                                                              std::string_view params,
                                                              std::string_view provider) const override;
 
    protected:
-      uint32_t expected_public_info_type() const final;
+      RSA_PrivateKey(Object obj);
+
+   private:
+      Object m_handle;
 };
 
 BOTAN_DIAGNOSTIC_POP

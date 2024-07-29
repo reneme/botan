@@ -113,9 +113,9 @@ KeyT load_persistent(Test::Result& result,
       "Persistent key available",
       std::find(persistent_handles.begin(), persistent_handles.end(), persistent_key_id) != persistent_handles.end());
 
-   auto key = KeyT(ctx, persistent_key_id, auth_value);
+   auto key = KeyT::from_persistent(ctx, persistent_key_id, auth_value);
    result.test_eq("Algo", key.algo_name(), "RSA" /* TODO ECC support*/);
-   result.test_is_eq("Handle", key.persistent_handle(), persistent_key_id);
+   result.test_is_eq("Handle", key.handles().persistent_handle(), persistent_key_id);
    return key;
 }
 

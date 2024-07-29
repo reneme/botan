@@ -445,6 +445,30 @@ template <typename T>
    return out_ptr_t{outptr};
 }
 
+template <typename T>
+   requires std::is_default_constructible_v<T>
+[[nodiscard]] constexpr auto out_opt(std::optional<T>& outopt) noexcept {
+   class out_opt_t {
+      public:
+         constexpr ~out_opt_t() noexcept { m_opt = m_raw; }
+
+         constexpr out_opt_t(std::optional<T>& outopt) noexcept : m_opt(outopt) {}
+
+         out_opt_t(const out_opt_t&) = delete;
+         out_opt_t(out_opt_t&&) = delete;
+         out_opt_t& operator=(const out_opt_t&) = delete;
+         out_opt_t& operator=(out_opt_t&&) = delete;
+
+         [[nodiscard]] constexpr operator T*() && noexcept { return &m_raw; }
+
+      private:
+         std::optional<T>& m_opt;
+         T m_raw;
+   };
+
+   return out_opt_t{outopt};
+}
+
 }  // namespace Botan
 
 #endif

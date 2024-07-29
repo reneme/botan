@@ -26,40 +26,6 @@ namespace Botan::TPM2 {
 
 namespace {
 
-template <typename T>
-concept tpm2_buffer = requires(T t) {
-   { t.buffer } -> std::convertible_to<const uint8_t*>;
-   { t.size } -> std::convertible_to<size_t>;
-};
-
-auto as_span(tpm2_buffer auto& data) {
-   return std::span{data.buffer, data.size};
-}
-
-template <tpm2_buffer T>
-T copy_into(std::span<const uint8_t> data) {
-   T result;
-   BOTAN_ASSERT_NOMSG(data.size() <= sizeof(result.buffer));
-   result.size = static_cast<decltype(result.size)>(data.size());
-   copy_mem(as_span(result), data);
-   return result;
-}
-
-template <concepts::resizable_byte_buffer OutT>
-OutT copy_into(const tpm2_buffer auto& data) {
-   OutT result;
-   result.resize(data.size);
-   copy_mem(result, as_span(data));
-   return result;
-}
-
-template <tpm2_buffer T>
-T init_empty() {
-   T result;
-   result.size = 0;
-   return result;
-}
-
 TPMI_ALG_HASH get_tpm2_hash_type(const std::optional<std::string>& hash_name) {
    if(!hash_name) {
       return TPM2_ALG_NULL;
@@ -145,108 +111,7 @@ TPMT_SIG_SCHEME prepare_padding_mechanism(std::string_view padding) {
    };
 }
 
-template <typename T>
-   requires std::is_default_constructible_v<T>
-[[nodiscard]] constexpr auto out_opt(std::optional<T>& outopt) noexcept {
-   class out_opt_t {
-      public:
-         constexpr ~out_opt_t() noexcept { m_opt = m_raw; }
-
-         constexpr out_opt_t(std::optional<T>& outopt) noexcept : m_opt(outopt) {}
-
-         out_opt_t(const out_opt_t&) = delete;
-         out_opt_t(out_opt_t&&) = delete;
-         out_opt_t& operator=(const out_opt_t&) = delete;
-         out_opt_t& operator=(out_opt_t&&) = delete;
-
-         [[nodiscard]] constexpr operator T*() && noexcept { return &m_raw; }
-
-      private:
-         std::optional<T>& m_opt;
-         T m_raw;
-   };
-
-   return out_opt_t{outopt};
-}
-
 }  // namespace
-
-struct PublicInfo {
-      unique_esys_ptr<TPM2B_PUBLIC> pub;
-      unique_esys_ptr<TPM2B_NAME> name;
-      unique_esys_ptr<TPM2B_NAME> qualified_name;
-};
-
-struct ObjectHandles {
-      std::optional<TPM2_HANDLE> persistent = std::nullopt;
-      ESYS_TR transient = ESYS_TR_NONE;
-};
-
-bool Object::is_persistent() const {
-   return m_handles->persistent.has_value();
-}
-
-PublicInfo& Object::public_info() const {
-   if(!m_public_info) {
-      m_public_info = std::make_unique<PublicInfo>();
-
-      check_tss2_rc("Esys_ReadPublic",
-                    Esys_ReadPublic(inner(m_ctx),
-                                    m_handles->transient,
-                                    m_ctx->session_handle(0),
-                                    m_ctx->session_handle(1),
-                                    m_ctx->session_handle(2),
-                                    out_ptr(m_public_info->pub),
-                                    out_ptr(m_public_info->name),
-                                    out_ptr(m_public_info->qualified_name)));
-      BOTAN_ASSERT_NONNULL(m_public_info->pub);
-      BOTAN_STATE_CHECK(m_public_info->pub->publicArea.type == expected_public_info_type());
-   }
-
-   return *m_public_info;
-}
-
-Object::Object(std::shared_ptr<Context> ctx, uint32_t persistent_object_id, std::span<const uint8_t> auth_value) :
-      m_ctx(std::move(ctx)), m_handles(std::make_unique<ObjectHandles>()) {
-   BOTAN_ARG_CHECK(TPM2_PERSISTENT_FIRST <= persistent_object_id && persistent_object_id <= TPM2_PERSISTENT_LAST,
-                   "persistent_object_id out of range");
-   const bool is_persistent = m_ctx->in_persistent_handles(persistent_object_id);
-   BOTAN_STATE_CHECK(is_persistent);
-
-   check_tss2_rc("Esys_TR_FromTPMPublic",
-                 Esys_TR_FromTPMPublic(inner(m_ctx),
-                                       persistent_object_id,
-                                       m_ctx->session_handle(0),
-                                       m_ctx->session_handle(1),
-                                       m_ctx->session_handle(2),
-                                       &m_handles->transient));
-
-   const auto user_auth = copy_into<TPM2B_AUTH>(auth_value);
-   check_tss2_rc("Esys_TR_SetAuth", Esys_TR_SetAuth(inner(m_ctx), m_handles->transient, &user_auth));
-
-   check_tss2_rc("Esys_TR_GetTpmHandle",
-                 Esys_TR_GetTpmHandle(inner(m_ctx), m_handles->transient, out_opt(m_handles->persistent)));
-}
-
-Object::~Object() {
-   if(!m_handles->persistent) {
-      check_tss2_rc("Esys_FlushContext", Esys_FlushContext(inner(m_ctx), m_handles->transient));
-   }
-
-   // No need to flush persistent handles
-}
-
-Object::Object(Object&&) noexcept = default;
-Object& Object::operator=(Object&&) noexcept = default;
-
-uint32_t Object::persistent_handle() const {
-   BOTAN_STATE_CHECK(is_persistent());
-   return *m_handles->persistent;
-}
-
-uint32_t Object::transient_handle() const {
-   return m_handles->transient;
-}
 
 namespace {
 

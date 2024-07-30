@@ -37,3 +37,6 @@ tpm2_createprimary --tcti="$tcti" -C e -g sha256 -G rsa -c $tmp_dir/primary.ctx
 tpm2_create --tcti="$tcti" -C $tmp_dir/primary.ctx -G rsa -u $tmp_dir/rsa.pub -r $tmp_dir/rsa.priv -p $test_pwd
 tpm2_load --tcti="$tcti" -C $tmp_dir/primary.ctx -u $tmp_dir/rsa.pub -r $tmp_dir/rsa.priv -c $tmp_dir/rsa.ctx
 tpm2_evictcontrol --tcti="$tcti" -C o -c $tmp_dir/rsa.ctx 0x81000008
+
+echo "Effectively disable dictionary attack lockout..."
+tpm2_dictionarylockout --tcti="$tcti" --setup-parameters --max-tries=1000 --recovery-time=1 --lockout-recovery-time=1

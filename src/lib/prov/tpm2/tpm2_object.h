@@ -37,14 +37,15 @@ class BOTAN_PUBLIC_API(3, 6) Object {
       uint32_t persistent_handle() const;
       uint32_t transient_handle() const;
 
-      void _reset();
+      void _reset() noexcept;
+      void _disengage() noexcept;
       PublicInfo& _public_info(std::optional<uint32_t> expected_type = {}) const;
 
    private:
       friend class ObjectSetter;
       ObjectHandles& handles();
 
-      void flush() const;
+      void flush() const noexcept;
       void scrub();
 
    private:

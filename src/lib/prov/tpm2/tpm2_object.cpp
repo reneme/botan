@@ -42,10 +42,11 @@ Object& Object::operator=(Object&& other) noexcept {
 }
 
 /// Flush the object's TPM handles as necessary
-void Object::flush() const {
+void Object::flush() const noexcept {
    // Only purely transient objects have to be flushed
    if(!has_persistent_handle() && has_transient_handle()) {
-      // check_tss2_rc("Esys_FlushContext", Esys_FlushContext(inner(m_ctx), m_handles->transient));
+      // we don't care about the return value here
+      Esys_FlushContext(inner(m_ctx), m_handles->transient);
    }
 }
 
@@ -57,8 +58,13 @@ void Object::scrub() {
 }
 
 /// Flush the object's TPM handles and reset its internal state
-void Object::_reset() {
+void Object::_reset() noexcept {
    flush();
+   _disengage();
+}
+
+/// Reset the object's internal state without flushing its TPM handles
+void Object::_disengage() noexcept {
    m_handles = std::make_unique<ObjectHandles>();
    m_public_info.reset();
 }

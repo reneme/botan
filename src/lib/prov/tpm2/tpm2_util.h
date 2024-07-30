@@ -83,26 +83,26 @@ concept tpm2_buffer = requires(T t) {
    { t.size } -> std::convertible_to<size_t>;
 };
 
-auto as_span(tpm2_buffer auto& data) {
+constexpr auto as_span(tpm2_buffer auto& data) {
    return std::span{data.buffer, data.size};
 }
 
 template <tpm2_buffer T>
-void copy_into(T& dest, std::span<const uint8_t> data) {
+constexpr void copy_into(T& dest, std::span<const uint8_t> data) {
    BOTAN_ASSERT_NOMSG(data.size() <= sizeof(dest.buffer));
    dest.size = static_cast<decltype(dest.size)>(data.size());
    copy_mem(as_span(dest), data);
 }
 
 template <tpm2_buffer T>
-T copy_into(std::span<const uint8_t> data) {
+constexpr T copy_into(std::span<const uint8_t> data) {
    T result;
    copy_into(result, data);
    return result;
 }
 
 template <concepts::resizable_byte_buffer OutT>
-OutT copy_into(const tpm2_buffer auto& data) {
+constexpr OutT copy_into(const tpm2_buffer auto& data) {
    OutT result;
    result.resize(data.size);
    copy_mem(result, as_span(data));
@@ -110,7 +110,7 @@ OutT copy_into(const tpm2_buffer auto& data) {
 }
 
 template <tpm2_buffer T>
-T init_empty() {
+constexpr T init_empty() {
    T result;
    result.size = 0;
    return result;

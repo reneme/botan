@@ -154,7 +154,9 @@ std::pair<unique_esys_ptr<TPM2B_DIGEST>, unique_esys_ptr<TPMT_TK_HASHCHECK>> Has
                                   out_ptr(result.second)));
    BOTAN_ASSERT_NONNULL(result.first);
 
-   m_handle._reset();
+   // Esys_SequenceComplete() destroys the underlying transient object
+   // so we need to disengage it's RAII wrapper.
+   m_handle._disengage();
 
    return result;
 }

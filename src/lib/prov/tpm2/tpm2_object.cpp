@@ -15,8 +15,69 @@
 
 namespace Botan::TPM2 {
 
-bool Object::is_persistent() const {
+Object::Object(std::shared_ptr<Context> ctx) : m_ctx(std::move(ctx)), m_handles(std::make_unique<ObjectHandles>()) {}
+
+Object::~Object() {
+   if(m_handles) {
+      flush();
+   }
+}
+
+Object::Object(Object&& other) noexcept :
+      m_ctx(std::move(other.m_ctx)),
+      m_handles(std::move(other.m_handles)),
+      m_public_info(std::move(other.m_public_info)) {
+   other.scrub();
+}
+
+Object& Object::operator=(Object&& other) noexcept {
+   if(this != &other) {
+      flush();
+      m_ctx = std::move(other.m_ctx);
+      m_handles = std::move(other.m_handles);
+      m_public_info = std::move(other.m_public_info);
+      other.scrub();
+   }
+   return *this;
+}
+
+/// Flush the object's TPM handles as necessary
+void Object::flush() const {
+   // Only purely transient objects have to be flushed
+   if(!has_persistent_handle() && has_transient_handle()) {
+      // check_tss2_rc("Esys_FlushContext", Esys_FlushContext(inner(m_ctx), m_handles->transient));
+   }
+}
+
+/// Destroy the object's internal state, making the destructor a no-op.
+void Object::scrub() {
+   m_ctx.reset();
+   m_handles.reset();
+   m_public_info.reset();
+}
+
+/// Flush the object's TPM handles and reset its internal state
+void Object::_reset() {
+   flush();
+   m_handles = std::make_unique<ObjectHandles>();
+   m_public_info.reset();
+}
+
+bool Object::has_persistent_handle() const {
    return m_handles->persistent.has_value();
+}
+
+bool Object::has_transient_handle() const {
+   return m_handles->transient != ESYS_TR_NONE;
+}
+
+uint32_t Object::persistent_handle() const {
+   BOTAN_STATE_CHECK(has_persistent_handle());
+   return *m_handles->persistent;
+}
+
+uint32_t Object::transient_handle() const {
+   return m_handles->transient;
 }
 
 PublicInfo& Object::_public_info(std::optional<uint32_t> expected_type) const {
@@ -40,46 +101,6 @@ PublicInfo& Object::_public_info(std::optional<uint32_t> expected_type) const {
    }
 
    return *m_public_info;
-}
-
-Object::Object(std::shared_ptr<Context> ctx) : m_ctx(std::move(ctx)), m_handles(std::make_unique<ObjectHandles>()) {}
-
-Object::~Object() {
-   if(m_handles) {
-      if(!m_handles->persistent) {
-         check_tss2_rc("Esys_FlushContext", Esys_FlushContext(inner(m_ctx), m_handles->transient));
-      }
-
-      // No need to flush persistent handles
-   }
-}
-
-Object::Object(Object&& other) noexcept :
-      m_ctx(std::move(other.m_ctx)),
-      m_handles(std::move(other.m_handles)),
-      m_public_info(std::move(other.m_public_info)) {
-   other.m_handles.reset();
-   other.m_public_info.reset();
-}
-
-Object& Object::operator=(Object&& other) noexcept {
-   if(this != &other) {
-      m_ctx = std::move(other.m_ctx);
-      m_handles = std::move(other.m_handles);
-      m_public_info = std::move(other.m_public_info);
-      other.m_handles.reset();
-      other.m_public_info.reset();
-   }
-   return *this;
-}
-
-uint32_t Object::persistent_handle() const {
-   BOTAN_STATE_CHECK(is_persistent());
-   return *m_handles->persistent;
-}
-
-uint32_t Object::transient_handle() const {
-   return m_handles->transient;
 }
 
 ObjectHandles& Object::handles() {

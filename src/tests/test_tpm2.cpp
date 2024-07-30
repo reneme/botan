@@ -10,10 +10,11 @@
 #include <botan/internal/fmt.h>
 #include <botan/internal/loadstor.h>
 #include <botan/internal/stl_util.h>
-#include <botan/internal/tpm2_authsession.h>
-#include <iostream>
 
 #if defined(BOTAN_HAS_TPM2)
+   #include <botan/internal/tpm2_authsession.h>
+   #include <botan/internal/tpm2_hash.h>
+
    #include <botan/tpm2_rng.h>
    #include <botan/tpm2_rsa.h>
 #endif
@@ -195,9 +196,119 @@ std::vector<Test::Result> test_tpm2_rsa() {
    };
 }
 
+std::vector<Test::Result> test_tpm2_hash() {
+   auto ctx = get_tpm2_context();
+   if(!ctx) {
+      return {bail_out()};
+   }
+
+   auto session = std::make_unique<Botan::TPM2::AuthSession>(ctx);
+   ctx->set_sessions(session->session(), std::nullopt, std::nullopt);
+
+   auto test = [&](Test::Result& result, std::string_view algo) {
+      auto tpm_hash = [&]() -> std::unique_ptr<Botan::TPM2::HashFunction> {
+         try {
+            return std::make_unique<Botan::TPM2::HashFunction>(ctx, algo);
+         } catch(const Botan::Lookup_Error&) {
+            return {};
+         }
+      }();
+      auto soft_hash = Botan::HashFunction::create(algo);
+
+      if(!tpm_hash) {
+         result.test_note(Botan::fmt("Skipping {}, TPM 2.0 does not support it", algo));
+         return;
+      }
+
+      if(!soft_hash) {
+         result.test_note(Botan::fmt("Skipping {}, no software equivalent available", algo));
+         return;
+      }
+
+      result.test_eq("Name", tpm_hash->name(), soft_hash->name());
+      result.test_eq("Output length", tpm_hash->output_length(), soft_hash->output_length());
+
+      // multiple update calls
+      tpm_hash->update("Hello, ");
+      tpm_hash->update("world!");
+      result.test_eq("digest (multi-update)", tpm_hash->final(), soft_hash->process("Hello, world!"));
+
+      // single process call
+      result.test_eq("digest (single-process)", tpm_hash->process("Hallo, Welt."), soft_hash->process("Hallo, Welt."));
+
+      // create a message that is larger than the TPM2 max buffer size
+      const auto long_message = [] {
+         std::vector<uint8_t> result(TPM2_MAX_DIGEST_BUFFER + 5);
+         for(size_t i = 0; i < result.size(); ++i) {
+            result[i] = static_cast<uint8_t>(i);
+         }
+         return result;
+      }();
+
+      tpm_hash->update(long_message);
+      result.test_eq("digest (long msg via update)", tpm_hash->final(), soft_hash->process(long_message));
+      result.test_eq(
+         "digest (long msg via process)", tpm_hash->process(long_message), soft_hash->process(long_message));
+
+      // test clear
+      tpm_hash->update("Hello");
+      tpm_hash->clear();
+      tpm_hash->update("Bonjour");
+      result.test_eq("digest (clear)", tpm_hash->final(), soft_hash->process("Bonjour"));
+
+      // new_object
+      auto new_tpm_hash = tpm_hash->new_object();
+      result.test_eq("Name (new_object)", new_tpm_hash->name(), tpm_hash->name());
+      result.test_eq("Output length (new_object)", new_tpm_hash->output_length(), tpm_hash->output_length());
+      result.test_eq("digest (new object)",
+                     new_tpm_hash->process("Salut tout le monde!"),
+                     soft_hash->process("Salut tout le monde!"));
+   };
+
+   return {
+      CHECK("SHA-1", [&](Test::Result& result) { test(result, "SHA-1"); }),
+      CHECK("SHA-256", [&](Test::Result& result) { test(result, "SHA-256"); }),
+      CHECK("SHA-384", [&](Test::Result& result) { test(result, "SHA-384"); }),
+      CHECK("SHA-512", [&](Test::Result& result) { test(result, "SHA-512"); }),
+      CHECK("SHA-3(256)", [&](Test::Result& result) { test(result, "SHA-3(256)"); }),
+      CHECK("SHA-3(384)", [&](Test::Result& result) { test(result, "SHA-3(384)"); }),
+      CHECK("SHA-3(512)", [&](Test::Result& result) { test(result, "SHA-3(512)"); }),
+
+      CHECK("lookup error",
+            [&](Test::Result& result) {
+               result.test_throws<Botan::Lookup_Error>(
+                  "Lookup error", [&] { [[maybe_unused]] auto _ = Botan::TPM2::HashFunction(ctx, "MD-5"); });
+            }),
+
+      CHECK("copy_state is not implemented",
+            [&](Test::Result& result) {
+               auto tpm_hash = Botan::TPM2::HashFunction(ctx, "SHA-256");
+               result.test_throws<Botan::Not_Implemented>("TPM2 hash does not support copy_state",
+                                                          [&] { [[maybe_unused]] auto _ = tpm_hash.copy_state(); });
+            }),
+
+      CHECK("validation ticket",
+            [&](Test::Result& result) {
+               auto tpm_hash = Botan::TPM2::HashFunction(ctx, "SHA-256");
+
+               tpm_hash.update("Hola mundo!");
+
+               const auto [digest, ticket] = tpm_hash.final_with_ticket();
+               result.require("digest is set", digest != nullptr);
+               result.test_not_null("ticket is set", ticket);
+
+               const auto digest_vec = Botan::TPM2::copy_into<Botan::secure_vector<uint8_t>>(*digest);
+               result.test_eq("digest",
+                              digest_vec,
+                              Botan::hex_decode("1e479f4d871e59e9054aad62105a259726801d5f494acbfcd40591c82f9b3136"));
+            }),
+   };
+}
+
 }  // namespace
 
-BOTAN_REGISTER_TEST_FN("tpm2", "tpm2", test_tpm2_rng, test_tpm2_rsa);
+BOTAN_REGISTER_TEST_FN("tpm2", "tpm2", test_tpm2_rng, test_tpm2_rsa, test_tpm2_hash);
+
 #endif
 
 }  // namespace Botan_Tests

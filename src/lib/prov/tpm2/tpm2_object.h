@@ -31,16 +31,21 @@ class BOTAN_PUBLIC_API(3, 6) Object {
 
       const std::shared_ptr<Context>& context() const { return m_ctx; }
 
-      bool is_persistent() const;
+      bool has_persistent_handle() const;
+      bool has_transient_handle() const;
 
       uint32_t persistent_handle() const;
       uint32_t transient_handle() const;
 
+      void _reset();
       PublicInfo& _public_info(std::optional<uint32_t> expected_type = {}) const;
 
    private:
       friend class ObjectSetter;
       ObjectHandles& handles();
+
+      void flush() const;
+      void scrub();
 
    private:
       std::shared_ptr<Context> m_ctx;

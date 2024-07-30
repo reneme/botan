@@ -82,7 +82,7 @@ struct PublicInfo {
 };
 
 struct ObjectHandles {
-      std::optional<TPM2_HANDLE> persistent = 0;
+      std::optional<TPM2_HANDLE> persistent = std::nullopt;
       ESYS_TR transient = ESYS_TR_NONE;
 };
 

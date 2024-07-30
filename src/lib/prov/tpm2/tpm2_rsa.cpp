@@ -84,19 +84,19 @@ Object make_persistent_object(const std::shared_ptr<Context>& ctx,
 
    Object object(ctx);
 
-   check_tss2_rc("Esys_TR_FromTPMPublic",
-                 Esys_TR_FromTPMPublic(inner(ctx),
-                                       persistent_object_handle,
-                                       ctx->session_handle(0),
-                                       ctx->session_handle(1),
-                                       ctx->session_handle(2),
-                                       out_transient_handle(object)));
+   check_rc("Esys_TR_FromTPMPublic",
+            Esys_TR_FromTPMPublic(inner(ctx),
+                                  persistent_object_handle,
+                                  ctx->session_handle(0),
+                                  ctx->session_handle(1),
+                                  ctx->session_handle(2),
+                                  out_transient_handle(object)));
 
    const auto user_auth = copy_into<TPM2B_AUTH>(auth_value);
-   check_tss2_rc("Esys_TR_SetAuth", Esys_TR_SetAuth(inner(ctx), object.transient_handle(), &user_auth));
+   check_rc("Esys_TR_SetAuth", Esys_TR_SetAuth(inner(ctx), object.transient_handle(), &user_auth));
 
-   check_tss2_rc("Esys_TR_GetTpmHandle",
-                 Esys_TR_GetTpmHandle(inner(ctx), object.transient_handle(), out_persistent_handle(object)));
+   check_rc("Esys_TR_GetTpmHandle",
+            Esys_TR_GetTpmHandle(inner(ctx), object.transient_handle(), out_persistent_handle(object)));
 
    return object;
 }
@@ -144,16 +144,16 @@ class RSA_Signature_Operation : public PK_Ops::Signature {
          auto [digest, validation] = m_hash.final_with_ticket();
 
          unique_esys_ptr<TPMT_SIGNATURE> signature;
-         check_tss2_rc("Esys_Sign",
-                       Esys_Sign(inner(m_key_handle.context()),
-                                 m_key_handle.transient_handle(),
-                                 m_key_handle.context()->session_handle(0),
-                                 m_key_handle.context()->session_handle(1),
-                                 m_key_handle.context()->session_handle(2),
-                                 digest.get(),
-                                 &m_scheme,
-                                 validation.get(),
-                                 out_ptr(signature)));
+         check_rc("Esys_Sign",
+                  Esys_Sign(inner(m_key_handle.context()),
+                            m_key_handle.transient_handle(),
+                            m_key_handle.context()->session_handle(0),
+                            m_key_handle.context()->session_handle(1),
+                            m_key_handle.context()->session_handle(2),
+                            digest.get(),
+                            &m_scheme,
+                            validation.get(),
+                            out_ptr(signature)));
 
          BOTAN_ASSERT_NONNULL(signature);
          const auto& sig = [&]() -> TPMS_SIGNATURE_RSA {
@@ -213,26 +213,19 @@ class RSA_Verification_Operation : public PK_Ops::Verification {
             return signature;
          }();
 
-         unique_esys_ptr<TPMT_TK_VERIFIED> result;
-         const auto rc = Esys_VerifySignature(inner(m_key_handle.context()),
-                                              m_key_handle.transient_handle(),
-                                              m_key_handle.context()->session_handle(0),
-                                              m_key_handle.context()->session_handle(1),
-                                              m_key_handle.context()->session_handle(2),
-                                              digest.get(),
-                                              &signature,
-                                              out_ptr(result));
+         // If the signature is not valid, this returns TPM2_RC_SIGNATURE.
+         const auto rc =
+            check_rc_expecting<TPM2_RC_SIGNATURE>("Esys_VerifySignature",
+                                                  Esys_VerifySignature(inner(m_key_handle.context()),
+                                                                       m_key_handle.transient_handle(),
+                                                                       m_key_handle.context()->session_handle(0),
+                                                                       m_key_handle.context()->session_handle(1),
+                                                                       m_key_handle.context()->session_handle(2),
+                                                                       digest.get(),
+                                                                       &signature,
+                                                                       nullptr /* validation */));
 
-         TSS2_RC_INFO info;
-         check_tss2_rc("Tss2_RC_DecodeInfo", Tss2_RC_DecodeInfo(rc, &info));
-
-         if(info.error == TPM2_RC_SIGNATURE) {
-            return false;
-         }
-
-         check_tss2_rc("Esys_VerifySignature", rc);
-
-         return true;
+         return rc == TPM2_RC_SUCCESS;
       }
 
       std::string hash_function() const override { return m_hash.name(); }

@@ -49,14 +49,14 @@ std::shared_ptr<Context> Context::create(std::optional<std::string> tcti, std::o
 
 Context::Context(const char* tcti_nameconf) :
       m_impl(std::make_unique<Impl>()), m_session_handles{ESYS_TR_NONE, ESYS_TR_NONE, ESYS_TR_NONE} {
-   check_tss2_rc("TCTI Initialization", Tss2_TctiLdr_Initialize(tcti_nameconf, &m_impl->m_tcti_ctx));
-   check_tss2_rc("TPM2 Initialization", Esys_Initialize(&m_impl->m_ctx, m_impl->m_tcti_ctx, nullptr /* ABI version */));
+   check_rc("TCTI Initialization", Tss2_TctiLdr_Initialize(tcti_nameconf, &m_impl->m_tcti_ctx));
+   check_rc("TPM2 Initialization", Esys_Initialize(&m_impl->m_ctx, m_impl->m_tcti_ctx, nullptr /* ABI version */));
 }
 
 Context::Context(const char* tcti_name, const char* tcti_conf) :
       m_impl(std::make_unique<Impl>()), m_session_handles{ESYS_TR_NONE, ESYS_TR_NONE, ESYS_TR_NONE} {
-   check_tss2_rc("TCTI Initialization", Tss2_TctiLdr_Initialize_Ex(tcti_name, tcti_conf, &m_impl->m_tcti_ctx));
-   check_tss2_rc("TPM2 Initialization", Esys_Initialize(&m_impl->m_ctx, m_impl->m_tcti_ctx, nullptr /* ABI version */));
+   check_rc("TCTI Initialization", Tss2_TctiLdr_Initialize_Ex(tcti_name, tcti_conf, &m_impl->m_tcti_ctx));
+   check_rc("TPM2 Initialization", Esys_Initialize(&m_impl->m_ctx, m_impl->m_tcti_ctx, nullptr /* ABI version */));
 }
 
 void Context::set_sessions(std::optional<uint32_t> session1,
@@ -89,16 +89,16 @@ std::string Context::vendor() const {
       TPMI_YES_NO more_data;
       unique_esys_ptr<TPMS_CAPABILITY_DATA> capability_data;
 
-      check_tss2_rc("Esys_GetCapability",
-                    Esys_GetCapability(m_impl->m_ctx,
-                                       ESYS_TR_NONE,
-                                       ESYS_TR_NONE,
-                                       ESYS_TR_NONE,
-                                       TPM2_CAP_TPM_PROPERTIES,
-                                       prop,
-                                       1,
-                                       &more_data,
-                                       out_ptr(capability_data)));
+      check_rc("Esys_GetCapability",
+               Esys_GetCapability(m_impl->m_ctx,
+                                  ESYS_TR_NONE,
+                                  ESYS_TR_NONE,
+                                  ESYS_TR_NONE,
+                                  TPM2_CAP_TPM_PROPERTIES,
+                                  prop,
+                                  1,
+                                  &more_data,
+                                  out_ptr(capability_data)));
 
       BOTAN_STATE_CHECK(capability_data->capability == TPM2_CAP_TPM_PROPERTIES &&
                         capability_data->data.tpmProperties.count > 0);
@@ -113,16 +113,16 @@ std::vector<uint32_t> Context::persistent_handles() const {
    TPMI_YES_NO more_data;
    unique_esys_ptr<TPMS_CAPABILITY_DATA> capability_data;
 
-   check_tss2_rc("Esys_GetCapability",
-                 Esys_GetCapability(m_impl->m_ctx,
-                                    ESYS_TR_NONE,
-                                    ESYS_TR_NONE,
-                                    ESYS_TR_NONE,
-                                    TPM2_CAP_HANDLES,
-                                    TPM2_PERSISTENT_FIRST,
-                                    TPM2_MAX_CAP_HANDLES,
-                                    &more_data,
-                                    out_ptr(capability_data)));
+   check_rc("Esys_GetCapability",
+            Esys_GetCapability(m_impl->m_ctx,
+                               ESYS_TR_NONE,
+                               ESYS_TR_NONE,
+                               ESYS_TR_NONE,
+                               TPM2_CAP_HANDLES,
+                               TPM2_PERSISTENT_FIRST,
+                               TPM2_MAX_CAP_HANDLES,
+                               &more_data,
+                               out_ptr(capability_data)));
 
    // TODO: Check if we have `more_data`
 

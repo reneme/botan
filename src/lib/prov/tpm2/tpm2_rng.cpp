@@ -26,23 +26,22 @@ void RNG::fill_bytes_with_input(std::span<uint8_t> output, std::span<const uint8
       data.size = std::min(in.remaining(), MAX_STIR_RANDOM_SIZE);
       in.copy_into({data.buffer, data.size});
 
-      check_tss2_rc(
-         "StirRandom",
-         Esys_StirRandom(
-            inner(m_ctx), m_ctx->session_handle(0), m_ctx->session_handle(1), m_ctx->session_handle(2), &data));
+      check_rc("Esys_StirRandom",
+               Esys_StirRandom(
+                  inner(m_ctx), m_ctx->session_handle(0), m_ctx->session_handle(1), m_ctx->session_handle(2), &data));
    }
 
    BufferStuffer out(output);
    while(!out.full()) {
       unique_esys_ptr<TPM2B_DIGEST> digest = nullptr;
       const auto requested_bytes = std::min(sizeof(digest->buffer), out.remaining_capacity());
-      check_tss2_rc("GetRandom",
-                    Esys_GetRandom(inner(m_ctx),
-                                   m_ctx->session_handle(0),
-                                   m_ctx->session_handle(1),
-                                   m_ctx->session_handle(2),
-                                   requested_bytes,
-                                   out_ptr(digest)));
+      check_rc("Esys_GetRandom",
+               Esys_GetRandom(inner(m_ctx),
+                              m_ctx->session_handle(0),
+                              m_ctx->session_handle(1),
+                              m_ctx->session_handle(2),
+                              requested_bytes,
+                              out_ptr(digest)));
 
       BOTAN_ASSERT_NOMSG(digest->size == requested_bytes);
       out.append({digest->buffer, digest->size});

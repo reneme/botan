@@ -13,6 +13,8 @@
 #include <botan/tpm2.h>
 #include <botan/tpm2_object.h>
 
+#include <botan/internal/fmt.h>
+
 #include <tss2/tss2_esys.h>
 #include <tss2/tss2_rc.h>
 
@@ -21,10 +23,58 @@
 
 namespace Botan::TPM2 {
 
-inline void check_tss2_rc(std::string_view location, TSS2_RC rc) {
+/**
+ * Check the return code and throw an exception if some error occured.
+ *
+ * @throws TPM2::Error if an error occured.
+ */
+constexpr void check_rc(std::string_view location, TSS2_RC rc) {
    if(rc != TSS2_RC_SUCCESS) {
       throw Error(location, rc);
    }
+}
+
+/**
+ * Check the return code and throw an exception if an unexpected error occured.
+ *
+ * Errors that are listed in the `expected_errors` parameter are considered
+ * expected and will not cause an exception to be thrown. Instead the error
+ * code is decoded and returned to the caller for further processing.
+ *
+ * @throws TPM2::Error if an unexpected error occured.
+ * @returns TSS2_RC_SUCCESS or one of the expected error codes.
+ */
+template <TSS2_RC... expected_errors>
+   requires(sizeof...(expected_errors) > 0)
+[[nodiscard]] constexpr TSS2_RC check_rc_expecting(std::string_view location, TSS2_RC rc) {
+   // If the RC is success, we can return early and avoid the decoding.
+   if(rc == TSS2_RC_SUCCESS) {
+      return rc;
+   }
+
+   // An error occured, we need to decode it to check if it was expected.
+   // Decoding in itself might fail, so we need to check that as well.
+   const TSS2_RC decoded_rc = [&] {
+      TSS2_RC_INFO info;
+      const TSS2_RC decoding_rc = Tss2_RC_DecodeInfo(rc, &info);
+      if(decoding_rc != TSS2_RC_SUCCESS) [[unlikely]] {
+         throw Error(fmt("Decoding RC of {} (was: {})", location, rc), decoding_rc);
+      }
+      return info.error;
+   }();
+
+   // Check if the error is one of the expected and return those to the caller.
+   const bool is_expected_by_caller = ((decoded_rc == expected_errors) || ...);
+   if(is_expected_by_caller) {
+      return decoded_rc;
+   }
+
+   // The error was not expected, so call the normal error handling which
+   // will throw an exception.
+   check_rc(location, rc);
+
+   // We know, rc is not 'success', so this won't ever be reached.
+   return rc;
 }
 
 template <typename T>

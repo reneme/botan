@@ -84,15 +84,15 @@ PublicInfo& Object::_public_info(std::optional<uint32_t> expected_type) const {
    if(!m_public_info) {
       m_public_info = std::make_unique<PublicInfo>();
 
-      check_tss2_rc("Esys_ReadPublic",
-                    Esys_ReadPublic(inner(m_ctx),
-                                    m_handles->transient,
-                                    m_ctx->session_handle(0),
-                                    m_ctx->session_handle(1),
-                                    m_ctx->session_handle(2),
-                                    out_ptr(m_public_info->pub),
-                                    out_ptr(m_public_info->name),
-                                    out_ptr(m_public_info->qualified_name)));
+      check_rc("Esys_ReadPublic",
+               Esys_ReadPublic(inner(m_ctx),
+                               m_handles->transient,
+                               m_ctx->session_handle(0),
+                               m_ctx->session_handle(1),
+                               m_ctx->session_handle(2),
+                               out_ptr(m_public_info->pub),
+                               out_ptr(m_public_info->name),
+                               out_ptr(m_public_info->qualified_name)));
       BOTAN_ASSERT_NONNULL(m_public_info->pub);
 
       if(expected_type) {

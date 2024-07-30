@@ -104,22 +104,18 @@ void HashFunction::lazy_setup() {
    }
 
    const auto auth = init_empty<TPM2B_AUTH>();
-   const auto rc = Esys_HashSequenceStart(inner(m_handle.context()),
-                                          m_handle.context()->session_handle(0),
-                                          m_handle.context()->session_handle(1),
-                                          m_handle.context()->session_handle(2),
-                                          &auth,
-                                          m_hash_type,
-                                          out_transient_handle(m_handle));
+   const auto rc = check_rc_expecting<TPM2_RC_HASH>("Esys_HashSequenceStart",
+                                                    Esys_HashSequenceStart(inner(m_handle.context()),
+                                                                           m_handle.context()->session_handle(0),
+                                                                           m_handle.context()->session_handle(1),
+                                                                           m_handle.context()->session_handle(2),
+                                                                           &auth,
+                                                                           m_hash_type,
+                                                                           out_transient_handle(m_handle)));
 
-   TSS2_RC_INFO info;
-   check_tss2_rc("Tss2_RC_DecodeInfo", Tss2_RC_DecodeInfo(rc, &info));
-
-   if(info.error == TPM2_RC_HASH) {
+   if(rc == TPM2_RC_HASH) {
       throw Lookup_Error(fmt("TPM 2.0 Hash {} is not supported", name()));
    }
-
-   check_tss2_rc("Esys_HashSequenceStart", rc);
 }
 
 void HashFunction::add_data(std::span<const uint8_t> input) {
@@ -129,13 +125,13 @@ void HashFunction::add_data(std::span<const uint8_t> input) {
    while(slicer.remaining() > 0) {
       const size_t chunk = std::min(slicer.remaining(), size_t(TPM2_MAX_DIGEST_BUFFER));
       const auto data = copy_into<TPM2B_MAX_BUFFER>(slicer.take(chunk));
-      check_tss2_rc("Esys_SequenceUpdate",
-                    Esys_SequenceUpdate(inner(m_handle.context()),
-                                        m_handle.transient_handle(),
-                                        m_handle.context()->session_handle(0),
-                                        m_handle.context()->session_handle(1),
-                                        m_handle.context()->session_handle(2),
-                                        &data));
+      check_rc("Esys_SequenceUpdate",
+               Esys_SequenceUpdate(inner(m_handle.context()),
+                                   m_handle.transient_handle(),
+                                   m_handle.context()->session_handle(0),
+                                   m_handle.context()->session_handle(1),
+                                   m_handle.context()->session_handle(2),
+                                   &data));
    }
    BOTAN_ASSERT_NOMSG(slicer.empty());
 }
@@ -146,16 +142,16 @@ std::pair<unique_esys_ptr<TPM2B_DIGEST>, unique_esys_ptr<TPMT_TK_HASHCHECK>> Has
    std::pair<unique_esys_ptr<TPM2B_DIGEST>, unique_esys_ptr<TPMT_TK_HASHCHECK>> result;
 
    const auto nodata = init_empty<TPM2B_MAX_BUFFER>();
-   check_tss2_rc("Esys_SequenceComplete",
-                 Esys_SequenceComplete(inner(m_handle.context()),
-                                       m_handle.transient_handle(),
-                                       m_handle.context()->session_handle(0),
-                                       m_handle.context()->session_handle(1),
-                                       m_handle.context()->session_handle(2),
-                                       &nodata,
-                                       ESYS_TR_RH_NULL,
-                                       out_ptr(result.first),
-                                       out_ptr(result.second)));
+   check_rc("Esys_SequenceComplete",
+            Esys_SequenceComplete(inner(m_handle.context()),
+                                  m_handle.transient_handle(),
+                                  m_handle.context()->session_handle(0),
+                                  m_handle.context()->session_handle(1),
+                                  m_handle.context()->session_handle(2),
+                                  &nodata,
+                                  ESYS_TR_RH_NULL,
+                                  out_ptr(result.first),
+                                  out_ptr(result.second)));
    BOTAN_ASSERT_NONNULL(result.first);
 
    m_handle._reset();

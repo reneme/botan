@@ -44,9 +44,12 @@ Object& Object::operator=(Object&& other) noexcept {
 /// Flush the object's TPM handles as necessary
 void Object::flush() const noexcept {
    // Only purely transient objects have to be flushed
-   if(!has_persistent_handle() && has_transient_handle()) {
-      // we don't care about the return value here
-      Esys_FlushContext(inner(m_ctx), m_handles->transient);
+   if(has_transient_handle()) {
+      if(has_persistent_handle()) {
+         Esys_TR_Close(inner(m_ctx), &m_handles->transient);
+      } else {
+         Esys_FlushContext(inner(m_ctx), m_handles->transient);
+      }
    }
 }
 

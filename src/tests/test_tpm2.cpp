@@ -133,6 +133,14 @@ std::vector<Test::Result> test_tpm2_rsa() {
    const std::vector<uint8_t> password = {'p', 'a', 's', 's', 'w', 'o', 'r', 'd'};
 
    return {
+      CHECK("Load the private key multiple times",
+            [&](Test::Result& result) {
+               for(size_t i = 0; i < 20; ++i) {
+                  auto key = load_persistent<Botan::TPM2::RSA_PrivateKey>(result, ctx, persistent_key_id, password);
+                  result.test_eq(Botan::fmt("Key loaded successfully ({})", i), key.algo_name(), "RSA");
+               }
+            }),
+
       CHECK("Sign a message",
             [&](Test::Result& result) {
                auto key = load_persistent<Botan::TPM2::RSA_PrivateKey>(result, ctx, persistent_key_id, password);
@@ -156,19 +164,6 @@ std::vector<Test::Result> test_tpm2_rsa() {
                result.confirm("Signature is valid", verifier.verify_message(message, signature));
             }),
 
-      CHECK("Wrong password is not accepted during signing",
-            [&](Test::Result& result) {
-               auto key = load_persistent<Botan::TPM2::RSA_PrivateKey>(
-                  result, ctx, persistent_key_id, Botan::hex_decode("deadbeef"));
-
-               Botan::Null_RNG null_rng;
-               Botan::PK_Signer signer(key, null_rng /* TPM takes care of this */, "PSS(SHA-256)");
-
-               const auto message = Botan::hex_decode("baadcafe");
-               result.test_throws<Botan::TPM2::Error>("Wrong password is not accepted during signing",
-                                                      [&] { signer.sign_message(message, null_rng); });
-            }),
-
       CHECK("verify signature",
             [&](Test::Result& result) {
                const auto message = Botan::hex_decode("baadcafe");
@@ -188,10 +183,60 @@ std::vector<Test::Result> test_tpm2_rsa() {
 
                // change the message
                auto rng = Test::new_rng(__func__);
-               auto mutated_signature = Test::mutate_vec(signature, *rng);
+               auto mutated_message = Test::mutate_vec(message, *rng);
 
-               Botan::PK_Verifier verifier2(key, "PSS(SHA-256)");
-               result.confirm("verification failed", !verifier2.verify_message(message, mutated_signature));
+               result.confirm("verification failed", !verifier.verify_message(mutated_message, signature));
+            }),
+
+      CHECK("sign and verify multiple messages with the same Signer/Verifier objects",
+            [&](Test::Result& result) {
+               const std::vector<std::vector<uint8_t>> messages = {
+                  Botan::hex_decode("BAADF00D"),
+                  Botan::hex_decode("DEADBEEF"),
+                  Botan::hex_decode("CAFEBABE"),
+               };
+
+               // Generate a few signatures, then deallocate the private key.
+               auto signatures = [&] {
+                  auto sk = load_persistent<Botan::TPM2::RSA_PrivateKey>(result, ctx, persistent_key_id, password);
+                  Botan::Null_RNG null_rng;
+                  Botan::PK_Signer signer(sk, null_rng /* TPM takes care of this */, "PSS(SHA-256)");
+                  std::vector<std::vector<uint8_t>> sigs;
+                  sigs.reserve(messages.size());
+                  for(const auto& message : messages) {
+                     sigs.emplace_back(signer.sign_message(message, null_rng));
+                  }
+                  return sigs;
+               }();
+
+               // verify via TPM 2.0
+               auto pk = load_persistent<Botan::TPM2::RSA_PublicKey>(result, ctx, persistent_key_id, password);
+               Botan::PK_Verifier verifier(pk, "PSS(SHA-256)");
+               for(size_t i = 0; i < messages.size(); ++i) {
+                  result.confirm(Botan::fmt("verification successful ({})", i),
+                                 verifier.verify_message(messages[i], signatures[i]));
+               }
+
+               // verify via software
+               auto soft_pk = Botan::RSA_PublicKey(pk.algorithm_identifier(), pk.public_key_bits());
+               Botan::PK_Verifier soft_verifier(soft_pk, "PSS(SHA-256)");
+               for(size_t i = 0; i < messages.size(); ++i) {
+                  result.confirm(Botan::fmt("software verification successful ({})", i),
+                                 soft_verifier.verify_message(messages[i], signatures[i]));
+               }
+            }),
+
+      CHECK("Wrong password is not accepted during signing",
+            [&](Test::Result& result) {
+               auto key = load_persistent<Botan::TPM2::RSA_PrivateKey>(
+                  result, ctx, persistent_key_id, Botan::hex_decode("deadbeef"));
+
+               Botan::Null_RNG null_rng;
+               Botan::PK_Signer signer(key, null_rng /* TPM takes care of this */, "PSS(SHA-256)");
+
+               const auto message = Botan::hex_decode("baadcafe");
+               result.test_throws<Botan::TPM2::Error>("Fail with wrong password",
+                                                      [&] { signer.sign_message(message, null_rng); });
             }),
    };
 }

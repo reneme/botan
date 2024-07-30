@@ -92,8 +92,10 @@ Object make_persistent_object(const std::shared_ptr<Context>& ctx,
                                   ctx->session_handle(2),
                                   out_transient_handle(object)));
 
-   const auto user_auth = copy_into<TPM2B_AUTH>(auth_value);
-   check_rc("Esys_TR_SetAuth", Esys_TR_SetAuth(inner(ctx), object.transient_handle(), &user_auth));
+   if(!auth_value.empty()) {
+      const auto user_auth = copy_into<TPM2B_AUTH>(auth_value);
+      check_rc("Esys_TR_SetAuth", Esys_TR_SetAuth(inner(ctx), object.transient_handle(), &user_auth));
+   }
 
    check_rc("Esys_TR_GetTpmHandle",
             Esys_TR_GetTpmHandle(inner(ctx), object.transient_handle(), out_persistent_handle(object)));
@@ -103,10 +105,8 @@ Object make_persistent_object(const std::shared_ptr<Context>& ctx,
 
 }  // namespace
 
-RSA_PublicKey RSA_PublicKey::from_persistent(const std::shared_ptr<Context>& ctx,
-                                             uint32_t persistent_object_handle,
-                                             std::span<const uint8_t> auth_value) {
-   return make_persistent_object(ctx, persistent_object_handle, auth_value);
+RSA_PublicKey RSA_PublicKey::from_persistent(const std::shared_ptr<Context>& ctx, uint32_t persistent_object_handle) {
+   return make_persistent_object(ctx, persistent_object_handle, {});
 }
 
 RSA_PublicKey::RSA_PublicKey(Object object) :

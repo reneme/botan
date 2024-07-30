@@ -20,9 +20,7 @@ struct ObjectHandles;
 
 class BOTAN_PUBLIC_API(3, 6) RSA_PublicKey : public Botan::RSA_PublicKey {
    public:
-      static RSA_PublicKey from_persistent(const std::shared_ptr<Context>& ctx,
-                                           uint32_t persistent_object_handle,
-                                           std::span<const uint8_t> auth_value);
+      static RSA_PublicKey from_persistent(const std::shared_ptr<Context>& ctx, uint32_t persistent_object_handle);
 
    public:
       ~RSA_PublicKey() override = default;

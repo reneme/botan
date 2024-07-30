@@ -29,6 +29,8 @@ class HashFunction final : public Botan::HashFunction {
       std::unique_ptr<Botan::HashFunction> copy_state() const override;
       std::unique_ptr<Botan::HashFunction> new_object() const override;
 
+      TPMI_ALG_HASH type() const { return m_hash_type; }
+
       std::pair<unique_esys_ptr<TPM2B_DIGEST>, unique_esys_ptr<TPMT_TK_HASHCHECK>> final_with_ticket();
 
    protected:

@@ -77,7 +77,7 @@ void* Context::inner_context_object() {
 }
 
 std::string Context::vendor() const {
-   std::array<TPM2_PT, 4> properties = {
+   const std::array properties = {
       TPM2_PT_VENDOR_STRING_1, TPM2_PT_VENDOR_STRING_2, TPM2_PT_VENDOR_STRING_3, TPM2_PT_VENDOR_STRING_4};
    std::array<uint8_t, properties.size() * sizeof(TPM2_PT) + 1 /* ensure zero-termination */> vendor_string{};
 
@@ -106,7 +106,29 @@ std::string Context::vendor() const {
    }
 
    BOTAN_ASSERT_NOMSG(bs.remaining_capacity() == 1);  // the ensured zero-termination
-   return std::string(reinterpret_cast<const char*>(vendor_string.data()));
+   return std::string(cast_uint8_ptr_to_char(vendor_string.data()));
+}
+
+std::string Context::manufacturer() const {
+   TPMI_YES_NO more_data;
+   unique_esys_ptr<TPMS_CAPABILITY_DATA> capability_data;
+
+   check_rc("Esys_GetCapability",
+            Esys_GetCapability(m_impl->m_ctx,
+                               ESYS_TR_NONE,
+                               ESYS_TR_NONE,
+                               ESYS_TR_NONE,
+                               TPM2_CAP_TPM_PROPERTIES,
+                               TPM2_PT_MANUFACTURER,
+                               1,
+                               &more_data,
+                               out_ptr(capability_data)));
+
+   BOTAN_STATE_CHECK(capability_data->capability == TPM2_CAP_TPM_PROPERTIES &&
+                     capability_data->data.tpmProperties.count > 0);
+   std::array<uint8_t, sizeof(TPM2_PT) + 1 /* ensure zero termination */> manufacturer_data{};
+   store_be(std::span{manufacturer_data}.first<4>(), capability_data->data.tpmProperties.tpmProperty[0].value);
+   return std::string(cast_uint8_ptr_to_char(manufacturer_data.data()));
 }
 
 std::vector<uint32_t> Context::persistent_handles() const {

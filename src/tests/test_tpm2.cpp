@@ -39,7 +39,7 @@ bool not_zero_64(std::span<const uint8_t> in) {
 
 std::shared_ptr<Botan::TPM2::Context> get_tpm2_context() {
    auto ctx = Botan::TPM2::Context::create(Test::options().tpm2_tcti_name(), Test::options().tpm2_tcti_conf());
-   if(ctx->vendor() != "SW   TPM") {
+   if(ctx->vendor() != "SW   TPM" || ctx->manufacturer() != "IBM") {
       return {};
    }
 
@@ -359,7 +359,9 @@ std::vector<Test::Result> test_tpm2_hash() {
 
 }  // namespace
 
-BOTAN_REGISTER_TEST_FN("tpm2", "tpm2", test_tpm2_rng, test_tpm2_rsa, test_tpm2_hash);
+BOTAN_REGISTER_TEST_FN("tpm2", "tpm2_rng", test_tpm2_rng);
+BOTAN_REGISTER_TEST_FN("tpm2", "tpm2_rsa", test_tpm2_rsa);
+BOTAN_REGISTER_TEST_FN("tpm2", "tpm2_hash", test_tpm2_hash);
 
 #endif
 

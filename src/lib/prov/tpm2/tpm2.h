@@ -74,6 +74,9 @@ class BOTAN_PUBLIC_API(3, 6) Context final : public std::enable_shared_from_this
       /// @return the Vendor of the TPM2
       std::string vendor() const;
 
+      /// @returns the Manufacturer of the TPM2
+      std::string manufacturer() const;
+
       std::vector<uint32_t> persistent_handles() const;
 
       /// @return true if @param persistent_handle is in the list of persistent handles

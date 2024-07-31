@@ -10,9 +10,18 @@
 
 #include <botan/tpm2.h>
 
+#include <botan/secmem.h>
+
 #include <tss2/tss2_esys.h>
 
 namespace Botan::TPM2 {
+
+struct SessionAttributes {
+      bool continue_session;
+      bool decrypt;
+      bool encrypt;
+      bool audit;
+};
 
 class AuthSession {
       //Always establishes an HMAC session. Shall only be used within Context
@@ -27,6 +36,11 @@ class AuthSession {
       ~AuthSession();
 
       ESYS_TR session() const { return m_session; }
+
+      SessionAttributes attributes() const;
+      void set_attributes(SessionAttributes attributes);
+
+      secure_vector<uint8_t> tpm_nonce() const;
 
    private:
       std::shared_ptr<Context> m_ctx;

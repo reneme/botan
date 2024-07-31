@@ -173,26 +173,37 @@ std::vector<Test::Result> test_tpm2_rsa() {
 
       CHECK("verify signature",
             [&](Test::Result& result) {
-               const auto message = Botan::hex_decode("baadcafe");
-               const auto signature = [&] {
+               auto sign = [&](std::span<const uint8_t> message) {
                   auto key = load_persistent<Botan::TPM2::RSA_PrivateKey>(result, ctx, persistent_key_id, password);
-
                   Botan::Null_RNG null_rng;
                   Botan::PK_Signer signer(key, null_rng /* TPM takes care of this */, "PSS(SHA-256)");
-
                   return signer.sign_message(message, null_rng);
-               }();
+               };
 
-               auto key = load_persistent<Botan::TPM2::RSA_PublicKey>(result, ctx, persistent_key_id, password);
+               auto verify = [&](std::span<const uint8_t> msg, std::span<const uint8_t> sig) {
+                  auto key = load_persistent<Botan::TPM2::RSA_PublicKey>(result, ctx, persistent_key_id, password);
+                  Botan::PK_Verifier verifier(key, "PSS(SHA-256)");
+                  return verifier.verify_message(msg, sig);
+               };
 
-               Botan::PK_Verifier verifier(key, "PSS(SHA-256)");
-               result.confirm("verification successful", verifier.verify_message(message, signature));
+               const auto message = Botan::hex_decode("baadcafe");
+               const auto signature = sign(message);
+
+               result.confirm("verification successful", verify(message, signature));
 
                // change the message
                auto rng = Test::new_rng(__func__);
                auto mutated_message = Test::mutate_vec(message, *rng);
+               result.confirm("verification failed", !verify(mutated_message, signature));
 
-               result.confirm("verification failed", !verifier.verify_message(mutated_message, signature));
+               // TODO: figure out why we need to do that here!
+               auto attrs = session->attributes();
+               result.confirm("encrypt flag was cleared by ESAPI", !attrs.encrypt);
+               attrs.encrypt = true;
+               session->set_attributes(attrs);
+
+               // orignal message again
+               result.confirm("verification still successful", verify(message, signature));
             }),
 
       CHECK("sign and verify multiple messages with the same Signer/Verifier objects",

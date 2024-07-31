@@ -7,6 +7,8 @@
 */
 
 #include <botan/internal/tpm2_authsession.h>
+
+#include <botan/internal/stl_util.h>
 #include <botan/internal/tpm2_util.h>
 
 namespace Botan::TPM2 {
@@ -28,8 +30,12 @@ AuthSession::AuthSession(std::shared_ptr<Context> ctx) : m_ctx(std::move(ctx)) {
                                   auth_hash,
                                   &m_session));
 
-   TPMA_SESSION sessionAttributes = TPMA_SESSION_CONTINUESESSION | TPMA_SESSION_DECRYPT | TPMA_SESSION_ENCRYPT;
-   check_rc("Esys_TRSess_SetAttributes", Esys_TRSess_SetAttributes(inner(m_ctx), m_session, sessionAttributes, 0xFF));
+   set_attributes({
+      .continue_session = true,
+      .decrypt = true,
+      .encrypt = true,
+      .audit = false,
+   });
 }
 
 AuthSession::~AuthSession() {
@@ -38,4 +44,35 @@ AuthSession::~AuthSession() {
       m_session = ESYS_TR_NONE;
    }
 }
+
+SessionAttributes AuthSession::attributes() const {
+   TPMA_SESSION attrs;
+   check_rc("Esys_TRSess_GetAttributes", Esys_TRSess_GetAttributes(inner(m_ctx), m_session, &attrs));
+   return {.continue_session = (attrs & TPMA_SESSION_CONTINUESESSION) != 0,
+           .decrypt = (attrs & TPMA_SESSION_DECRYPT) != 0,
+           .encrypt = (attrs & TPMA_SESSION_ENCRYPT) != 0,
+           .audit = (attrs & TPMA_SESSION_AUDIT) != 0};
+}
+
+void AuthSession::set_attributes(SessionAttributes attributes) {
+   auto expand = [](bool flag) -> TPMA_SESSION {
+      static_assert(std::is_unsigned_v<TPMA_SESSION>);
+      return flag ? TPMA_SESSION(-1) : TPMA_SESSION(0);
+   };
+
+   TPMA_SESSION attrs = 0;
+   attrs |= TPMA_SESSION_CONTINUESESSION & expand(attributes.continue_session);
+   attrs |= TPMA_SESSION_DECRYPT & expand(attributes.decrypt);
+   attrs |= TPMA_SESSION_ENCRYPT & expand(attributes.encrypt);
+   attrs |= TPMA_SESSION_AUDIT & expand(attributes.audit);
+
+   check_rc("Esys_TRSess_SetAttributes", Esys_TRSess_SetAttributes(inner(m_ctx), m_session, attrs, 0xFF));
+}
+
+secure_vector<uint8_t> AuthSession::tpm_nonce() const {
+   unique_esys_ptr<TPM2B_NONCE> nonce;
+   check_rc("Esys_TRSess_GetNonceTPM", Esys_TRSess_GetNonceTPM(inner(m_ctx), m_session, out_ptr(nonce)));
+   return copy_into<secure_vector<uint8_t>>(*nonce);
+}
+
 }  // namespace Botan::TPM2

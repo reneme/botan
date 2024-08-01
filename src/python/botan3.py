@@ -21,6 +21,7 @@ introduced in Botan 3.0.0
 
 from ctypes import CDLL, CFUNCTYPE, POINTER, byref, create_string_buffer, \
     c_void_p, c_size_t, c_uint8, c_uint32, c_uint64, c_int, c_uint, c_char, c_char_p, addressof
+from typing import Callable
 
 from sys import platform
 from time import strptime, mktime, time as system_time
@@ -505,8 +506,13 @@ def _set_prototypes(dll):
 
     # TPM2
     ffi_api(dll.botan_tpm2_ctx_init, [c_void_p, c_char_p], [-40])
+    ffi_api(dll.botan_tpm2_ctx_init_ex, [c_void_p, c_char_p, c_char_p], [-40])
     ffi_api(dll.botan_tpm2_ctx_destroy, [c_void_p], [-40])
     ffi_api(dll.botan_tpm2_rng_init, [c_void_p, c_void_p])
+    ffi_api(dll.botan_tpm2_unauthenticated_session_init, [c_void_p, c_void_p])
+    ffi_api(dll.botan_tpm2_session_destroy, [c_void_p])
+    ffi_api(dll.botan_tpm2_persistent_privkey_open, [c_void_p, c_void_p, c_uint32, c_char_p, c_size_t, c_void_p, c_void_p, c_void_p])
+
 
     return dll
 
@@ -636,6 +642,46 @@ def const_time_compare(x, y):
         return False
     rc = _DLL.botan_constant_time_compare(xbits, ybits, c_size_t(len_x))
     return rc == 0
+
+#
+# TPM2
+#
+
+class TPM2Object:
+    def __init__(self, obj: c_void_p, destroyer: Callable[[c_void_p], None]):
+        self.__obj = obj
+        self.__destroyer = destroyer
+
+    def __del__(self):
+        if hasattr(self, '__obj') and hasattr(self, '__destroyer'):
+            self.__destroyer(self.__obj)
+
+    def handle_(self):
+        return self.__obj
+
+class TPM2Context(TPM2Object):
+    def __init__(self, tcti_name_maybe_with_conf: str | None = None, tcti_conf: str | None = None):
+        obj = c_void_p(0)
+        if tcti_conf is not None:
+            rc = _DLL.botan_tpm2_ctx_init_ex(byref(obj), _ctype_str(tcti_name_maybe_with_conf), _ctype_str(tcti_conf))
+        else:
+            rc = _DLL.botan_tpm2_ctx_init(byref(obj), _ctype_str(tcti_name_maybe_with_conf))
+        if rc == -40: # 'Not Implemented'
+            raise BotanException("TPM2 is not implemented in this build configuration", rc)
+        super().__init__(obj, _DLL.botan_tpm2_ctx_destroy)
+
+class TPM2Session(TPM2Object):
+    def __init__(self, obj: c_void_p):
+        super().__init__(obj, _DLL.botan_tpm2_session_destroy)
+
+class TPM2UnauthenticatedSession(TPM2Session):
+    def __init__(self, ctx: TPM2Context):
+        obj = c_void_p(0)
+        _DLL.botan_tpm2_unauthenticated_session_init(byref(obj), ctx.handle_())
+        super().__init__(obj)
+
+def session_bundle(s1: TPM2Session | None, s2: TPM2Session | None, s3: TPM2Session | None) -> tuple[TPM2Session | None, TPM2Session | None, TPM2Session | None]:
+    return (s.handle_() if isinstance(s, TPM2Session) else None for s in (s1, s2, s3))
 
 #
 # RNG
@@ -1280,6 +1326,12 @@ class PrivateKey:
     def load_kyber(cls, key):
         obj = c_void_p(0)
         _DLL.botan_privkey_load_kyber(byref(obj), key, len(key))
+        return PrivateKey(obj)
+
+    @classmethod
+    def load_persistent_on_tpm2(cls, context: TPM2Context, tpm_handle: int, auth_value: bytes, s1: TPM2Session | None = None, s2: TPM2Session | None = None, s3: TPM2Session | None = None):
+        obj = c_void_p(0)
+        _DLL.botan_tpm2_persistent_privkey_open(byref(obj), context.handle_(), tpm_handle, _ctype_bits(auth_value), len(auth_value), *session_bundle(s1, s2, s3))
         return PrivateKey(obj)
 
     def __del__(self):
@@ -2149,19 +2201,3 @@ def zfec_decode(k, n, indexes, inputs):
         c_size_t(k), c_size_t(n), c_indexes, c_inputs, c_size_t(share_size), c_outputs
     )
     return [output.raw for output in outputs]
-
-#
-# TPM2
-#
-class TPM2Context:
-    def __init__(self, tcti_nameconf: str = None) -> None:
-        self.__obj = c_void_p(0)
-        rc = _DLL.botan_tpm2_ctx_init(byref(self.__obj), _ctype_str(tcti_nameconf))
-        if rc == -40: # 'Not Implemented'
-            raise BotanException("TPM2 is not implemented in this build configuration", rc)
-
-    def __del__(self) -> None:
-        _DLL.botan_tpm2_ctx_destroy(self.__obj)
-
-    def handle_(self):
-        return self.__obj

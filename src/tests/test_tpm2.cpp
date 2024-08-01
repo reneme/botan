@@ -4,19 +4,21 @@
 *
 * Botan is released under the Simplified BSD License (see license.txt)
 */
+
 #include "tests.h"
 
 #include <botan/pubkey.h>
+
 #include <botan/internal/fmt.h>
 #include <botan/internal/loadstor.h>
 #include <botan/internal/stl_util.h>
 
 #if defined(BOTAN_HAS_TPM2)
-   #include <botan/internal/tpm2_authsession.h>
    #include <botan/internal/tpm2_hash.h>
 
    #include <botan/tpm2_rng.h>
    #include <botan/tpm2_rsa.h>
+   #include <botan/tpm2_session.h>
 #endif
 
 namespace Botan_Tests {
@@ -58,8 +60,8 @@ std::vector<Test::Result> test_tpm2_rng() {
       return {bail_out()};
    }
 
-   auto session = std::make_unique<Botan::TPM2::AuthSession>(ctx);
-   ctx->set_sessions(session->session(), std::nullopt, std::nullopt);
+   auto session = Botan::TPM2::Session::unauthenticated_session(ctx);
+   ctx->set_sessions(session->handle(), std::nullopt, std::nullopt);
 
    auto rng = Botan::TPM2::RNG(ctx);
 
@@ -133,8 +135,8 @@ std::vector<Test::Result> test_tpm2_rsa() {
       return {bail_out()};
    }
 
-   auto session = std::make_unique<Botan::TPM2::AuthSession>(ctx);
-   ctx->set_sessions(session->session(), std::nullopt, std::nullopt);
+   auto session = Botan::TPM2::Session::unauthenticated_session(ctx);
+   ctx->set_sessions(session->handle(), std::nullopt, std::nullopt);
 
    constexpr uint32_t persistent_key_id = TPM2_PERSISTENT_FIRST + 8;
    const std::vector<uint8_t> password = {'p', 'a', 's', 's', 'w', 'o', 'r', 'd'};
@@ -265,8 +267,8 @@ std::vector<Test::Result> test_tpm2_hash() {
       return {bail_out()};
    }
 
-   auto session = std::make_unique<Botan::TPM2::AuthSession>(ctx);
-   ctx->set_sessions(session->session(), std::nullopt, std::nullopt);
+   auto session = Botan::TPM2::Session::unauthenticated_session(ctx);
+   ctx->set_sessions(session->handle(), std::nullopt, std::nullopt);
 
    auto test = [&](Test::Result& result, std::string_view algo) {
       auto tpm_hash = [&]() -> std::unique_ptr<Botan::TPM2::HashFunction> {

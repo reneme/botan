@@ -8,14 +8,16 @@
 
 #include <botan/tpm2.h>
 
+#include <botan/tpm2_session.h>
+
 #include <botan/internal/fmt.h>
 #include <botan/internal/loadstor.h>
 #include <botan/internal/stl_util.h>
-#include <botan/internal/tpm2_authsession.h>
 #include <botan/internal/tpm2_util.h>
 
 #include <algorithm>
 #include <array>
+
 #include <tss2/tss2_esys.h>
 #include <tss2/tss2_tcti.h>
 #include <tss2/tss2_tctildr.h>

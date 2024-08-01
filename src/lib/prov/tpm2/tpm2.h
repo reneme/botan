@@ -66,7 +66,10 @@ class BOTAN_PUBLIC_API(3, 6) Context final : public std::enable_shared_from_this
                         std::optional<uint32_t> session2,
                         std::optional<uint32_t> session3);
 
-      uint32_t session_handle(size_t idx) const { return m_session_handles[idx]; }
+      uint32_t session_handle(size_t idx) const {
+         BOTAN_DEBUG_ASSERT(idx >= 0 && idx <= 2);
+         return m_session_handles[idx];
+      }
 
       /// @return an ESYS_CONTEXT* for use in other TPM2 functions.
       void* inner_context_object();

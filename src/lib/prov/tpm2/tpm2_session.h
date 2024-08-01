@@ -5,14 +5,16 @@
 *
 * Botan is released under the Simplified BSD License (see license.txt)
 */
-#ifndef BOTAN_TPM2_AUTHSESSION_H_
-#define BOTAN_TPM2_AUTHSESSION_H_
+#ifndef BOTAN_TPM2_SESSION_H_
+#define BOTAN_TPM2_SESSION_H_
 
 #include <botan/tpm2.h>
 
 #include <botan/secmem.h>
+#include <botan/tpm2_object.h>
 
-#include <tss2/tss2_esys.h>
+#include <array>
+#include <memory>
 
 namespace Botan::TPM2 {
 
@@ -23,19 +25,12 @@ struct SessionAttributes {
       bool audit;
 };
 
-class AuthSession {
-      //Always establishes an HMAC session. Shall only be used within Context
-      // TODO: Constructors
+class Session {
+   public:
+      static std::shared_ptr<Session> unauthenticated_session(const std::shared_ptr<Context>& ctx);
 
    public:
-      /**
-         * @param ctx  The Context to use for the session
-         */
-      AuthSession(std::shared_ptr<Context> ctx);
-
-      ~AuthSession();
-
-      ESYS_TR session() const { return m_session; }
+      uint32_t handle() const { return m_session.transient_handle(); }
 
       SessionAttributes attributes() const;
       void set_attributes(SessionAttributes attributes);
@@ -43,8 +38,10 @@ class AuthSession {
       secure_vector<uint8_t> tpm_nonce() const;
 
    private:
-      std::shared_ptr<Context> m_ctx;
-      ESYS_TR m_session;
+      Session(Object session, SessionAttributes attributes);
+
+   private:
+      Object m_session;
 };
 
 }  // namespace Botan::TPM2

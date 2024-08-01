@@ -82,10 +82,12 @@ bool Object::has_transient_handle() const {
 
 uint32_t Object::persistent_handle() const {
    BOTAN_STATE_CHECK(has_persistent_handle());
+   static_assert(std::same_as<decltype(m_handles->persistent)::value_type, uint32_t>);
    return *m_handles->persistent;
 }
 
 uint32_t Object::transient_handle() const {
+   static_assert(std::same_as<decltype(m_handles->transient), uint32_t>);
    return m_handles->transient;
 }
 

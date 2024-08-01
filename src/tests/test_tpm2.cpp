@@ -107,7 +107,8 @@ template <typename KeyT>
 KeyT load_persistent(Test::Result& result,
                      const std::shared_ptr<Botan::TPM2::Context>& ctx,
                      uint32_t persistent_key_id,
-                     std::span<const uint8_t> auth_value) {
+                     std::span<const uint8_t> auth_value,
+                     const std::shared_ptr<Botan::TPM2::Session>& session) {
    const auto persistent_handles = ctx->persistent_handles();
    result.confirm(
       "Persistent key available",
@@ -115,9 +116,9 @@ KeyT load_persistent(Test::Result& result,
 
    auto key = [&] {
       if constexpr(std::same_as<Botan::TPM2::RSA_PublicKey, KeyT>) {
-         return KeyT::from_persistent(ctx, persistent_key_id);
+         return KeyT::from_persistent(ctx, persistent_key_id, session);
       } else {
-         return KeyT::from_persistent(ctx, persistent_key_id, auth_value);
+         return KeyT::from_persistent(ctx, persistent_key_id, auth_value, session);
       }
    }();
 
@@ -133,7 +134,6 @@ std::vector<Test::Result> test_tpm2_rsa() {
    }
 
    auto session = Botan::TPM2::Session::unauthenticated_session(ctx);
-   ctx->set_sessions(session->handle(), std::nullopt, std::nullopt);
 
    constexpr uint32_t persistent_key_id = TPM2_PERSISTENT_FIRST + 8;
    const std::vector<uint8_t> password = {'p', 'a', 's', 's', 'w', 'o', 'r', 'd'};
@@ -142,14 +142,16 @@ std::vector<Test::Result> test_tpm2_rsa() {
       CHECK("Load the private key multiple times",
             [&](Test::Result& result) {
                for(size_t i = 0; i < 20; ++i) {
-                  auto key = load_persistent<Botan::TPM2::RSA_PrivateKey>(result, ctx, persistent_key_id, password);
+                  auto key =
+                     load_persistent<Botan::TPM2::RSA_PrivateKey>(result, ctx, persistent_key_id, password, session);
                   result.test_eq(Botan::fmt("Key loaded successfully ({})", i), key.algo_name(), "RSA");
                }
             }),
 
       CHECK("Sign a message",
             [&](Test::Result& result) {
-               auto key = load_persistent<Botan::TPM2::RSA_PrivateKey>(result, ctx, persistent_key_id, password);
+               auto key =
+                  load_persistent<Botan::TPM2::RSA_PrivateKey>(result, ctx, persistent_key_id, password, session);
 
                Botan::Null_RNG null_rng;
                Botan::PK_Signer signer(key, null_rng /* TPM takes care of this */, "PSS(SHA-256)");
@@ -173,14 +175,16 @@ std::vector<Test::Result> test_tpm2_rsa() {
       CHECK("verify signature",
             [&](Test::Result& result) {
                auto sign = [&](std::span<const uint8_t> message) {
-                  auto key = load_persistent<Botan::TPM2::RSA_PrivateKey>(result, ctx, persistent_key_id, password);
+                  auto key =
+                     load_persistent<Botan::TPM2::RSA_PrivateKey>(result, ctx, persistent_key_id, password, session);
                   Botan::Null_RNG null_rng;
                   Botan::PK_Signer signer(key, null_rng /* TPM takes care of this */, "PSS(SHA-256)");
                   return signer.sign_message(message, null_rng);
                };
 
                auto verify = [&](std::span<const uint8_t> msg, std::span<const uint8_t> sig) {
-                  auto key = load_persistent<Botan::TPM2::RSA_PublicKey>(result, ctx, persistent_key_id, password);
+                  auto key =
+                     load_persistent<Botan::TPM2::RSA_PublicKey>(result, ctx, persistent_key_id, password, session);
                   Botan::PK_Verifier verifier(key, "PSS(SHA-256)");
                   return verifier.verify_message(msg, sig);
                };
@@ -195,11 +199,13 @@ std::vector<Test::Result> test_tpm2_rsa() {
                auto mutated_message = Test::mutate_vec(message, *rng);
                result.confirm("verification failed", !verify(mutated_message, signature));
 
-               // TODO: figure out why we need to do that here!
-               auto attrs = session->attributes();
-               result.confirm("encrypt flag was cleared by ESAPI", !attrs.encrypt);
-               attrs.encrypt = true;
-               session->set_attributes(attrs);
+               // ESAPI manipulates the session attributes internally and does
+               // not reset them when an error occurs. A failure to validate a
+               // signature is an error, and hence behaves surprisingly by
+               // leaving the session attributes in an unexpected state.
+               // The Botan wrapper has a workaround for this...
+               const auto attrs = session->attributes();
+               result.confirm("encrypt flag was not cleared by ESAPI", attrs.encrypt);
 
                // orignal message again
                result.confirm("verification still successful", verify(message, signature));
@@ -215,7 +221,8 @@ std::vector<Test::Result> test_tpm2_rsa() {
 
                // Generate a few signatures, then deallocate the private key.
                auto signatures = [&] {
-                  auto sk = load_persistent<Botan::TPM2::RSA_PrivateKey>(result, ctx, persistent_key_id, password);
+                  auto sk =
+                     load_persistent<Botan::TPM2::RSA_PrivateKey>(result, ctx, persistent_key_id, password, session);
                   Botan::Null_RNG null_rng;
                   Botan::PK_Signer signer(sk, null_rng /* TPM takes care of this */, "PSS(SHA-256)");
                   std::vector<std::vector<uint8_t>> sigs;
@@ -227,7 +234,7 @@ std::vector<Test::Result> test_tpm2_rsa() {
                }();
 
                // verify via TPM 2.0
-               auto pk = load_persistent<Botan::TPM2::RSA_PublicKey>(result, ctx, persistent_key_id, password);
+               auto pk = load_persistent<Botan::TPM2::RSA_PublicKey>(result, ctx, persistent_key_id, password, session);
                Botan::PK_Verifier verifier(pk, "PSS(SHA-256)");
                for(size_t i = 0; i < messages.size(); ++i) {
                   result.confirm(Botan::fmt("verification successful ({})", i),
@@ -246,7 +253,7 @@ std::vector<Test::Result> test_tpm2_rsa() {
       CHECK("Wrong password is not accepted during signing",
             [&](Test::Result& result) {
                auto key = load_persistent<Botan::TPM2::RSA_PrivateKey>(
-                  result, ctx, persistent_key_id, Botan::hex_decode("deadbeef"));
+                  result, ctx, persistent_key_id, Botan::hex_decode("deadbeef"), session);
 
                Botan::Null_RNG null_rng;
                Botan::PK_Signer signer(key, null_rng /* TPM takes care of this */, "PSS(SHA-256)");

@@ -12,6 +12,7 @@
 #include <botan/rsa.h>
 #include <botan/tpm2.h>
 #include <botan/tpm2_object.h>
+#include <botan/tpm2_session.h>
 
 namespace Botan::TPM2 {
 
@@ -20,7 +21,9 @@ struct ObjectHandles;
 
 class BOTAN_PUBLIC_API(3, 6) RSA_PublicKey : public Botan::RSA_PublicKey {
    public:
-      static RSA_PublicKey from_persistent(const std::shared_ptr<Context>& ctx, uint32_t persistent_object_handle);
+      static RSA_PublicKey from_persistent(const std::shared_ptr<Context>& ctx,
+                                           uint32_t persistent_object_handle,
+                                           const SessionBundle& sessions = {});
 
    public:
       ~RSA_PublicKey() override = default;
@@ -39,10 +42,11 @@ class BOTAN_PUBLIC_API(3, 6) RSA_PublicKey : public Botan::RSA_PublicKey {
                                                                    std::string_view provider) const override;
 
    protected:
-      RSA_PublicKey(Object object);
+      RSA_PublicKey(Object object, SessionBundle sessions);
 
    private:
       Object m_handle;
+      SessionBundle m_sessions;
 };
 
 BOTAN_DIAGNOSTIC_PUSH
@@ -53,7 +57,8 @@ class BOTAN_PUBLIC_API(3, 6) RSA_PrivateKey final : public virtual Botan::RSA_Pu
    public:
       static RSA_PrivateKey from_persistent(const std::shared_ptr<Context>& ctx,
                                             uint32_t persistent_object_handle,
-                                            std::span<const uint8_t> auth_value);
+                                            std::span<const uint8_t> auth_value,
+                                            const SessionBundle& sessions = {});
 
    public:
       ~RSA_PrivateKey() override = default;
@@ -62,7 +67,9 @@ class BOTAN_PUBLIC_API(3, 6) RSA_PrivateKey final : public virtual Botan::RSA_Pu
       RSA_PrivateKey(RSA_PrivateKey&& other) noexcept = default;
       RSA_PrivateKey& operator=(RSA_PrivateKey&& other) noexcept = default;
 
-      std::unique_ptr<Public_Key> public_key() const override;
+      std::unique_ptr<Public_Key> public_key() const override {
+         return std::make_unique<Botan::RSA_PublicKey>(algorithm_identifier(), public_key_bits());
+      }
 
       secure_vector<uint8_t> private_key_bits() const override {
          throw Not_Implemented("cannot export private key bits from a TPM2 key");
@@ -75,10 +82,11 @@ class BOTAN_PUBLIC_API(3, 6) RSA_PrivateKey final : public virtual Botan::RSA_Pu
                                                              std::string_view provider) const override;
 
    protected:
-      RSA_PrivateKey(Object obj);
+      RSA_PrivateKey(Object obj, SessionBundle sessions);
 
    private:
       Object m_handle;
+      SessionBundle m_sessions;
 };
 
 BOTAN_DIAGNOSTIC_POP

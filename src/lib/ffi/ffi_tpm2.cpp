@@ -7,12 +7,15 @@
 
 #include <botan/ffi.h>
 
+#include <botan/internal/ffi_pkey.h>
 #include <botan/internal/ffi_rng.h>
 #include <botan/internal/ffi_util.h>
 
 #if defined(BOTAN_HAS_TPM2)
    #include <botan/tpm2_context.h>
    #include <botan/tpm2_rng.h>
+   #include <botan/tpm2_rsa.h>
+   #include <botan/tpm2_session.h>
 #endif
 
 extern "C" {
@@ -20,15 +23,36 @@ extern "C" {
 using namespace Botan_FFI;
 
 #if defined(BOTAN_HAS_TPM2)
-/**
- * This wrapper is required since BOTAN_FFI_DECLARE_STRUCT internally produces a unique pointer,
- * but the TPM2_Context is meant to be used as a shared pointer.
- */
+
+// These wrappers are required since BOTAN_FFI_DECLARE_STRUCT internally
+// produces a unique pointer, but the TPM types are meant to be used as
+// shared pointers.
+
 struct botan_tpm2_ctx_wrapper {
       std::shared_ptr<Botan::TPM2::Context> ctx;
 };
 
+struct botan_tpm2_session_wrapper {
+      std::shared_ptr<Botan::TPM2::Session> session;
+};
+
 BOTAN_FFI_DECLARE_STRUCT(botan_tpm2_ctx_struct, botan_tpm2_ctx_wrapper, 0xD2B95E15);
+BOTAN_FFI_DECLARE_STRUCT(botan_tpm2_session_struct, botan_tpm2_session_wrapper, 0x9ACCAB52);
+
+}  // extern "C"
+
+namespace {
+
+Botan::TPM2::SessionBundle sessions(botan_tpm2_session_t s1, botan_tpm2_session_t s2, botan_tpm2_session_t s3) {
+   return Botan::TPM2::SessionBundle((s1 != nullptr) ? safe_get(s1).session : nullptr,
+                                     (s2 != nullptr) ? safe_get(s2).session : nullptr,
+                                     (s3 != nullptr) ? safe_get(s3).session : nullptr);
+}
+
+}  // namespace
+
+extern "C" {
+
 #endif
 
 int botan_tpm2_ctx_init(botan_tpm2_ctx_t* ctx_out, const char* tcti_nameconf) {
@@ -117,6 +141,58 @@ int botan_tpm2_rng_init(botan_rng_t* rng_out, botan_tpm2_ctx_t ctx) {
    });
 #else
    BOTAN_UNUSED(rng_out, ctx);
+   return BOTAN_FFI_ERROR_NOT_IMPLEMENTED;
+#endif
+}
+
+int botan_tpm2_unauthenticated_session_init(botan_tpm2_session_t* session_out, botan_tpm2_ctx_t ctx) {
+#if defined(BOTAN_HAS_TPM2)
+   return BOTAN_FFI_VISIT(ctx, [=](botan_tpm2_ctx_wrapper& ctx_wrapper) -> int {
+      if(session_out == nullptr) {
+         return BOTAN_FFI_ERROR_NULL_POINTER;
+      }
+
+      auto session = std::make_unique<botan_tpm2_session_wrapper>();
+      session->session = Botan::TPM2::Session::unauthenticated_session(ctx_wrapper.ctx);
+      *session_out = new botan_tpm2_session_struct(std::move(session));
+      return BOTAN_FFI_SUCCESS;
+   });
+#else
+   BOTAN_UNUSED(session_out, ctx);
+   return BOTAN_FFI_ERROR_NOT_IMPLEMENTED;
+#endif
+}
+
+int botan_tpm2_session_destroy(botan_tpm2_session_t session) {
+#if defined(BOTAN_HAS_TPM2)
+   return BOTAN_FFI_CHECKED_DELETE(session);
+#else
+   BOTAN_UNUSED(session);
+   return BOTAN_FFI_ERROR_NOT_IMPLEMENTED;
+#endif
+}
+
+int botan_tpm2_persistent_privkey_open(botan_privkey_t* key_out,
+                                       botan_tpm2_ctx_t ctx,
+                                       uint32_t handle,
+                                       const uint8_t* auth_value,
+                                       size_t auth_len,
+                                       botan_tpm2_session_t s1,
+                                       botan_tpm2_session_t s2,
+                                       botan_tpm2_session_t s3) {
+#if defined(BOTAN_HAS_TPM2)
+   return BOTAN_FFI_VISIT(ctx, [=](botan_tpm2_ctx_wrapper& ctx_wrapper) -> int {
+      if(key_out == nullptr) {
+         return BOTAN_FFI_ERROR_NULL_POINTER;
+      }
+
+      // TODO: come up with an abstraction over the TPM2 key types
+      *key_out = new botan_privkey_struct(Botan::TPM2::RSA_PrivateKey::from_persistent(
+         ctx_wrapper.ctx, handle, {auth_value, auth_len}, sessions(s1, s2, s3)));
+      return BOTAN_FFI_SUCCESS;
+   });
+#else
+   BOTAN_UNUSED(key_out, ctx, handle, s1, s2, s3);
    return BOTAN_FFI_ERROR_NOT_IMPLEMENTED;
 #endif
 }

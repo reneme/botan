@@ -2197,6 +2197,11 @@ int botan_zfec_decode(
 typedef struct botan_tpm2_ctx_struct* botan_tpm2_ctx_t;
 
 /**
+* TPM2 session
+*/
+typedef struct botan_tpm2_session_struct* botan_tpm2_session_t;
+
+/**
 * Initialize a TPM2 context
 * @param ctx_out output TPM2 context
 * @param tcti_nameconf TCTI config (may be nullptr)
@@ -2227,6 +2232,47 @@ BOTAN_FFI_EXPORT(3, 6) int botan_tpm2_ctx_destroy(botan_tpm2_ctx_t ctx);
 * @param ctx TPM2 context
 */
 BOTAN_FFI_EXPORT(3, 6) int botan_tpm2_rng_init(botan_rng_t* rng_out, botan_tpm2_ctx_t ctx);
+
+/**
+* Create an unauthenticated session for use with TPM2
+* @param session_out the session object to create
+* @param ctx TPM2 context
+*/
+BOTAN_FFI_EXPORT(3, 6)
+int botan_tpm2_unauthenticated_session_init(botan_tpm2_session_t* session_out, botan_tpm2_ctx_t ctx);
+
+/**
+* Create an unauthenticated session for use with TPM2
+* @param session the session object to destroy
+*/
+BOTAN_FFI_EXPORT(3, 6)
+int botan_tpm2_session_destroy(botan_tpm2_session_t session);
+
+/**
+* Load a persistent private key from the TPM2
+*
+* After successful loading, the object may be used with the ordinary public key
+* API defined for the botan_privkey_t type. Eventually destroy the key with
+* botan_privkey_destroy().
+*
+* @param key_out output private key
+* @param ctx TPM2 context
+* @param handle the persistent TPM handle of the key to load
+* @param auth_value the authorization value for the key
+* @param auth_len the length of the authorization value for the key
+* @param s1 the first session to use (optional, may be nullptr)
+* @param s2 the second session to use (optional, may be nullptr)
+* @param s3 the third session to use (optional, may be nullptr)
+*/
+BOTAN_FFI_EXPORT(3, 6)
+int botan_tpm2_persistent_privkey_open(botan_privkey_t* key_out,
+                                       botan_tpm2_ctx_t ctx,
+                                       uint32_t handle,
+                                       const uint8_t* auth_value,
+                                       size_t auth_len,
+                                       botan_tpm2_session_t s1,
+                                       botan_tpm2_session_t s2,
+                                       botan_tpm2_session_t s3);
 
 #ifdef __cplusplus
 }

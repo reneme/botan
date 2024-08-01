@@ -57,6 +57,40 @@ int botan_tpm2_ctx_init(botan_tpm2_ctx_t* ctx_out, const char* tcti_nameconf) {
 #endif
 }
 
+int botan_tpm2_ctx_init_ex(botan_tpm2_ctx_t* ctx_out, const char* tcti_name, const char* tcti_conf) {
+#if defined(BOTAN_HAS_TPM2)
+   return ffi_guard_thunk(__func__, [=]() -> int {
+      if(ctx_out == nullptr) {
+         return BOTAN_FFI_ERROR_NULL_POINTER;
+      }
+      auto ctx = std::make_unique<botan_tpm2_ctx_wrapper>();
+
+      auto tcti_name_str = [=]() -> std::optional<std::string> {
+         if(tcti_name == nullptr) {
+            return {};
+         } else {
+            return std::string(tcti_name);
+         }
+      }();
+
+      auto tcti_conf_str = [=]() -> std::optional<std::string> {
+         if(tcti_conf == nullptr) {
+            return {};
+         } else {
+            return std::string(tcti_conf);
+         }
+      }();
+
+      ctx->ctx = Botan::TPM2::Context::create(std::move(tcti_name_str), std::move(tcti_conf_str));
+      *ctx_out = new botan_tpm2_ctx_struct(std::move(ctx));
+      return BOTAN_FFI_SUCCESS;
+   });
+#else
+   BOTAN_UNUSED(ctx_out, tcti_nameconf);
+   return BOTAN_FFI_ERROR_NOT_IMPLEMENTED;
+#endif
+}
+
 /**
  * Frees all resouces of a TPM2 context
  * @param ctx TPM2 context

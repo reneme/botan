@@ -21,9 +21,9 @@ struct ObjectHandles;
 
 class BOTAN_PUBLIC_API(3, 6) RSA_PublicKey : public Botan::RSA_PublicKey {
    public:
-      static RSA_PublicKey from_persistent(const std::shared_ptr<Context>& ctx,
-                                           uint32_t persistent_object_handle,
-                                           const SessionBundle& sessions = {});
+      static std::unique_ptr<RSA_PublicKey> from_persistent(const std::shared_ptr<Context>& ctx,
+                                                            uint32_t persistent_object_handle,
+                                                            const SessionBundle& sessions = {});
 
    public:
       ~RSA_PublicKey() override = default;
@@ -55,10 +55,10 @@ BOTAN_DIAGNOSTIC_IGNORE_INHERITED_VIA_DOMINANCE
 class BOTAN_PUBLIC_API(3, 6) RSA_PrivateKey final : public virtual Botan::RSA_PublicKey,
                                                     public virtual Private_Key {
    public:
-      static RSA_PrivateKey from_persistent(const std::shared_ptr<Context>& ctx,
-                                            uint32_t persistent_object_handle,
-                                            std::span<const uint8_t> auth_value,
-                                            const SessionBundle& sessions = {});
+      static std::unique_ptr<RSA_PrivateKey> from_persistent(const std::shared_ptr<Context>& ctx,
+                                                             uint32_t persistent_object_handle,
+                                                             std::span<const uint8_t> auth_value,
+                                                             const SessionBundle& sessions = {});
 
    public:
       ~RSA_PrivateKey() override = default;

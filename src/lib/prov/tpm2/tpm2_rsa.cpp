@@ -105,10 +105,11 @@ Object make_persistent_object(const std::shared_ptr<Context>& ctx,
 
 }  // namespace
 
-RSA_PublicKey RSA_PublicKey::from_persistent(const std::shared_ptr<Context>& ctx,
-                                             uint32_t persistent_object_handle,
-                                             const SessionBundle& sessions) {
-   return {make_persistent_object(ctx, persistent_object_handle, {}, sessions), sessions};
+std::unique_ptr<RSA_PublicKey> RSA_PublicKey::from_persistent(const std::shared_ptr<Context>& ctx,
+                                                              uint32_t persistent_object_handle,
+                                                              const SessionBundle& sessions) {
+   return std::unique_ptr<RSA_PublicKey>(
+      new RSA_PublicKey(make_persistent_object(ctx, persistent_object_handle, {}, sessions), sessions));
 }
 
 RSA_PublicKey::RSA_PublicKey(Object object, SessionBundle sessions) :
@@ -117,11 +118,12 @@ RSA_PublicKey::RSA_PublicKey(Object object, SessionBundle sessions) :
       m_handle(std::move(object)),
       m_sessions(std::move(sessions)) {}
 
-RSA_PrivateKey RSA_PrivateKey::from_persistent(const std::shared_ptr<Context>& ctx,
-                                               uint32_t persistent_object_handle,
-                                               std::span<const uint8_t> auth_value,
-                                               const SessionBundle& sessions) {
-   return {make_persistent_object(ctx, persistent_object_handle, auth_value, sessions), sessions};
+std::unique_ptr<RSA_PrivateKey> RSA_PrivateKey::from_persistent(const std::shared_ptr<Context>& ctx,
+                                                                uint32_t persistent_object_handle,
+                                                                std::span<const uint8_t> auth_value,
+                                                                const SessionBundle& sessions) {
+   return std::unique_ptr<RSA_PrivateKey>(
+      new RSA_PrivateKey(make_persistent_object(ctx, persistent_object_handle, auth_value, sessions), sessions));
 }
 
 RSA_PrivateKey::RSA_PrivateKey(Object object, SessionBundle sessions) :

@@ -10,6 +10,7 @@
 #define BOTAN_TPM2_UTIL_H_
 
 #include <botan/concepts.h>
+#include <botan/mem_ops.h>
 #include <botan/tpm2_context.h>
 #include <botan/tpm2_error.h>
 #include <botan/tpm2_object.h>

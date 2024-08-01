@@ -10,7 +10,7 @@
 
 #include <botan/pk_keys.h>
 #include <botan/rsa.h>
-#include <botan/tpm2.h>
+#include <botan/tpm2_context.h>
 #include <botan/tpm2_object.h>
 #include <botan/tpm2_session.h>
 

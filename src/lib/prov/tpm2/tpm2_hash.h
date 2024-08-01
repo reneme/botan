@@ -10,6 +10,7 @@
 #define BOTAN_TPM2_HASH_H_
 
 #include <botan/hash.h>
+#include <botan/tpm2_context.h>
 #include <botan/tpm2_object.h>
 #include <botan/tpm2_session.h>
 

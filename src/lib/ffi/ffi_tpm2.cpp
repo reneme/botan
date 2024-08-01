@@ -11,7 +11,7 @@
 #include <botan/internal/ffi_util.h>
 
 #if defined(BOTAN_HAS_TPM2)
-   #include <botan/tpm2.h>
+   #include <botan/tpm2_context.h>
    #include <botan/tpm2_rng.h>
 #endif
 

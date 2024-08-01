@@ -23,9 +23,10 @@ tpm2_util.h
 </header:internal>
 
 <header:public>
+tpm2_context.h
+tpm2_error.h
 tpm2_object.h
 tpm2_rng.h
 tpm2_rsa.h
 tpm2_session.h
-tpm2.h
 </header:public>

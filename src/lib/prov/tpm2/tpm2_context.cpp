@@ -6,7 +6,7 @@
 * Botan is released under the Simplified BSD License (see license.txt)
 */
 
-#include <botan/tpm2.h>
+#include <botan/tpm2_context.h>
 
 #include <botan/tpm2_session.h>
 
@@ -15,21 +15,11 @@
 #include <botan/internal/stl_util.h>
 #include <botan/internal/tpm2_util.h>
 
-#include <algorithm>
-#include <array>
-
 #include <tss2/tss2_esys.h>
 #include <tss2/tss2_tcti.h>
 #include <tss2/tss2_tctildr.h>
 
 namespace Botan::TPM2 {
-
-Error::Error(std::string_view location, uint32_t rc) :
-      Exception(fmt("TPM2 Exception in {}: Code {} ({})", location, rc, Tss2_RC_Decode(rc))), m_rc(rc) {}
-
-std::string Error::error_message() const {
-   return Tss2_RC_Decode(m_rc);
-}
 
 struct Context::Impl {
       TSS2_TCTI_CONTEXT* m_tcti_ctx;

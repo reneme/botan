@@ -10,8 +10,7 @@
 #define BOTAN_TPM2_RNG_H_
 
 #include <botan/rng.h>
-
-#include <botan/tpm2.h>
+#include <botan/tpm2_context.h>
 #include <botan/tpm2_session.h>
 
 namespace Botan::TPM2 {

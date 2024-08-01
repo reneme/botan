@@ -6,8 +6,8 @@
 * Botan is released under the Simplified BSD License (see license.txt)
 */
 
-#ifndef BOTAN_TPM2_H_
-#define BOTAN_TPM2_H_
+#ifndef BOTAN_TPM2_CONTEXT_H_
+#define BOTAN_TPM2_CONTEXT_H_
 
 #include <botan/exceptn.h>
 
@@ -19,25 +19,6 @@
 namespace Botan::TPM2 {
 
 class AuthSession;
-
-class BOTAN_PUBLIC_API(3, 6) Error final : public Exception {
-   public:
-      Error(std::string_view location, uint32_t rc);
-
-      ErrorType error_type() const noexcept override { return ErrorType::TPMError; }
-
-      uint32_t code() const { return m_rc; }
-
-      int error_code() const noexcept override {
-         // RC is uint32 but the maximum value is within int32 range as per tss2_common.h
-         return static_cast<int>(m_rc);
-      }
-
-      std::string error_message() const;
-
-   private:
-      uint32_t m_rc;
-};
 
 class BOTAN_PUBLIC_API(3, 6) Context final : public std::enable_shared_from_this<Context> {
    public:

@@ -8,9 +8,8 @@
 #ifndef BOTAN_TPM2_SESSION_H_
 #define BOTAN_TPM2_SESSION_H_
 
-#include <botan/tpm2.h>
-
 #include <botan/secmem.h>
+#include <botan/tpm2_context.h>
 #include <botan/tpm2_object.h>
 
 #include <array>

@@ -11,7 +11,7 @@
 
 #include <botan/pk_keys.h>
 #include <botan/rsa.h>
-#include <botan/tpm2.h>
+#include <botan/tpm2_context.h>
 
 namespace Botan::TPM2 {
 

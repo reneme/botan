@@ -60,10 +60,7 @@ std::vector<Test::Result> test_tpm2_rng() {
       return {bail_out()};
    }
 
-   auto session = Botan::TPM2::Session::unauthenticated_session(ctx);
-   ctx->set_sessions(session->handle(), std::nullopt, std::nullopt);
-
-   auto rng = Botan::TPM2::RNG(ctx);
+   auto rng = Botan::TPM2::RNG(ctx, Botan::TPM2::Session::unauthenticated_session(ctx));
 
    return {
       CHECK("Basic functionalities",

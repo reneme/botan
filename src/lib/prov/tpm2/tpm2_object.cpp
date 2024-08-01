@@ -86,7 +86,7 @@ uint32_t Object::persistent_handle() const {
    return *m_handles->persistent;
 }
 
-uint32_t Object::transient_handle() const {
+uint32_t Object::transient_handle() const noexcept {
    static_assert(std::same_as<decltype(m_handles->transient), uint32_t>);
    return m_handles->transient;
 }

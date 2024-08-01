@@ -35,7 +35,7 @@ class BOTAN_PUBLIC_API(3, 6) Object {
       bool has_transient_handle() const;
 
       uint32_t persistent_handle() const;
-      uint32_t transient_handle() const;
+      uint32_t transient_handle() const noexcept;
 
       void _reset() noexcept;
       void _disengage() noexcept;

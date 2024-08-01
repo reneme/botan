@@ -11,6 +11,7 @@
 
 #include <botan/hash.h>
 #include <botan/tpm2_object.h>
+#include <botan/tpm2_session.h>
 
 #include <botan/internal/tpm2_util.h>
 
@@ -20,7 +21,7 @@ namespace Botan::TPM2 {
 
 class HashFunction final : public Botan::HashFunction {
    public:
-      HashFunction(std::shared_ptr<Context> ctx, std::string_view algorithm);
+      HashFunction(std::shared_ptr<Context> ctx, std::string_view algorithm, SessionBundle sessions = {});
 
       std::string name() const override;
       size_t output_length() const override;
@@ -41,6 +42,7 @@ class HashFunction final : public Botan::HashFunction {
    private:
       TPMI_ALG_HASH m_hash_type;
       Object m_handle;
+      SessionBundle m_sessions;
 };
 
 }  // namespace Botan::TPM2

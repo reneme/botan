@@ -264,13 +264,11 @@ std::vector<Test::Result> test_tpm2_hash() {
       return {bail_out()};
    }
 
-   auto session = Botan::TPM2::Session::unauthenticated_session(ctx);
-   ctx->set_sessions(session->handle(), std::nullopt, std::nullopt);
-
    auto test = [&](Test::Result& result, std::string_view algo) {
       auto tpm_hash = [&]() -> std::unique_ptr<Botan::TPM2::HashFunction> {
          try {
-            return std::make_unique<Botan::TPM2::HashFunction>(ctx, algo);
+            return std::make_unique<Botan::TPM2::HashFunction>(
+               ctx, algo, Botan::TPM2::Session::unauthenticated_session(ctx));
          } catch(const Botan::Lookup_Error&) {
             return {};
          }
@@ -351,7 +349,8 @@ std::vector<Test::Result> test_tpm2_hash() {
 
       CHECK("validation ticket",
             [&](Test::Result& result) {
-               auto tpm_hash = Botan::TPM2::HashFunction(ctx, "SHA-256");
+               auto tpm_hash =
+                  Botan::TPM2::HashFunction(ctx, "SHA-256", Botan::TPM2::Session::unauthenticated_session(ctx));
 
                tpm_hash.update("Hola mundo!");
 

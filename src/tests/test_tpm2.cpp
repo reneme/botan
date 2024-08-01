@@ -135,8 +135,8 @@ std::vector<Test::Result> test_tpm2_rsa() {
 
    auto session = Botan::TPM2::Session::unauthenticated_session(ctx);
 
-   constexpr uint32_t persistent_key_id = TPM2_PERSISTENT_FIRST + 8;
-   const std::vector<uint8_t> password = {'p', 'a', 's', 's', 'w', 'o', 'r', 'd'};
+   const auto persistent_key_id = Test::options().tpm2_persistent_rsa_handle();
+   const auto password = Test::options().tpm2_persistent_auth_value();
 
    return {
       CHECK("Load the private key multiple times",

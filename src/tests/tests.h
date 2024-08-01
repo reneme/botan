@@ -9,6 +9,7 @@
 #define BOTAN_TESTS_H_
 
 #include <botan/hex.h>
+#include <botan/mem_ops.h>
 #include <botan/rng.h>
 #include <botan/symkey.h>
 #include <botan/types.h>
@@ -67,6 +68,9 @@ class Test_Options {
                    const std::string& provider,
                    const std::string& tpm2_tcti_name,
                    const std::string& tpm2_tcti_conf,
+                   size_t tpm2_persistent_rsa_handle,
+                   size_t tpm2_persistent_ecc_handle,
+                   const std::string& tpm2_persistent_auth_value,
                    const std::string& drbg_seed,
                    const std::string& xml_results_dir,
                    const std::vector<std::string>& report_properties,
@@ -86,6 +90,9 @@ class Test_Options {
             m_provider(provider),
             m_tpm2_tcti_name(tpm2_tcti_name),
             m_tpm2_tcti_conf(tpm2_tcti_conf),
+            m_tpm2_persistent_rsa_handle(tpm2_persistent_rsa_handle),
+            m_tpm2_persistent_ecc_handle(tpm2_persistent_ecc_handle),
+            m_tpm2_persistent_auth_value(tpm2_persistent_auth_value),
             m_drbg_seed(drbg_seed),
             m_xml_results_dir(xml_results_dir),
             m_report_properties(report_properties),
@@ -112,6 +119,16 @@ class Test_Options {
       const std::optional<std::string>& tpm2_tcti_name() const { return m_tpm2_tcti_name; }
 
       const std::optional<std::string>& tpm2_tcti_conf() const { return m_tpm2_tcti_conf; }
+
+      uint32_t tpm2_persistent_rsa_handle() const { return static_cast<uint32_t>(m_tpm2_persistent_rsa_handle); }
+
+      uint32_t tpm2_persistent_ecc_handle() const { return static_cast<uint32_t>(m_tpm2_persistent_ecc_handle); }
+
+      std::vector<uint8_t> tpm2_persistent_auth_value() const {
+         std::span<const uint8_t> auth_value(Botan::cast_char_ptr_to_uint8(m_tpm2_persistent_auth_value.data()),
+                                             m_tpm2_persistent_auth_value.size());
+         return std::vector<uint8_t>(auth_value.begin(), auth_value.end());
+      }
 
       const std::string& drbg_seed() const { return m_drbg_seed; }
 
@@ -145,6 +162,9 @@ class Test_Options {
       std::string m_provider;
       std::optional<std::string> m_tpm2_tcti_name;
       std::optional<std::string> m_tpm2_tcti_conf;
+      size_t m_tpm2_persistent_rsa_handle;
+      size_t m_tpm2_persistent_ecc_handle;
+      std::string m_tpm2_persistent_auth_value;
       std::string m_drbg_seed;
       std::string m_xml_results_dir;
       std::vector<std::string> m_report_properties;

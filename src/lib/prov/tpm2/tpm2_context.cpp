@@ -39,29 +39,14 @@ std::shared_ptr<Context> Context::create(std::optional<std::string> tcti, std::o
    return std::shared_ptr<Context>(new Context(tcti_ptr, conf_ptr));
 }
 
-Context::Context(const char* tcti_nameconf) :
-      m_impl(std::make_unique<Impl>()), m_session_handles{ESYS_TR_NONE, ESYS_TR_NONE, ESYS_TR_NONE} {
+Context::Context(const char* tcti_nameconf) : m_impl(std::make_unique<Impl>()) {
    check_rc("TCTI Initialization", Tss2_TctiLdr_Initialize(tcti_nameconf, &m_impl->m_tcti_ctx));
    check_rc("TPM2 Initialization", Esys_Initialize(&m_impl->m_ctx, m_impl->m_tcti_ctx, nullptr /* ABI version */));
 }
 
-Context::Context(const char* tcti_name, const char* tcti_conf) :
-      m_impl(std::make_unique<Impl>()), m_session_handles{ESYS_TR_NONE, ESYS_TR_NONE, ESYS_TR_NONE} {
+Context::Context(const char* tcti_name, const char* tcti_conf) : m_impl(std::make_unique<Impl>()) {
    check_rc("TCTI Initialization", Tss2_TctiLdr_Initialize_Ex(tcti_name, tcti_conf, &m_impl->m_tcti_ctx));
    check_rc("TPM2 Initialization", Esys_Initialize(&m_impl->m_ctx, m_impl->m_tcti_ctx, nullptr /* ABI version */));
-}
-
-void Context::set_sessions(std::optional<uint32_t> session1,
-                           std::optional<uint32_t> session2,
-                           std::optional<uint32_t> session3) {
-   auto set_session = [this](auto& session, size_t idx) {
-      if(session.has_value()) {
-         m_session_handles[idx] = session.value();
-      }
-   };
-   set_session(session1, 0);
-   set_session(session2, 1);
-   set_session(session3, 2);
 }
 
 void* Context::inner_context_object() {

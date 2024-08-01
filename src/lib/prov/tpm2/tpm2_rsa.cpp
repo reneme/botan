@@ -112,7 +112,8 @@ RSA_PublicKey RSA_PublicKey::from_persistent(const std::shared_ptr<Context>& ctx
 }
 
 RSA_PublicKey::RSA_PublicKey(Object object, SessionBundle sessions) :
-      Botan::RSA_PublicKey(n(object._public_info(TPM2_ALG_RSA)), e(object._public_info(TPM2_ALG_RSA))),
+      Botan::RSA_PublicKey(n(object._public_info(sessions, TPM2_ALG_RSA)),
+                           e(object._public_info(sessions, TPM2_ALG_RSA))),
       m_handle(std::move(object)),
       m_sessions(std::move(sessions)) {}
 
@@ -124,7 +125,8 @@ RSA_PrivateKey RSA_PrivateKey::from_persistent(const std::shared_ptr<Context>& c
 }
 
 RSA_PrivateKey::RSA_PrivateKey(Object object, SessionBundle sessions) :
-      Botan::RSA_PublicKey(n(object._public_info(TPM2_ALG_RSA)), e(object._public_info(TPM2_ALG_RSA))),
+      Botan::RSA_PublicKey(n(object._public_info(sessions, TPM2_ALG_RSA)),
+                           e(object._public_info(sessions, TPM2_ALG_RSA))),
       m_handle(std::move(object)),
       m_sessions(std::move(sessions)) {}
 
@@ -174,7 +176,7 @@ class RSA_Signature_Operation : public PK_Ops::Signature {
       }
 
       size_t signature_length() const override {
-         return m_key_handle._public_info(TPM2_ALG_RSA).pub->publicArea.parameters.rsaDetail.keyBits / 8;
+         return m_key_handle._public_info(m_sessions, TPM2_ALG_RSA).pub->publicArea.parameters.rsaDetail.keyBits / 8;
       }
 
       std::string hash_function() const override { return m_hash.name(); }

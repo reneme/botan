@@ -9,8 +9,6 @@
 #ifndef BOTAN_TPM2_BASE_OBJECT_H_
 #define BOTAN_TPM2_BASE_OBJECT_H_
 
-#include <botan/pk_keys.h>
-#include <botan/rsa.h>
 #include <botan/tpm2_context.h>
 
 namespace Botan::TPM2 {
@@ -18,6 +16,7 @@ namespace Botan::TPM2 {
 struct PublicInfo;
 struct ObjectHandles;
 class ObjectSetter;
+class SessionBundle;
 
 class BOTAN_PUBLIC_API(3, 6) Object {
    public:
@@ -39,7 +38,7 @@ class BOTAN_PUBLIC_API(3, 6) Object {
 
       void _reset() noexcept;
       void _disengage() noexcept;
-      PublicInfo& _public_info(std::optional<uint32_t> expected_type = {}) const;
+      PublicInfo& _public_info(const SessionBundle& sessions, std::optional<uint32_t> expected_type = {}) const;
 
    private:
       friend class ObjectSetter;

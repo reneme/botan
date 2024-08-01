@@ -8,6 +8,8 @@
 
 #include <botan/tpm2_object.h>
 
+#include <botan/tpm2_session.h>
+
 #include <botan/internal/stl_util.h>
 #include <botan/internal/tpm2_util.h>
 
@@ -91,16 +93,16 @@ uint32_t Object::transient_handle() const noexcept {
    return m_handles->transient;
 }
 
-PublicInfo& Object::_public_info(std::optional<uint32_t> expected_type) const {
+PublicInfo& Object::_public_info(const SessionBundle& sessions, std::optional<uint32_t> expected_type) const {
    if(!m_public_info) {
       m_public_info = std::make_unique<PublicInfo>();
 
       check_rc("Esys_ReadPublic",
                Esys_ReadPublic(inner(m_ctx),
                                m_handles->transient,
-                               m_ctx->session_handle(0),
-                               m_ctx->session_handle(1),
-                               m_ctx->session_handle(2),
+                               sessions[0],
+                               sessions[1],
+                               sessions[2],
                                out_ptr(m_public_info->pub),
                                out_ptr(m_public_info->name),
                                out_ptr(m_public_info->qualified_name)));

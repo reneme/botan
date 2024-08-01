@@ -11,14 +11,11 @@
 
 #include <botan/exceptn.h>
 
-#include <array>
 #include <memory>
 #include <optional>
 #include <vector>
 
 namespace Botan::TPM2 {
-
-class AuthSession;
 
 class BOTAN_PUBLIC_API(3, 6) Context final : public std::enable_shared_from_this<Context> {
    public:
@@ -43,15 +40,6 @@ class BOTAN_PUBLIC_API(3, 6) Context final : public std::enable_shared_from_this
       Context& operator=(const Context&) = delete;
       Context& operator=(Context&& ctx) noexcept = default;
 
-      void set_sessions(std::optional<uint32_t> session1,
-                        std::optional<uint32_t> session2,
-                        std::optional<uint32_t> session3);
-
-      uint32_t session_handle(size_t idx) const {
-         BOTAN_DEBUG_ASSERT(idx >= 0 && idx <= 2);
-         return m_session_handles[idx];
-      }
-
       /// @return an ESYS_CONTEXT* for use in other TPM2 functions.
       void* inner_context_object();
 
@@ -66,8 +54,6 @@ class BOTAN_PUBLIC_API(3, 6) Context final : public std::enable_shared_from_this
       /// @return true if @param persistent_handle is in the list of persistent handles
       bool in_persistent_handles(uint32_t persistent_handle) const;
 
-      void set_session(std::unique_ptr<AuthSession> session);
-
    private:
       Context(const char* tcti_nameconf);
       Context(const char* tcti_name, const char* tcti_conf);
@@ -75,8 +61,6 @@ class BOTAN_PUBLIC_API(3, 6) Context final : public std::enable_shared_from_this
    private:
       struct Impl;  // PImpl to avoid TPM2-TSS includes in this header
       std::unique_ptr<Impl> m_impl;
-
-      std::array<uint32_t, 3> m_session_handles;
 };
 
 }  // namespace Botan::TPM2

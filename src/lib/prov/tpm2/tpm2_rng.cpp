@@ -11,7 +11,6 @@
 #include <botan/internal/stl_util.h>
 #include <botan/internal/tpm2_util.h>
 
-#include <source_location>
 #include <tss2/tss2_esys.h>
 
 namespace Botan::TPM2 {
@@ -20,16 +19,15 @@ void RNG::fill_bytes_with_input(std::span<uint8_t> output, std::span<const uint8
    constexpr size_t MAX_STIR_RANDOM_SIZE = 128;  // From specification of tpm2-tool's tpm2_stirrandom
 
    BufferSlicer in(input);
-
    while(!in.empty()) {
-      TPM2B_SENSITIVE_DATA data;
-      data.size = std::min(in.remaining(), MAX_STIR_RANDOM_SIZE);
-      in.copy_into({data.buffer, data.size});
+      const size_t chunk = std::min(in.remaining(), MAX_STIR_RANDOM_SIZE);
+      const auto data = copy_into<TPM2B_SENSITIVE_DATA>(in.take(chunk));
 
       check_rc("Esys_StirRandom",
                Esys_StirRandom(
                   inner(m_ctx), m_ctx->session_handle(0), m_ctx->session_handle(1), m_ctx->session_handle(2), &data));
    }
+   BOTAN_ASSERT_NOMSG(in.empty());
 
    BufferStuffer out(output);
    while(!out.full()) {
@@ -44,8 +42,9 @@ void RNG::fill_bytes_with_input(std::span<uint8_t> output, std::span<const uint8
                               out_ptr(digest)));
 
       BOTAN_ASSERT_NOMSG(digest->size == requested_bytes);
-      out.append({digest->buffer, digest->size});
+      out.append(as_span(*digest));
    }
+   BOTAN_ASSERT_NOMSG(out.full());
 }
 
 }  // namespace Botan::TPM2

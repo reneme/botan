@@ -158,11 +158,11 @@ std::vector<Test::Result> test_tpm2_rsa() {
 
                // create a message that is larger than the TPM2 max buffer size
                const auto message = [] {
-                  std::vector<uint8_t> result(TPM2_MAX_DIGEST_BUFFER + 5);
-                  for(size_t i = 0; i < result.size(); ++i) {
-                     result[i] = static_cast<uint8_t>(i);
+                  std::vector<uint8_t> msg(TPM2_MAX_DIGEST_BUFFER + 5);
+                  for(size_t i = 0; i < msg.size(); ++i) {
+                     msg[i] = static_cast<uint8_t>(i);
                   }
-                  return result;
+                  return msg;
                }();
                const auto signature = signer.sign_message(message, null_rng);
                result.require("signature is not empty", !signature.empty());
@@ -305,11 +305,11 @@ std::vector<Test::Result> test_tpm2_hash() {
 
       // create a message that is larger than the TPM2 max buffer size
       const auto long_message = [] {
-         std::vector<uint8_t> result(TPM2_MAX_DIGEST_BUFFER + 5);
-         for(size_t i = 0; i < result.size(); ++i) {
-            result[i] = static_cast<uint8_t>(i);
+         std::vector<uint8_t> msg(TPM2_MAX_DIGEST_BUFFER + 5);
+         for(size_t i = 0; i < msg.size(); ++i) {
+            msg[i] = static_cast<uint8_t>(i);
          }
-         return result;
+         return msg;
       }();
 
       tpm_hash->update(long_message);

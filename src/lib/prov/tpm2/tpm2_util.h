@@ -168,7 +168,7 @@ class ObjectSetter {
       [[nodiscard]] constexpr operator uint32_t*() && noexcept { return &m_handle; }
 
    private:
-      bool was_written() const { return m_handle != (m_persistent ? 0 : ESYS_TR_NONE); }
+      constexpr bool was_written() const { return m_handle != (m_persistent ? 0 : ESYS_TR_NONE); }
 
    private:
       Object& m_object;

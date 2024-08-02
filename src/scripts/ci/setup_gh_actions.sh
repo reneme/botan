@@ -35,7 +35,7 @@ if type -p "apt-get"; then
         # (l)ist mode (avoiding https://github.com/actions/runner-images/issues/9996)
         sudo NEEDRESTART_MODE=l apt-get -qq install valgrind
 
-    elif [ "$TARGET" = "static"]; then
+    elif [ "$TARGET" = "static" ]; then
         sudo apt-get -qq install $tpm2_specific_packages
         echo "BOTAN_TPM2_ENABLED=1" >> "$GITHUB_ENV"
 

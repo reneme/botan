@@ -38,15 +38,15 @@ if type -p "apt-get"; then
 
     if [ "$TARGET" = "valgrind" ] || [ "$TARGET" = "valgrind-full" ]; then
         # (l)ist mode (avoiding https://github.com/actions/runner-images/issues/9996)
-        sudo NEEDRESTART_MODE=l apt-get -qq install valgrind $tpm2_specific_packages
+        sudo NEEDRESTART_MODE=l apt-get -qq install valgrind "$tpm2_specific_packages[@]"
         echo "BOTAN_TPM2_ENABLED=1" >> "$GITHUB_ENV"
 
     elif [ "$TARGET" = "static" ]; then
-        sudo apt-get -qq install $tpm2_specific_packages
+        sudo apt-get -qq install "$tpm2_specific_packages[@]"
         echo "BOTAN_TPM2_ENABLED=1" >> "$GITHUB_ENV"
 
     elif [ "$TARGET" = "shared" ]; then
-        sudo apt-get -qq install libboost-dev $tpm2_specific_packages
+        sudo apt-get -qq install libboost-dev "$tpm2_specific_packages[@]"
         echo "BOTAN_TPM2_ENABLED=1" >> "$GITHUB_ENV"
 
     elif [ "$TARGET" = "examples" ] || [ "$TARGET" = "tlsanvil" ] || [ "$TARGET" = "clang-tidy" ] ; then
@@ -129,7 +129,7 @@ if type -p "apt-get"; then
             curl -L https://coveralls.io/coveralls-linux.tar.gz | tar -xz -C /usr/local/bin
         fi
 
-        sudo apt-get -qq install softhsm2 libtspi-dev libboost-dev $tpm2_specific_packages
+        sudo apt-get -qq install softhsm2 libtspi-dev libboost-dev "$tpm2_specific_packages[@]"
         echo "BOTAN_TPM2_ENABLED=1" >> "$GITHUB_ENV"
 
         echo "$HOME/.local/bin" >> "$GITHUB_PATH"

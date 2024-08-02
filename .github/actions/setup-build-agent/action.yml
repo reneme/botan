@@ -55,6 +55,6 @@ runs:
       if: runner.os == 'Windows'
 
     - name: Start TPM 2.0 Simulator
-      run: sudo -u runner ${{ github.action_path }}/../../../src/scripts/ci/start_tpm2_simulator.sh "${{ github.workspace }}/tpm2_simulator_state"
+      run: ${{ github.action_path }}/../../../src/scripts/ci/start_tpm2_simulator.sh "${{ github.workspace }}/tpm2_simulator_state"
       shell: bash
       if: runner.os != 'Windows' && env.BOTAN_TPM2_ENABLED == '1'

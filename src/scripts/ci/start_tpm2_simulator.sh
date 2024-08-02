@@ -18,6 +18,11 @@ tcti="${tcti_name}:${tcti_conf}"
 test_pwd="password"
 persistent_rsa_key_handle="0x81000008"
 
+if ! systemctl is-active --quiet dbus; then
+    echo "DBus is not running. Starting it..."
+    sudo systemctl start dbus
+fi
+
 echo "Setting up TPM..."
 swtpm_setup --create-config-files overwrite
 

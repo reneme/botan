@@ -3313,6 +3313,7 @@ def calculate_cc_min_version(options, ccinfo, source_paths):
         'msvc': r'^ *MSVC ([0-9]{2})([0-9]{2})$',
         'gcc': r'^ *GCC ([0-9]+) ([0-9]+)$',
         'clang': r'^ *CLANG ([0-9]+) ([0-9]+)$',
+        'clangcl': r'^ *CLANG ([0-9]+) ([0-9]+)$',
         'xcode': r'^ *XCODE ([0-9]+) ([0-9]+)$',
         'xlc': r'^ *XLC ([0-9]+) ([0-9]+)$',
         'emcc': r'^ *EMCC ([0-9]+) ([0-9]+)$',

@@ -1,6 +1,6 @@
 macro_name CLANG
 
-minimum_supported_version 19.30
+minimum_supported_version 14.0
 
 binary_name clang-cl
 linker_name lld-link

@@ -26,12 +26,6 @@ class BOTAN_PUBLIC_API(3, 6) RSA_PublicKey : public Botan::RSA_PublicKey {
                                                             const SessionBundle& sessions = {});
 
    public:
-      ~RSA_PublicKey() override = default;
-      RSA_PublicKey(const RSA_PublicKey&) = delete;
-      RSA_PublicKey& operator=(const RSA_PublicKey&) = delete;
-      RSA_PublicKey(RSA_PublicKey&& other) noexcept = default;
-      RSA_PublicKey& operator=(RSA_PublicKey&& other) noexcept = default;
-
       std::unique_ptr<Private_Key> generate_another(RandomNumberGenerator&) const override {
          throw Not_Implemented("Cannot generate a new TPM-based keypair from this asymmetric key");
       }
@@ -61,12 +55,6 @@ class BOTAN_PUBLIC_API(3, 6) RSA_PrivateKey final : public virtual Botan::RSA_Pu
                                                              const SessionBundle& sessions = {});
 
    public:
-      ~RSA_PrivateKey() override = default;
-      RSA_PrivateKey(const RSA_PrivateKey&) = delete;
-      RSA_PrivateKey& operator=(const RSA_PrivateKey&) = delete;
-      RSA_PrivateKey(RSA_PrivateKey&& other) noexcept = default;
-      RSA_PrivateKey& operator=(RSA_PrivateKey&& other) noexcept = default;
-
       std::unique_ptr<Public_Key> public_key() const override {
          return std::make_unique<Botan::RSA_PublicKey>(algorithm_identifier(), public_key_bits());
       }

@@ -110,7 +110,7 @@ int botan_tpm2_ctx_init_ex(botan_tpm2_ctx_t* ctx_out, const char* tcti_name, con
       return BOTAN_FFI_SUCCESS;
    });
 #else
-   BOTAN_UNUSED(ctx_out, tcti_nameconf);
+   BOTAN_UNUSED(ctx_out, tcti_name, tcti_conf);
    return BOTAN_FFI_ERROR_NOT_IMPLEMENTED;
 #endif
 }
@@ -192,7 +192,7 @@ int botan_tpm2_persistent_privkey_open(botan_privkey_t* key_out,
       return BOTAN_FFI_SUCCESS;
    });
 #else
-   BOTAN_UNUSED(key_out, ctx, handle, s1, s2, s3);
+   BOTAN_UNUSED(key_out, ctx, handle, auth_value, auth_len, s1, s2, s3);
    return BOTAN_FFI_ERROR_NOT_IMPLEMENTED;
 #endif
 }

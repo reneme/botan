@@ -17,6 +17,7 @@ ARCH="$2"
 SCRIPT_LOCATION=$(cd "$(dirname "$0")"; pwd)
 
 if type -p "apt-get"; then
+    tpm2_specific_packages="tpm2-tools libtss2-dev swtpm swtpm-tools tpm2-abrmd libtss2-tcti-tabrmd0"
 
     if [ "$(lsb_release -sr)" = "22.04" ]; then
         # Hack to deal with https://github.com/actions/runner-images/issues/8659
@@ -25,22 +26,21 @@ if type -p "apt-get"; then
         sudo apt-get install -y --allow-downgrades libc6=2.35-* libc6-dev=2.35-* libstdc++6=12.3.0-* libgcc-s1=12.3.0-*
     fi
 
-    tpm2_specific_packages="tpm2-tools libtss2-dev swtpm swtpm-tools tpm2-abrmd libtss2-tcti-tabrmd0"
-
     # Normal workflow follows
     #sudo apt-get -qq update
     sudo apt-get -qq install ccache libbz2-dev liblzma-dev libsqlite3-dev
 
     if [ "$TARGET" = "valgrind" ] || [ "$TARGET" = "valgrind-full" ]; then
         # (l)ist mode (avoiding https://github.com/actions/runner-images/issues/9996)
-        sudo NEEDRESTART_MODE=l apt-get -qq install valgrind
+        sudo NEEDRESTART_MODE=l apt-get -qq install valgrind "$tpm2_specific_packages"
+        echo "BOTAN_TPM2_ENABLED=1" >> "$GITHUB_ENV"
 
     elif [ "$TARGET" = "static" ]; then
-        sudo apt-get -qq install $tpm2_specific_packages
+        sudo apt-get -qq install "$tpm2_specific_packages"
         echo "BOTAN_TPM2_ENABLED=1" >> "$GITHUB_ENV"
 
     elif [ "$TARGET" = "shared" ]; then
-        sudo apt-get -qq install libboost-dev $tpm2_specific_packages
+        sudo apt-get -qq install libboost-dev "$tpm2_specific_packages"
         echo "BOTAN_TPM2_ENABLED=1" >> "$GITHUB_ENV"
 
     elif [ "$TARGET" = "examples" ] || [ "$TARGET" = "tlsanvil" ] || [ "$TARGET" = "clang-tidy" ] ; then
@@ -123,7 +123,7 @@ if type -p "apt-get"; then
             curl -L https://coveralls.io/coveralls-linux.tar.gz | tar -xz -C /usr/local/bin
         fi
 
-        sudo apt-get -qq install softhsm2 libtspi-dev libboost-dev $tpm2_specific_packages
+        sudo apt-get -qq install softhsm2 libtspi-dev libboost-dev "$tpm2_specific_packages"
         echo "BOTAN_TPM2_ENABLED=1" >> "$GITHUB_ENV"
 
         echo "$HOME/.local/bin" >> "$GITHUB_PATH"

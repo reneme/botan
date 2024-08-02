@@ -447,6 +447,12 @@ def determine_flags(target, target_os, target_cpu, target_cc, cc_bin, ccache,
             if 'BOTAN_TPM2_ENABLED' in os.environ:
                 flags += ['--with-tpm2']
 
+                if is_running_in_github_actions():
+                    test_cmd += ["--tpm2-tcti-name=${BOTAN_TPM2_TCTI_NAME}",
+                                 "--tpm2-tcti-conf=${BOTAN_TPM2_TCTI_CONF}",
+                                 "--tpm2-persistent-rsa-handle=${BOTAN_TPM2_PERSISTENT_RSA_KEY_HANDLE}",
+                                 "--tpm2-persistent-auth-value=${BOTAN_TPM2_PERSISTENT_KEY_AUTH_VALUE}"]
+
         if target in ['coverage']:
             flags += ['--with-tpm']
             test_cmd += ['--run-online-tests']

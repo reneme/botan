@@ -48,6 +48,13 @@ echo "Starting TPM2 resource manager..."
 tpm2-abrmd --tcti=swtpm --session --dbus-name="${dbus_name}" &
 echo "Resource manager running as PID: $!"
 
+echo "Waiting a bit..."
+sleep 1
+
+echo "List the dbus names..."
+dbus-send --session --dest=org.freedesktop.DBus --type=method_call --print-reply \
+    /org/freedesktop/DBus org.freedesktop.DBus.ListNames
+
 echo "Create a key to play with..."
 tpm2_createprimary --tcti="$tcti" -C e -g sha256 -G rsa -c $tmp_dir/primary.ctx
 tpm2_create --tcti="$tcti" -C $tmp_dir/primary.ctx -G rsa -u $tmp_dir/rsa.pub -r $tmp_dir/rsa.priv -p $test_pwd

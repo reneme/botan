@@ -28,7 +28,7 @@ class Session;
 
 namespace detail {
 
-class SessionHandle final {
+class BOTAN_UNSTABLE_API SessionHandle final {
    public:
       SessionHandle() = default;
 

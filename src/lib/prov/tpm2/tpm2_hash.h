@@ -20,7 +20,7 @@
 
 namespace Botan::TPM2 {
 
-class HashFunction final : public Botan::HashFunction {
+class BOTAN_TEST_API HashFunction final : public Botan::HashFunction {
    public:
       HashFunction(std::shared_ptr<Context> ctx, std::string_view algorithm, SessionBundle sessions = {});
 

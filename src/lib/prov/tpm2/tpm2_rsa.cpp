@@ -142,7 +142,7 @@ class RSA_Signature_Operation : public PK_Ops::Signature {
 
    public:
       RSA_Signature_Operation(const Object& object, const SessionBundle& sessions, std::string_view padding) :
-            RSA_Signature_Operation(object, sessions, select_scheme(object.context(), sessions, padding)){};
+            RSA_Signature_Operation(object, sessions, select_scheme(object.context(), sessions, padding)) {}
 
       void update(std::span<const uint8_t> msg) override { m_hash.update(msg); }
 
@@ -199,7 +199,7 @@ class RSA_Verification_Operation : public PK_Ops::Verification {
 
    public:
       RSA_Verification_Operation(const Object& object, const SessionBundle& sessions, std::string_view padding) :
-            RSA_Verification_Operation(object, sessions, select_scheme(object.context(), sessions, padding)){};
+            RSA_Verification_Operation(object, sessions, select_scheme(object.context(), sessions, padding)) {}
 
       void update(std::span<const uint8_t> msg) override { m_hash.update(msg); }
 
@@ -207,19 +207,19 @@ class RSA_Verification_Operation : public PK_Ops::Verification {
          auto [digest, validation] = m_hash.final_with_ticket();
 
          const auto signature = [&]() -> TPMT_SIGNATURE {
-            TPMT_SIGNATURE signature;
-            signature.sigAlg = m_scheme.scheme;
-            signature.signature.any.hashAlg = m_hash.type();
+            TPMT_SIGNATURE sig;
+            sig.sigAlg = m_scheme.scheme;
+            sig.signature.any.hashAlg = m_hash.type();
 
-            if(signature.sigAlg == TPM2_ALG_RSASSA) {
-               copy_into(signature.signature.rsassa.sig, sig_data);
-            } else if(signature.sigAlg == TPM2_ALG_RSAPSS) {
-               copy_into(signature.signature.rsapss.sig, sig_data);
+            if(sig.sigAlg == TPM2_ALG_RSASSA) {
+               copy_into(sig.signature.rsassa.sig, sig_data);
+            } else if(sig.sigAlg == TPM2_ALG_RSAPSS) {
+               copy_into(sig.signature.rsapss.sig, sig_data);
             } else {
-               throw Invalid_State(fmt("Requested an unexpected signature scheme {}", signature.sigAlg));
+               throw Invalid_State(fmt("Requested an unexpected signature scheme {}", sig.sigAlg));
             }
 
-            return signature;
+            return sig;
          }();
 
          // If the signature is not valid, this returns TPM2_RC_SIGNATURE.

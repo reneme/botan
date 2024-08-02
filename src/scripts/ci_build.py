@@ -448,10 +448,10 @@ def determine_flags(target, target_os, target_cpu, target_cc, cc_bin, ccache,
                 flags += ['--with-tpm2']
 
                 if is_running_in_github_actions():
-                    test_cmd += ["--tpm2-tcti-name=${BOTAN_TPM2_TCTI_NAME}",
-                                 "--tpm2-tcti-conf=${BOTAN_TPM2_TCTI_CONF}",
-                                 "--tpm2-persistent-rsa-handle=${BOTAN_TPM2_PERSISTENT_RSA_KEY_HANDLE}",
-                                 "--tpm2-persistent-auth-value=${BOTAN_TPM2_PERSISTENT_KEY_AUTH_VALUE}"]
+                    test_cmd += ["--tpm2-tcti-name=%s" % os.getenv('BOTAN_TPM2_TCTI_NAME'),
+                                 "--tpm2-tcti-conf=%s" % os.getenv('BOTAN_TPM2_TCTI_CONF'),
+                                 "--tpm2-persistent-rsa-handle=%s" % os.getenv('BOTAN_TPM2_PERSISTENT_RSA_KEY_HANDLE'),
+                                 "--tpm2-persistent-auth-value=%s" % os.getenv('BOTAN_TPM2_PERSISTENT_KEY_AUTH_VALUE')]
 
         if target in ['coverage']:
             flags += ['--with-tpm']
@@ -844,6 +844,12 @@ def main(args=None):
         python_tests = [os.path.join(root_dir, 'src/scripts/test_python.py')]
         if root_dir != '.':
             python_tests.append('--test-data-dir=%s' % root_dir)
+
+        if is_running_in_github_actions() and 'BOTAN_TPM2_ENABLED' in os.environ:
+            python_tests.extend(["--tpm2-tcti-name=%s" % os.getenv('BOTAN_TPM2_TCTI_NAME'),
+                                 "--tpm2-tcti-conf=%s" % os.getenv('BOTAN_TPM2_TCTI_CONF'),
+                                 "--tpm2-persistent-rsa-handle=%s" % os.getenv('BOTAN_TPM2_PERSISTENT_RSA_KEY_HANDLE'),
+                                 "--tpm2-persistent-auth-value=%s" % os.getenv('BOTAN_TPM2_PERSISTENT_KEY_AUTH_VALUE')])
 
         if target in ['shared', 'coverage'] and not (options.os == 'windows' and options.cpu == 'x86'):
             cmds.append([py_interp, '-b'] + python_tests)

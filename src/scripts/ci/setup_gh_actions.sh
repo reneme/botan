@@ -17,7 +17,13 @@ ARCH="$2"
 SCRIPT_LOCATION=$(cd "$(dirname "$0")"; pwd)
 
 if type -p "apt-get"; then
-    tpm2_specific_packages="tpm2-tools libtss2-dev swtpm swtpm-tools tpm2-abrmd libtss2-tcti-tabrmd0"
+    tpm2_specific_packages=("libtss2-dev"           # TPM2-TSS library (to program against)
+                            "tpm2-tools"            # CLI tools to interact with the TPM
+                            "swtpm"                 # TPM 2.0 simulator
+                            "swtpm-tools"           # CLI tools to set up the TPM simulator
+                            "tpm2-abrmd"            # user-space resource manager for TPM 2.0
+                            "libtss2-tcti-tabrmd0"  # TCTI (TPM Command Transmission Interface) for the user-space resource manager
+                            )
 
     if [ "$(lsb_release -sr)" = "22.04" ]; then
         # Hack to deal with https://github.com/actions/runner-images/issues/8659
@@ -32,15 +38,15 @@ if type -p "apt-get"; then
 
     if [ "$TARGET" = "valgrind" ] || [ "$TARGET" = "valgrind-full" ]; then
         # (l)ist mode (avoiding https://github.com/actions/runner-images/issues/9996)
-        sudo NEEDRESTART_MODE=l apt-get -qq install valgrind "$tpm2_specific_packages"
+        sudo NEEDRESTART_MODE=l apt-get -qq install valgrind $tpm2_specific_packages
         echo "BOTAN_TPM2_ENABLED=1" >> "$GITHUB_ENV"
 
     elif [ "$TARGET" = "static" ]; then
-        sudo apt-get -qq install "$tpm2_specific_packages"
+        sudo apt-get -qq install $tpm2_specific_packages
         echo "BOTAN_TPM2_ENABLED=1" >> "$GITHUB_ENV"
 
     elif [ "$TARGET" = "shared" ]; then
-        sudo apt-get -qq install libboost-dev "$tpm2_specific_packages"
+        sudo apt-get -qq install libboost-dev $tpm2_specific_packages
         echo "BOTAN_TPM2_ENABLED=1" >> "$GITHUB_ENV"
 
     elif [ "$TARGET" = "examples" ] || [ "$TARGET" = "tlsanvil" ] || [ "$TARGET" = "clang-tidy" ] ; then
@@ -123,7 +129,7 @@ if type -p "apt-get"; then
             curl -L https://coveralls.io/coveralls-linux.tar.gz | tar -xz -C /usr/local/bin
         fi
 
-        sudo apt-get -qq install softhsm2 libtspi-dev libboost-dev "$tpm2_specific_packages"
+        sudo apt-get -qq install softhsm2 libtspi-dev libboost-dev $tpm2_specific_packages
         echo "BOTAN_TPM2_ENABLED=1" >> "$GITHUB_ENV"
 
         echo "$HOME/.local/bin" >> "$GITHUB_PATH"

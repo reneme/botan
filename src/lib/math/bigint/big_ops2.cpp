@@ -21,7 +21,7 @@
  * configure.py to allow cpu-specific libs in the compiler info or os+cc+arch-specific libs in the
  * module info. Hopefully this can go away when the above Clang issue is fixed anyway.
 */
-#if defined(_MSC_VER) && defined(_WIN64) && defined(__clang__)
+#if defined(BOTAN_BUILD_COMPILER_IS_CLANGCL)
    #pragma comment(lib, "clang_rt.builtins-x86_64.lib")
 #endif
 

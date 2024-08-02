@@ -1,4 +1,4 @@
-macro_name CLANG
+macro_name CLANGCL
 
 minimum_supported_version 14.0
 

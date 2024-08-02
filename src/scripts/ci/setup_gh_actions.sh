@@ -16,13 +16,6 @@ ARCH="$2"
 
 SCRIPT_LOCATION=$(cd "$(dirname "$0")"; pwd)
 
-start_swtpm() {
-    tpm2_state="/tmp/swtpm2"
-    mkdir $tpm2_state
-    swtpm socket --tpmstate dir=$tpm2_state --tpm2 --ctrl type=tcp,port=2322 --server type=tcp,port=2321 --flags not-need-init --daemon
-    tpm2_startup --tcti swtpm --clear
-}
-
 if type -p "apt-get"; then
 
     if [ "$(lsb_release -sr)" = "22.04" ]; then
@@ -32,6 +25,8 @@ if type -p "apt-get"; then
         sudo apt-get install -y --allow-downgrades libc6=2.35-* libc6-dev=2.35-* libstdc++6=12.3.0-* libgcc-s1=12.3.0-*
     fi
 
+    tpm2_specific_packages="tpm2-tools libtss2-dev swtpm swtpm-tools tpm2-abrmd libtss2-tcti-tabrmd0"
+
     # Normal workflow follows
     #sudo apt-get -qq update
     sudo apt-get -qq install ccache libbz2-dev liblzma-dev libsqlite3-dev
@@ -40,9 +35,13 @@ if type -p "apt-get"; then
         # (l)ist mode (avoiding https://github.com/actions/runner-images/issues/9996)
         sudo NEEDRESTART_MODE=l apt-get -qq install valgrind
 
+    elif [ "$TARGET" = "static"]; then
+        sudo apt-get -qq install $tpm2_specific_packages
+        echo "BOTAN_TPM2_ENABLED=1" >> "$GITHUB_ENV"
+
     elif [ "$TARGET" = "shared" ]; then
-        sudo apt-get -qq install libboost-dev tpm2-tools libtss2-dev swtpm
-        start_swtpm
+        sudo apt-get -qq install libboost-dev $tpm2_specific_packages
+        echo "BOTAN_TPM2_ENABLED=1" >> "$GITHUB_ENV"
 
     elif [ "$TARGET" = "examples" ] || [ "$TARGET" = "tlsanvil" ] || [ "$TARGET" = "clang-tidy" ] ; then
         sudo apt-get -qq install libboost-dev
@@ -124,7 +123,8 @@ if type -p "apt-get"; then
             curl -L https://coveralls.io/coveralls-linux.tar.gz | tar -xz -C /usr/local/bin
         fi
 
-        sudo apt-get -qq install softhsm2 libtspi-dev libboost-dev tpm2-tools libtss2-dev swtpm
+        sudo apt-get -qq install softhsm2 libtspi-dev libboost-dev $tpm2_specific_packages
+        echo "BOTAN_TPM2_ENABLED=1" >> "$GITHUB_ENV"
 
         echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
@@ -133,8 +133,6 @@ if type -p "apt-get"; then
 
         softhsm2-util --init-token --free --label test --pin 123456 --so-pin 12345678
         echo "PKCS11_LIB=/usr/lib/softhsm/libsofthsm2.so" >> "$GITHUB_ENV"
-
-        start_swtpm
 
     elif [ "$TARGET" = "docs" ]; then
         sudo apt-get -qq install doxygen python3-docutils python3-sphinx

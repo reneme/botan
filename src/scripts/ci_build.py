@@ -443,7 +443,8 @@ def determine_flags(target, target_os, target_cpu, target_cc, cc_bin, ccache,
 
         if target_os == 'linux':
             flags += ['--with-lzma']
-            if target in ['coverage', 'sanitizer', 'shared']:
+
+            if 'BOTAN_TPM2_ENABLED' in os.environ:
                 flags += ['--with-tpm2']
 
         if target in ['coverage']:

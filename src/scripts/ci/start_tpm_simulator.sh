@@ -1,11 +1,22 @@
 #/bin/bash
 
-set -ex
+#
+# Sets up a TPM2 simulator that is running behind a user-space TPM2 resource
+# manager. Applications can discover the resource manager via D-Bus and use
+# the resource manager's TCTI (aka. tabrmd).
+#
+# The simulator is populated with persistent keys for testing.
+#
 
-tmp_dir="/tmp/mytpm2"
+set -e
+
+tmp_dir="${1:-/tmp/mytpm2}"
 dbus_name="net.randombit.botan.tabrmd"
-tcti="tabrmd:bus_name=${dbus_name},bus_type=session"
+tcti_name="tabrmd"
+tcti_conf="bus_name=${dbus_name},bus_type=session"
+tcti="${tcti_name}:${tcti_conf}"
 test_pwd="password"
+persistent_rsa_key_handle="0x81000008"
 
 echo "Setting up TPM..."
 swtpm_setup --create-config-files overwrite
@@ -36,7 +47,16 @@ echo "Create a key to play with..."
 tpm2_createprimary --tcti="$tcti" -C e -g sha256 -G rsa -c $tmp_dir/primary.ctx
 tpm2_create --tcti="$tcti" -C $tmp_dir/primary.ctx -G rsa -u $tmp_dir/rsa.pub -r $tmp_dir/rsa.priv -p $test_pwd
 tpm2_load --tcti="$tcti" -C $tmp_dir/primary.ctx -u $tmp_dir/rsa.pub -r $tmp_dir/rsa.priv -c $tmp_dir/rsa.ctx
-tpm2_evictcontrol --tcti="$tcti" -C o -c $tmp_dir/rsa.ctx 0x81000008
+tpm2_evictcontrol --tcti="$tcti" -C o -c $tmp_dir/rsa.ctx $persistent_rsa_key_handle
 
 echo "Effectively disable dictionary attack lockout..."
 tpm2_dictionarylockout --tcti="$tcti" --setup-parameters --max-tries=1000 --recovery-time=1 --lockout-recovery-time=1
+
+# check that we're running on GitHub Actions
+if [ -n "$GITHUB_ACTIONS" ]; then
+    echo "Setting up GitHub Actions environment..."
+    echo "BOTAN_TPM2_TCTI_NAME=$tcti_name"                                 >> $GITHUB_ENV
+    echo "BOTAN_TPM2_TCTI_CONF=$tcti_conf"                                 >> $GITHUB_ENV
+    echo "BOTAN_TPM2_PERSISTENT_KEY_AUTH_VALUE=$test_pwd"                  >> $GITHUB_ENV
+    echo "BOTAN_TPM2_PERSISTENT_RSA_KEY_HANDLE=$persistent_rsa_key_handle" >> $GITHUB_ENV
+fi

@@ -136,8 +136,10 @@ bool Context::in_persistent_handles(uint32_t persistent_handle) const {
 }
 
 Context::~Context() {
-   Esys_Finalize(&m_impl->m_ctx);
-   Tss2_TctiLdr_Finalize(&m_impl->m_tcti_ctx);
+   if(m_impl) {
+      Esys_Finalize(&m_impl->m_ctx);
+      Tss2_TctiLdr_Finalize(&m_impl->m_tcti_ctx);
+   }
 }
 
 }  // namespace Botan::TPM2

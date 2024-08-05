@@ -50,6 +50,10 @@ jobs:
             arch: x86_64
             host_os: windows-2022
             compiler: clangcl
+          - target: static
+            arch: x86
+            host_os: windows-2022
+            compiler: clangcl
 
     runs-on: ${{ matrix.host_os }}
 

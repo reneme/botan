@@ -10,12 +10,15 @@
 #define BOTAN_TPM2_CONTEXT_H_
 
 #include <botan/exceptn.h>
+#include <botan/rng.h>
 
 #include <memory>
 #include <optional>
 #include <vector>
 
 namespace Botan::TPM2 {
+
+struct CryptoCallbackState;
 
 class BOTAN_PUBLIC_API(3, 6) Context final : public std::enable_shared_from_this<Context> {
    public:
@@ -40,6 +43,23 @@ class BOTAN_PUBLIC_API(3, 6) Context final : public std::enable_shared_from_this
       Context& operator=(const Context&) = delete;
       Context& operator=(Context&& ctx) noexcept = default;
 
+      /**
+       * Overrides the TSS2's crypto callbacks with Botan's functionality.
+       *
+       * @param rng  the RNG to use for the crypto operations
+       * @throws Not_Implemented if the TPM2-TSS does not support crypto callbacks
+       * @sa supports_botan_crypto_backend()
+       */
+      void use_botan_crypto_backend(const std::shared_ptr<Botan::RandomNumberGenerator>& rng);
+
+      /**
+       * Checks if the TSS2 supports registering Botan's crypto backend at runtime.
+       * Older versions of the TSS2 do not support this feature ( 4.0.0), also
+       * Botan may be compiled without support for TSS' crypto backend.
+       * @return true if the TSS2 supports Botan's crypto backend
+       */
+      static bool supports_botan_crypto_backend();
+
       /// @return an ESYS_CONTEXT* for use in other TPM2 functions.
       void* inner_context_object();
 
@@ -57,6 +77,11 @@ class BOTAN_PUBLIC_API(3, 6) Context final : public std::enable_shared_from_this
    private:
       Context(const char* tcti_nameconf);
       Context(const char* tcti_name, const char* tcti_conf);
+
+#if defined(BOTAN_HAS_TPM2_CRYPTO_BACKEND)
+      friend void enable_crypto_callbacks(const std::shared_ptr<Context>&);
+      CryptoCallbackState& crypto_callback_state();
+#endif
 
    private:
       struct Impl;  // PImpl to avoid TPM2-TSS includes in this header

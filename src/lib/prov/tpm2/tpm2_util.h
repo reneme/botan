@@ -23,6 +23,20 @@
 #include <memory>
 #include <span>
 
+#if defined(TSS2_BASE_RC_CALLBACK_NULL)
+   // The crypto callbacks were added in tpm2-tss 4.0.0. There's no obvious way
+   // to get the version of the TSS from its headers, instead the existence of
+   // TSS2_BASE_RC_CALLBACK_NULL indicates we have 4.0.0 or later.
+   #define BOTAN_TSS2_SUPPORTS_CRYPTO_CALLBACKS
+#endif
+
+#if defined(TPM2_RC_FW_LIMITED)
+   // The crypto callbacks for SM4 were added in tpm2-tss 4.1.0. There's no
+   // obvious way to get the version of the TSS from its headers, instead the
+   // existence of TPM2_RC_FW_LIMITED indicates we have 4.1.0 or later.
+   #define BOTAN_TSS2_SUPPORTS_SM4_IN_CRYPTO_CALLBACKS
+#endif
+
 namespace Botan::TPM2 {
 
 /**

@@ -45,6 +45,10 @@ std::shared_ptr<Botan::TPM2::Context> get_tpm2_context() {
       return {};
    }
 
+   if(ctx->supports_botan_crypto_backend()) {
+      ctx->use_botan_crypto_backend(Test::new_rng(__func__));
+   }
+
    return ctx;
 }
 

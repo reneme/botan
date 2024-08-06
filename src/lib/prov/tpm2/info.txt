@@ -15,6 +15,7 @@ all -> tss2-esys,tss2-rc,tss2-tctildr
 
 <requires>
 rng
+rsa
 </requires>
 
 <header:internal>

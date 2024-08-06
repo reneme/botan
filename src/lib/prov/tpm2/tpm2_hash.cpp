@@ -10,6 +10,7 @@
 
 #include <botan/internal/fmt.h>
 #include <botan/internal/stl_util.h>
+#include <botan/internal/tpm2_algo_mappings.h>
 
 #include <tss2/tss2_esys.h>
 
@@ -18,20 +19,8 @@ namespace Botan::TPM2 {
 namespace {
 
 TPMI_ALG_HASH get_tpm2_hash_type(std::string_view hash_name) {
-   if(hash_name == "SHA-1") {
-      return TPM2_ALG_SHA1;
-   } else if(hash_name == "SHA-256") {
-      return TPM2_ALG_SHA256;
-   } else if(hash_name == "SHA-384") {
-      return TPM2_ALG_SHA384;
-   } else if(hash_name == "SHA-512") {
-      return TPM2_ALG_SHA512;
-   } else if(hash_name == "SHA-3(256)") {
-      return TPM2_ALG_SHA3_256;
-   } else if(hash_name == "SHA-3(384)") {
-      return TPM2_ALG_SHA3_384;
-   } else if(hash_name == "SHA-3(512)") {
-      return TPM2_ALG_SHA3_512;
+   if(auto hash_id = hash_algo_botan_to_tss2(hash_name)) {
+      return hash_id.value();
    }
 
    throw Lookup_Error("TPM 2.0 Hash ", hash_name);
@@ -47,21 +36,8 @@ HashFunction::HashFunction(std::shared_ptr<Context> ctx, std::string_view algori
 }
 
 std::string HashFunction::name() const {
-   switch(m_hash_type) {
-      case TPM2_ALG_SHA1:
-         return "SHA-1";
-      case TPM2_ALG_SHA256:
-         return "SHA-256";
-      case TPM2_ALG_SHA384:
-         return "SHA-384";
-      case TPM2_ALG_SHA512:
-         return "SHA-512";
-      case TPM2_ALG_SHA3_256:
-         return "SHA-3(256)";
-      case TPM2_ALG_SHA3_384:
-         return "SHA-3(384)";
-      case TPM2_ALG_SHA3_512:
-         return "SHA-3(512)";
+   if(auto hash_name = hash_algo_tss2_to_botan(m_hash_type)) {
+      return hash_name.value();
    }
 
    throw Invalid_State("TPM 2.0 hash object with unexpected hash type");

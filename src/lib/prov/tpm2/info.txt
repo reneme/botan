@@ -18,6 +18,7 @@ rng
 </requires>
 
 <header:internal>
+tpm2_algo_mappings.h
 tpm2_hash.h
 tpm2_util.h
 </header:internal>

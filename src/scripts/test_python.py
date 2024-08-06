@@ -443,6 +443,12 @@ ofvkP1EDmpx50fHLawIDAQAB
             else:
                 raise ex
 
+        if botan.TPM2Context.supports_botan_crypto_backend():
+            # Constructing this RNG in-place is deliberate to ensure that the
+            # TPM2 context wrapper retains a reference to the RNG to prolong
+            # its lifetime.
+            tpm2_ctx.enable_botan_crypto_backend(botan.RandomNumberGenerator())
+
         session = botan.TPM2UnauthenticatedSession(tpm2_ctx)
         priv = botan.PrivateKey.load_persistent_on_tpm2(tpm2_ctx,
                                                         ARGS.tpm2_persistent_rsa_handle,

@@ -2202,6 +2202,13 @@ typedef struct botan_tpm2_ctx_struct* botan_tpm2_ctx_t;
 typedef struct botan_tpm2_session_struct* botan_tpm2_session_t;
 
 /**
+ * Checks if Botan's TSS2 crypto backend can be used in this build
+ * @returns 1 if the crypto backend can be enabled
+ */
+BOTAN_FFI_EXPORT(3, 6)
+int botan_tpm2_supports_crypto_backend();
+
+/**
 * Initialize a TPM2 context
 * @param ctx_out output TPM2 context
 * @param tcti_nameconf TCTI config (may be nullptr)
@@ -2218,6 +2225,18 @@ BOTAN_FFI_EXPORT(3, 6) int botan_tpm2_ctx_init(botan_tpm2_ctx_t* ctx_out, const 
 */
 BOTAN_FFI_EXPORT(3, 6)
 int botan_tpm2_ctx_init_ex(botan_tpm2_ctx_t* ctx_out, const char* tcti_name, const char* tcti_conf);
+
+/**
+ * Enable Botan's TSS2 crypto backend that replaces the cryptographic functions
+ * required for the communication with the TPM with implementations provided
+ * by Botan instead of using TSS' defaults OpenSSL or mbedTLS.
+ * Note that the provided @p rng should not be dependent on the TPM and the
+ * caller must ensure that it remains usable for the lifetime of the @p ctx.
+ * @param ctx TPM2 context
+ * @param rng random number generator to be used by the crypto backend
+ */
+BOTAN_FFI_EXPORT(3, 6)
+int botan_tpm2_ctx_enable_crypto_backend(botan_tpm2_ctx_t ctx, botan_rng_t rng);
 
 /**
 * Frees all resouces of a TPM2 context

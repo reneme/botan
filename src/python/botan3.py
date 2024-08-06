@@ -505,8 +505,10 @@ def _set_prototypes(dll):
             [c_size_t, c_size_t, POINTER(c_size_t), POINTER(c_char_p), c_size_t, POINTER(c_char_p)])
 
     # TPM2
+    ffi_api(dll.botan_tpm2_supports_crypto_backend, [])
     ffi_api(dll.botan_tpm2_ctx_init, [c_void_p, c_char_p], [-40])
     ffi_api(dll.botan_tpm2_ctx_init_ex, [c_void_p, c_char_p, c_char_p], [-40])
+    ffi_api(dll.botan_tpm2_ctx_enable_crypto_backend, [c_void_p, c_void_p])
     ffi_api(dll.botan_tpm2_ctx_destroy, [c_void_p], [-40])
     ffi_api(dll.botan_tpm2_rng_init, [c_void_p, c_void_p])
     ffi_api(dll.botan_tpm2_unauthenticated_session_init, [c_void_p, c_void_p])
@@ -668,7 +670,19 @@ class TPM2Context(TPM2Object):
             rc = _DLL.botan_tpm2_ctx_init(byref(obj), _ctype_str(tcti_name_maybe_with_conf))
         if rc == -40: # 'Not Implemented'
             raise BotanException("TPM2 is not implemented in this build configuration", rc)
+        self.rng_ = None
         super().__init__(obj, _DLL.botan_tpm2_ctx_destroy)
+
+    @staticmethod
+    def supports_botan_crypto_backend() -> bool:
+        rc = _DLL.botan_tpm2_supports_crypto_backend()
+        return rc == 1
+
+    def enable_botan_crypto_backend(self, rng):
+        # By keeping a reference to the passed-in RNG object, we make sure
+        # that the underlying object lives at least as long as this context.
+        self.rng_ = rng
+        _DLL.botan_tpm2_ctx_enable_crypto_backend(self.handle_(), self.rng_.handle_())
 
 class TPM2Session(TPM2Object):
     def __init__(self, obj: c_void_p):

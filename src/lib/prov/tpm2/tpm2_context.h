@@ -46,6 +46,12 @@ class BOTAN_PUBLIC_API(3, 6) Context final : public std::enable_shared_from_this
       /**
        * Overrides the TSS2's crypto callbacks with Botan's functionality.
        *
+       * This replaces all cryptographic functionality required for the
+       * communication with the TPM by botan's implementations. The TSS2
+       * would otherwise use OpenSSL or mbedTLS.
+       *
+       * Note that the provided @p rng should not be dependent on the TPM.
+       *
        * @param rng  the RNG to use for the crypto operations
        * @throws Not_Implemented if the TPM2-TSS does not support crypto callbacks
        * @sa supports_botan_crypto_backend()
@@ -58,7 +64,7 @@ class BOTAN_PUBLIC_API(3, 6) Context final : public std::enable_shared_from_this
        * Botan may be compiled without support for TSS' crypto backend.
        * @return true if the TSS2 supports Botan's crypto backend
        */
-      static bool supports_botan_crypto_backend();
+      static bool supports_botan_crypto_backend() noexcept;
 
       /// @return an ESYS_CONTEXT* for use in other TPM2 functions.
       void* inner_context_object();

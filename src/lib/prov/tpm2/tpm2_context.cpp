@@ -34,7 +34,7 @@ struct Context::Impl {
 #endif
 };
 
-bool Context::supports_botan_crypto_backend() {
+bool Context::supports_botan_crypto_backend() noexcept {
 #if defined(BOTAN_TSS2_SUPPORTS_CRYPTO_CALLBACKS) and defined(BOTAN_HAS_TPM2_CRYPTO_BACKEND)
    return true;
 #else

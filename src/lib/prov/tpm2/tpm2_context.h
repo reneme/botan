@@ -20,6 +20,9 @@ namespace Botan::TPM2 {
 
 struct CryptoCallbackState;
 
+class RSA_PrivateKey;  // TODO: remove, once a suitable TPM2-key base class is available
+class SessionBundle;
+
 class BOTAN_PUBLIC_API(3, 6) Context final : public std::enable_shared_from_this<Context> {
    public:
       /**
@@ -82,6 +85,12 @@ class BOTAN_PUBLIC_API(3, 6) Context final : public std::enable_shared_from_this
 
       /// @return true if @param persistent_handle is in the list of persistent handles
       bool in_persistent_handles(uint32_t persistent_handle) const;
+
+      // TODO: This should return a TPM2::Private_Key base class of some sort
+      // TODO: Currently this assumes that the SRK is a persistent object,
+      //       this assumption may not hold forever.
+      std::unique_ptr<RSA_PrivateKey> storage_root_key(std::span<const uint8_t> auth_value,
+                                                       const SessionBundle& sessions);
 
    private:
       Context(const char* tcti_nameconf);

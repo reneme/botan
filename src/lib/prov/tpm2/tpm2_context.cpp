@@ -8,6 +8,7 @@
 
 #include <botan/tpm2_context.h>
 
+#include <botan/tpm2_rsa.h>
 #include <botan/tpm2_session.h>
 
 #include <botan/internal/fmt.h>
@@ -139,6 +140,15 @@ std::string Context::manufacturer() const {
 
 size_t Context::max_random_bytes_per_request() const {
    return get_tpm_property(m_impl->m_ctx, TPM2_PT_MAX_DIGEST);
+}
+
+std::unique_ptr<RSA_PrivateKey> Context::storage_root_key(std::span<const uint8_t> auth_value,
+                                                          const SessionBundle& sessions) {
+   // TODO: remove the SRK address magic number
+   // TODO: allow loading ECC-based keys as well
+   //       (probably by providing a generic 'from_persistent' function that
+   //       detects the key type automatically and returns a suitable object)
+   return RSA_PrivateKey::from_persistent(shared_from_this(), 0x81000001 /*SRK location*/, auth_value, sessions);
 }
 
 std::vector<uint32_t> Context::persistent_handles() const {

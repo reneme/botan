@@ -80,6 +80,34 @@ std::vector<Test::Result> test_tpm2_properties() {
    };
 }
 
+std::vector<Test::Result> test_tpm2_context() {
+   auto ctx = get_tpm2_context();
+   if(!ctx) {
+      return {bail_out()};
+   }
+
+   const auto persistent_key_id = Test::options().tpm2_persistent_rsa_handle();
+
+   return {
+      CHECK("Persistent handles",
+            [&](Test::Result& result) {
+               const auto handles = ctx->persistent_handles();
+               result.confirm("At least one persistent handle", !handles.empty());
+               result.confirm("SRK is in the list", Botan::value_exists(handles, 0x81000001));
+               result.confirm("Test private key is in the list", Botan::value_exists(handles, persistent_key_id));
+            }),
+
+      CHECK("Fetch Storage Root Key",
+            [&](Test::Result& result) {
+               auto srk = ctx->storage_root_key({}, {});
+               result.require("SRK is not null", srk != nullptr);
+               result.test_eq("Algo", srk->algo_name(), "RSA");
+               result.test_eq("Key size", srk->key_length(), 2048);
+               result.confirm("Has persistent handle", srk->handles().has_persistent_handle());
+            }),
+   };
+}
+
 std::vector<Test::Result> test_tpm2_rng() {
    auto ctx = get_tpm2_context();
    if(!ctx) {
@@ -289,6 +317,38 @@ std::vector<Test::Result> test_tpm2_rsa() {
                result.test_throws<Botan::TPM2::Error>("Fail with wrong password",
                                                       [&] { signer.sign_message(message, null_rng); });
             }),
+
+      CHECK("Cannot export private key blob from persistent key",
+            [&](Test::Result& result) {
+               auto key =
+                  load_persistent<Botan::TPM2::RSA_PrivateKey>(result, ctx, persistent_key_id, password, session);
+               result.test_throws<Botan::Not_Implemented>("Export private key blob not implemented",
+                                                          [&] { key->private_key_bits(); });
+            }),
+
+      CHECK("Create a new transient key",
+            [&](Test::Result& result) {
+               auto srk = ctx->storage_root_key({}, {});
+
+               const std::array<uint8_t, 6> secret = {'s', 'e', 'c', 'r', 'e', 't'};
+
+               auto sk = Botan::TPM2::RSA_PrivateKey(ctx, *srk, secret, session, 2048);
+               result.confirm("is transient", sk.handles().has_transient_handle());
+               result.confirm("is not persistent", !sk.handles().has_persistent_handle());
+
+               const auto sk_blob = sk.private_key_bits();
+               const auto pk = sk.public_key();
+
+               // Perform a round-trip sign/verify test with the new key pair
+               std::vector<uint8_t> message = {'h', 'e', 'l', 'l', 'o'};
+               Botan::Null_RNG null_rng;
+               Botan::PK_Signer signer(sk, null_rng /* TPM takes care of this */, "PSS(SHA-256)");
+               const auto signature = signer.sign_message(message, null_rng);
+               result.require("signature is not empty", !signature.empty());
+
+               Botan::PK_Verifier verifier(*pk, "PSS(SHA-256)");
+               result.confirm("Signature is valid", verifier.verify_message(message, signature));
+            }),
    };
 }
 
@@ -403,6 +463,7 @@ std::vector<Test::Result> test_tpm2_hash() {
 }  // namespace
 
 BOTAN_REGISTER_TEST_FN("tpm2", "tpm2_props", test_tpm2_properties);
+BOTAN_REGISTER_TEST_FN("tpm2", "tpm2_ctx", test_tpm2_context);
 BOTAN_REGISTER_TEST_FN("tpm2", "tpm2_rng", test_tpm2_rng);
 BOTAN_REGISTER_TEST_FN("tpm2", "tpm2_rsa", test_tpm2_rsa);
 BOTAN_REGISTER_TEST_FN("tpm2", "tpm2_hash", test_tpm2_hash);

@@ -35,7 +35,7 @@ swtpm_setup --tpmstate $tmp_dir    \
             --create-platform-cert \
             --create-spk           \
             --overwrite --tpm2     \
-            --ecc --display
+            --display
 
 echo "Starting TPM2 simulator..."
 swtpm socket --tpmstate dir=$tmp_dir               \

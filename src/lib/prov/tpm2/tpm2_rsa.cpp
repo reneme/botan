@@ -22,6 +22,7 @@
 #include <botan/internal/workfactor.h>
 
 #include <tss2/tss2_esys.h>
+#include <tss2/tss2_mu.h>
 
 namespace Botan::TPM2 {
 
@@ -63,15 +64,17 @@ std::pair<TPMT_SIG_SCHEME, HashFunction> select_scheme(const std::shared_ptr<Con
            std::move(hash)};
 }
 
-BigInt n(const PublicInfo& pi) {
-   BOTAN_ASSERT_NONNULL(pi.pub);
-   return BigInt(as_span(pi.pub->publicArea.unique.rsa));
+BigInt n(const unique_esys_ptr<TPM2B_PUBLIC>& pub) {
+   BOTAN_ASSERT_NONNULL(pub);
+   BOTAN_ASSERT_NOMSG(pub->publicArea.type == TPM2_ALG_RSA);
+   return BigInt(as_span(pub->publicArea.unique.rsa));
 }
 
-BigInt e(const PublicInfo& pi) {
-   BOTAN_ASSERT_NONNULL(pi.pub);
+BigInt e(const unique_esys_ptr<TPM2B_PUBLIC>& pub) {
    // TPM2 may report 0 when the exponent is 'the default' (2^16 + 1)
-   const auto exponent = pi.pub->publicArea.parameters.rsaDetail.exponent;
+   BOTAN_ASSERT_NONNULL(pub);
+   BOTAN_ASSERT_NOMSG(pub->publicArea.type == TPM2_ALG_RSA);
+   const auto exponent = pub->publicArea.parameters.rsaDetail.exponent;
    return (exponent == 0) ? 65537 : exponent;
 }
 
@@ -103,6 +106,89 @@ Object make_persistent_object(const std::shared_ptr<Context>& ctx,
    return object;
 }
 
+RSA_PrivateKey::CreationData create_transient_key(const std::shared_ptr<Context>& ctx,
+                                                  const RSA_PrivateKey& parent,
+                                                  std::span<const uint8_t> auth_value,
+                                                  const SessionBundle& sessions,
+                                                  uint16_t keylength,
+                                                  uint32_t exponent) {
+   // TODO: Figure out how to use this properly. The Architecture Document
+   //       states that the key derivation incorporates the data in both
+   //       sensitive.sensitive.data and in public_template.unique.rsa.
+   //
+   // See Section 28.2 here:
+   // https://trustedcomputinggroup.org/wp-content/uploads/TCG_TPM2_r1p59_Part1_Architecture_pub.pdf
+   TPM2B_SENSITIVE_CREATE sensitive = {
+      .size = 0,
+      .sensitive =
+         {
+            .userAuth = copy_into<TPM2B_AUTH>(auth_value),
+            .data = init_empty<TPM2B_SENSITIVE_DATA>(),
+         },
+   };
+
+   TPMT_PUBLIC public_template = {
+      .type = TPM2_ALG_RSA,
+      .nameAlg = TPM2_ALG_SHA256,
+      .objectAttributes = (TPMA_OBJECT_USERWITHAUTH | TPMA_OBJECT_RESTRICTED | TPMA_OBJECT_FIXEDTPM |
+                           TPMA_OBJECT_FIXEDPARENT | TPMA_OBJECT_SENSITIVEDATAORIGIN) |
+                          TPMA_OBJECT_SIGN_ENCRYPT,
+      .authPolicy = init_empty<TPM2B_DIGEST>(),
+      .parameters =
+         {
+            .rsaDetail =
+               {
+                  .symmetric =
+                     {
+                        .algorithm = TPM2_ALG_NULL,
+                        .keyBits = {.aes = 256},
+                        .mode = {.aes = TPM2_ALG_CFB},
+                     },
+                  .scheme =
+                     {
+                        .scheme = TPM2_ALG_RSAPSS,
+                        .details = {.rsapss = {.hashAlg = TPM2_ALG_SHA256}},
+                     },
+                  .keyBits = keylength,
+                  .exponent = exponent,
+               },
+         },
+      // TODO: perhaps fill this somehow: see above...
+      .unique = {.rsa = init_empty<TPM2B_PUBLIC_KEY_RSA>()},
+   };
+
+   TPM2B_TEMPLATE generation_template = {};
+   size_t offset = 0;
+   check_rc("Tss2_MU_TPMT_PUBLIC_Marshal",
+            Tss2_MU_TPMT_PUBLIC_Marshal(&public_template, generation_template.buffer, sizeof(TPMT_PUBLIC), &offset));
+   generation_template.size = offset;
+
+   unique_esys_ptr<TPM2B_PRIVATE> private_bytes;
+   unique_esys_ptr<TPM2B_PUBLIC> public_info;
+
+   Object handle(ctx);
+   check_rc("Esys_CreateLoaded",
+            Esys_CreateLoaded(inner(ctx),
+                              parent.handles().transient_handle(),
+                              sessions[0],
+                              sessions[1],
+                              sessions[2],
+                              &sensitive,
+                              &generation_template,
+                              out_transient_handle(handle),
+                              out_ptr(private_bytes),
+                              out_ptr(public_info)));
+   BOTAN_ASSERT_NONNULL(private_bytes);
+   BOTAN_ASSERT_NOMSG(public_info->publicArea.type == TPM2_ALG_RSA);
+
+   return {
+      .handle = std::move(handle),
+      .private_blob = copy_into<std::vector<uint8_t>>(*private_bytes),
+      .n = n(public_info),
+      .e = e(public_info),
+   };
+}
+
 }  // namespace
 
 std::unique_ptr<RSA_PublicKey> RSA_PublicKey::from_persistent(const std::shared_ptr<Context>& ctx,
@@ -112,9 +198,19 @@ std::unique_ptr<RSA_PublicKey> RSA_PublicKey::from_persistent(const std::shared_
       new RSA_PublicKey(make_persistent_object(ctx, persistent_object_handle, {}, sessions), sessions));
 }
 
+RSA_PrivateKey::RSA_PrivateKey(const std::shared_ptr<Context>& ctx,
+                               const RSA_PrivateKey& parent,
+                               std::span<const uint8_t> auth_value,
+                               const SessionBundle& sessions,
+                               uint16_t keylength,
+                               std::optional<uint32_t> exponent) :
+      RSA_PrivateKey(
+         create_transient_key(ctx, parent, auth_value, sessions, keylength, exponent.value_or(0 /* TPM's default */)),
+         sessions) {}
+
 RSA_PublicKey::RSA_PublicKey(Object object, SessionBundle sessions) :
-      Botan::RSA_PublicKey(n(object._public_info(sessions, TPM2_ALG_RSA)),
-                           e(object._public_info(sessions, TPM2_ALG_RSA))),
+      Botan::RSA_PublicKey(n(object._public_info(sessions, TPM2_ALG_RSA).pub),
+                           e(object._public_info(sessions, TPM2_ALG_RSA).pub)),
       m_handle(std::move(object)),
       m_sessions(std::move(sessions)) {}
 
@@ -127,10 +223,16 @@ std::unique_ptr<RSA_PrivateKey> RSA_PrivateKey::from_persistent(const std::share
 }
 
 RSA_PrivateKey::RSA_PrivateKey(Object object, SessionBundle sessions) :
-      Botan::RSA_PublicKey(n(object._public_info(sessions, TPM2_ALG_RSA)),
-                           e(object._public_info(sessions, TPM2_ALG_RSA))),
+      Botan::RSA_PublicKey(n(object._public_info(sessions, TPM2_ALG_RSA).pub),
+                           e(object._public_info(sessions, TPM2_ALG_RSA).pub)),
       m_handle(std::move(object)),
       m_sessions(std::move(sessions)) {}
+
+RSA_PrivateKey::RSA_PrivateKey(RSA_PrivateKey::CreationData data, SessionBundle sessions) :
+      Botan::RSA_PublicKey(data.n, data.e),
+      m_handle(std::move(data.handle)),
+      m_sessions(std::move(sessions)),
+      m_private_blob(std::move(data.private_blob)) {}
 
 namespace {
 class RSA_Signature_Operation : public PK_Ops::Signature {
@@ -246,6 +348,15 @@ class RSA_Verification_Operation : public PK_Ops::Verification {
 };
 
 }  // namespace
+
+secure_vector<uint8_t> RSA_PrivateKey::private_key_bits() const {
+   if(m_handle.has_persistent_handle()) {
+      throw Not_Implemented("cannot export private key bits from a TPM2 key");
+   } else {
+      BOTAN_ASSERT_NOMSG(!m_private_blob.empty());
+      return Botan::lock(m_private_blob);
+   }
+}
 
 std::unique_ptr<PK_Ops::Verification> RSA_PublicKey::create_verification_op(std::string_view params,
                                                                             std::string_view provider) const {

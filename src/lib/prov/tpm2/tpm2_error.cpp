@@ -37,7 +37,7 @@ uint32_t get_raw_rc(uint32_t rc) {
 
 namespace {
 
-constexpr std::string raw_rc_to_string(TPM2_RC rc) noexcept {
+std::string raw_rc_to_string(TPM2_RC rc) noexcept {
    switch(rc) {
       case TPM2_RC_SUCCESS:
          return "TPM2_RC_SUCCESS";

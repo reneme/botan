@@ -13,6 +13,8 @@
 
 namespace Botan::TPM2 {
 
+uint32_t get_raw_rc(uint32_t rc);
+
 class BOTAN_PUBLIC_API(3, 6) Error final : public Exception {
    public:
       Error(std::string_view location, uint32_t rc);

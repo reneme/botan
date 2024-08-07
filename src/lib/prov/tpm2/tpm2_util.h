@@ -75,26 +75,7 @@ template <TSS2_RC... expected_errors>
    }
 
    // An error occured, we need to decode it to check if it was expected.
-   // Decoding in itself might fail, so we need to check that as well.
-   const TSS2_RC decoded_rc = [&] {
-#if defined(BOTAN_TSS2_SUPPORTS_ERROR_DECODING)
-      TSS2_RC_INFO info;
-      const TSS2_RC decoding_rc = Tss2_RC_DecodeInfo(rc, &info);
-      if(decoding_rc != TSS2_RC_SUCCESS) [[unlikely]] {
-         throw Error(fmt("Decoding RC of {} (was: {})", location, rc), decoding_rc);
-      }
-      return info.error;
-#else
-      // This fallback implementation is derived from the implementation of
-      // Tss2_RC_DecodeInfo in tpm2-tss 4.0.0.
-      const bool formatted = (rc & (1 << 7)) != 0;
-      if (formatted) {
-         return (rc & 0x3F) | TPM2_RC_FMT1;
-      } else {
-         return rc & 0xFFFF;
-      }
-#endif
-   }();
+   const TSS2_RC decoded_rc = get_raw_rc(rc);
 
    // Check if the error is one of the expected and return those to the caller.
    const bool is_expected_by_caller = ((decoded_rc == expected_errors) || ...);

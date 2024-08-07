@@ -23,17 +23,23 @@
 #include <memory>
 #include <span>
 
+// There's no obvious way to get the version of the TSS from its headers,
+// instead the existence of certain return code macro definitions is used
+// as sentinels to pinpoint the TSS' version. Namely:
+//
+//   - TSS2_BASE_RC_CALLBACK_NULL -> 4.0.0 or later
+//   - TPM2_RC_FW_LIMITED         -> 4.1.0 or later
+
 #if defined(TSS2_BASE_RC_CALLBACK_NULL)
-   // The crypto callbacks were added in tpm2-tss 4.0.0. There's no obvious way
-   // to get the version of the TSS from its headers, instead the existence of
-   // TSS2_BASE_RC_CALLBACK_NULL indicates we have 4.0.0 or later.
+   // The crypto callbacks were added in tpm2-tss 4.0.0.
    #define BOTAN_TSS2_SUPPORTS_CRYPTO_CALLBACKS
+
+   // Error decoding was added in tpm2-tss 4.0.0
+   #define BOTAN_TSS2_SUPPORTS_ERROR_DECODING
 #endif
 
 #if defined(TPM2_RC_FW_LIMITED)
-   // The crypto callbacks for SM4 were added in tpm2-tss 4.1.0. There's no
-   // obvious way to get the version of the TSS from its headers, instead the
-   // existence of TPM2_RC_FW_LIMITED indicates we have 4.1.0 or later.
+   // The crypto callbacks for SM4 were added in tpm2-tss 4.1.0.
    #define BOTAN_TSS2_SUPPORTS_SM4_IN_CRYPTO_CALLBACKS
 #endif
 
@@ -71,12 +77,23 @@ template <TSS2_RC... expected_errors>
    // An error occured, we need to decode it to check if it was expected.
    // Decoding in itself might fail, so we need to check that as well.
    const TSS2_RC decoded_rc = [&] {
+#if defined(BOTAN_TSS2_SUPPORTS_ERROR_DECODING)
       TSS2_RC_INFO info;
       const TSS2_RC decoding_rc = Tss2_RC_DecodeInfo(rc, &info);
       if(decoding_rc != TSS2_RC_SUCCESS) [[unlikely]] {
          throw Error(fmt("Decoding RC of {} (was: {})", location, rc), decoding_rc);
       }
       return info.error;
+#else
+      // This fallback implementation is derived from the implementation of
+      // Tss2_RC_DecodeInfo in tpm2-tss 4.0.0.
+      const bool formatted = (rc & (1 << 7)) != 0;
+      if (formatted) {
+         return (rc & 0x3F) | TPM2_RC_FMT1;
+      } else {
+         return rc & 0xFFFF;
+      }
+#endif
    }();
 
    // Check if the error is one of the expected and return those to the caller.

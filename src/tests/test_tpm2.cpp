@@ -75,6 +75,7 @@ std::vector<Test::Result> test_tpm2_rng() {
 
                result.test_no_throw("Clear", [&] { rng.clear(); });
             }),
+
       CHECK("Random number generation",
             [&](Test::Result& result) {
                std::array<uint8_t, 8> buf1 = {};

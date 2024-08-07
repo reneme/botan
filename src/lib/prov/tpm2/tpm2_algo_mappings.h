@@ -24,7 +24,7 @@ namespace Botan::TPM2 {
  *          otherwise std::nullopt
  */
 
-[[nodiscard]] constexpr std::optional<TPMI_ALG_HASH> hash_algo_botan_to_tss2(std::string_view hash_name) noexcept {
+[[nodiscard]] inline std::optional<TPMI_ALG_HASH> hash_algo_botan_to_tss2(std::string_view hash_name) noexcept {
    if(hash_name == "SHA-1") {
       return TPM2_ALG_SHA1;
    } else if(hash_name == "SHA-256") {
@@ -48,7 +48,7 @@ namespace Botan::TPM2 {
  * @returns a Botan hash name string if the @p hash_id value is known,
  *          otherwise std::nullopt
  */
-[[nodiscard]] constexpr std::optional<std::string> hash_algo_tss2_to_botan(TPM2_ALG_ID hash_id) noexcept {
+[[nodiscard]] inline std::optional<std::string> hash_algo_tss2_to_botan(TPM2_ALG_ID hash_id) noexcept {
    switch(hash_id) {
       case TPM2_ALG_SHA1:
          return "SHA-1";
@@ -73,7 +73,7 @@ namespace Botan::TPM2 {
  * @returns a Botan cipher mode name string if the @p cipher_id, @p key_bits and
  *          @p mode_name are known, otherwise std::nullopt
  */
-[[nodiscard]] constexpr std::optional<std::string> cipher_mode_tss2_to_botan(TPM2_ALG_ID cipher_id,
+[[nodiscard]] inline std::optional<std::string> cipher_mode_tss2_to_botan(TPM2_ALG_ID cipher_id,
                                                                              TPM2_KEY_BITS key_bits,
                                                                              TPM2_ALG_ID mode_id) noexcept {
    const auto cipher_name = [&]() -> std::optional<std::string> {

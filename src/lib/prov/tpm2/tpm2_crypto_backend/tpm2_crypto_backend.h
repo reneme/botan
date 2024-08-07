@@ -24,7 +24,9 @@ class Context;
  * Its lifetime is managed by the TPM2::Context.
  */
 struct CryptoCallbackState {
-      std::shared_ptr<Botan::RandomNumberGenerator> rng;
+      CryptoCallbackState(std::shared_ptr<Botan::RandomNumberGenerator> rng) : rng(std::move(rng)) {}
+
+      std::shared_ptr<Botan::RandomNumberGenerator> rng;  // NOLINT(misc-non-private-member-variables-in-classes)
 };
 
 /**

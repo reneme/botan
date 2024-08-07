@@ -633,6 +633,7 @@ void enable_crypto_callbacks(const std::shared_ptr<Context>& ctx) {
 
    check_rc("Esys_SetCryptoCallbacks", Esys_SetCryptoCallbacks(inner(ctx), &callbacks));
 #else
+   BOTAN_UNUSED(ctx);
    throw Not_Implemented(
       "This build of botan was compiled with a TSS2 version lower than 4.0.0, "
       "which dos not support custom runtime crypto backends");

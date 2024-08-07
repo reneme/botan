@@ -58,6 +58,28 @@ Test::Result bail_out() {
    return result;
 }
 
+std::vector<Test::Result> test_tpm2_properties() {
+   auto ctx = get_tpm2_context();
+   if(!ctx) {
+      return {bail_out()};
+   }
+
+   return {
+      CHECK("Vendor and Manufacturer",
+            [&](Test::Result& result) {
+               result.test_eq("Vendor", ctx->vendor(), "SW   TPM");
+               result.test_eq("Manufacturer", ctx->manufacturer(), "IBM");
+            }),
+
+      CHECK("Max random bytes per request",
+            [&](Test::Result& result) {
+               const auto prop = ctx->max_random_bytes_per_request();
+               result.test_gte("at least as long as SHA-256", prop, 32);
+               result.test_lte("at most as long as SHA-512", prop, 64);
+            }),
+   };
+}
+
 std::vector<Test::Result> test_tpm2_rng() {
    auto ctx = get_tpm2_context();
    if(!ctx) {
@@ -380,6 +402,7 @@ std::vector<Test::Result> test_tpm2_hash() {
 
 }  // namespace
 
+BOTAN_REGISTER_TEST_FN("tpm2", "tpm2_props", test_tpm2_properties);
 BOTAN_REGISTER_TEST_FN("tpm2", "tpm2_rng", test_tpm2_rng);
 BOTAN_REGISTER_TEST_FN("tpm2", "tpm2_rsa", test_tpm2_rsa);
 BOTAN_REGISTER_TEST_FN("tpm2", "tpm2_hash", test_tpm2_hash);

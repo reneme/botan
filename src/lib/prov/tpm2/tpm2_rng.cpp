@@ -30,7 +30,7 @@ void RNG::fill_bytes_with_input(std::span<uint8_t> output, std::span<const uint8
    BufferStuffer out(output);
    while(!out.full()) {
       unique_esys_ptr<TPM2B_DIGEST> digest = nullptr;
-      const auto requested_bytes = std::min(sizeof(digest->buffer), out.remaining_capacity());
+      const auto requested_bytes = std::min(out.remaining_capacity(), m_max_tpm2_rng_bytes);
       check_rc(
          "Esys_GetRandom",
          Esys_GetRandom(inner(m_ctx), m_sessions[0], m_sessions[1], m_sessions[2], requested_bytes, out_ptr(digest)));

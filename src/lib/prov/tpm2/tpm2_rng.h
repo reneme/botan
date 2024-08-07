@@ -17,7 +17,9 @@ namespace Botan::TPM2 {
 class BOTAN_PUBLIC_API(3, 6) RNG final : public Hardware_RNG {
    public:
       RNG(std::shared_ptr<Context> ctx, SessionBundle sessions = {}) :
-            m_ctx(std::move(ctx)), m_sessions(std::move(sessions)) {}
+            m_ctx(std::move(ctx)),
+            m_sessions(std::move(sessions)),
+            m_max_tpm2_rng_bytes(m_ctx->max_random_bytes_per_request()) {}
 
       bool accepts_input() const override { return true; }
 
@@ -31,6 +33,8 @@ class BOTAN_PUBLIC_API(3, 6) RNG final : public Hardware_RNG {
    private:
       std::shared_ptr<Context> m_ctx;
       SessionBundle m_sessions;
+
+      size_t m_max_tpm2_rng_bytes;
 };
 
 }  // namespace Botan::TPM2

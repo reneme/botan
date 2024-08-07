@@ -87,33 +87,44 @@ void* Context::inner_context_object() {
    return m_impl->m_ctx;
 }
 
+namespace {
+
+uint32_t get_tpm_property(ESYS_CONTEXT* ctx, TPM2_PT property) {
+   // We expect to retrieve a single piece of information, not a list.
+   constexpr uint32_t property_count = 1;
+   constexpr TPM2_CAP capability = TPM2_CAP_TPM_PROPERTIES;
+
+   unique_esys_ptr<TPMS_CAPABILITY_DATA> capability_data;
+   check_rc("Esys_GetCapability",
+            Esys_GetCapability(ctx,
+                               ESYS_TR_NONE,
+                               ESYS_TR_NONE,
+                               ESYS_TR_NONE,
+                               capability,
+                               property,
+                               property_count,
+                               nullptr /* more data? - we don't care here */,
+                               out_ptr(capability_data)));
+   BOTAN_ASSERT_NOMSG(capability_data->capability == capability);
+   BOTAN_ASSERT_NOMSG(capability_data->data.tpmProperties.count == property_count);
+   BOTAN_ASSERT_NOMSG(capability_data->data.tpmProperties.tpmProperty[0].property == property);
+
+   return capability_data->data.tpmProperties.tpmProperty[0].value;
+}
+
+}  // namespace
+
 std::string Context::vendor() const {
-   const std::array properties = {
+   constexpr std::array properties = {
       TPM2_PT_VENDOR_STRING_1, TPM2_PT_VENDOR_STRING_2, TPM2_PT_VENDOR_STRING_3, TPM2_PT_VENDOR_STRING_4};
-   std::array<uint8_t, properties.size() * sizeof(TPM2_PT) + 1 /* ensure zero-termination */> vendor_string{};
+   std::array<uint8_t, properties.size() * 4 + 1 /* ensure zero-termination */> vendor_string{};
 
    BufferStuffer bs(vendor_string);
 
    // The vendor name is transported in several uint32_t fields that are
    // loaded as big-endian bytes and concatenated to form the vendor string.
    for(auto prop : properties) {
-      TPMI_YES_NO more_data;
-      unique_esys_ptr<TPMS_CAPABILITY_DATA> capability_data;
-
-      check_rc("Esys_GetCapability",
-               Esys_GetCapability(m_impl->m_ctx,
-                                  ESYS_TR_NONE,
-                                  ESYS_TR_NONE,
-                                  ESYS_TR_NONE,
-                                  TPM2_CAP_TPM_PROPERTIES,
-                                  prop,
-                                  1,
-                                  &more_data,
-                                  out_ptr(capability_data)));
-
-      BOTAN_STATE_CHECK(capability_data->capability == TPM2_CAP_TPM_PROPERTIES &&
-                        capability_data->data.tpmProperties.count > 0);
-      bs.append(store_be(capability_data->data.tpmProperties.tpmProperty[0].value));
+      bs.append(store_be(get_tpm_property(m_impl->m_ctx, prop)));
    }
 
    BOTAN_ASSERT_NOMSG(bs.remaining_capacity() == 1);  // the ensured zero-termination
@@ -121,25 +132,13 @@ std::string Context::vendor() const {
 }
 
 std::string Context::manufacturer() const {
-   TPMI_YES_NO more_data;
-   unique_esys_ptr<TPMS_CAPABILITY_DATA> capability_data;
-
-   check_rc("Esys_GetCapability",
-            Esys_GetCapability(m_impl->m_ctx,
-                               ESYS_TR_NONE,
-                               ESYS_TR_NONE,
-                               ESYS_TR_NONE,
-                               TPM2_CAP_TPM_PROPERTIES,
-                               TPM2_PT_MANUFACTURER,
-                               1,
-                               &more_data,
-                               out_ptr(capability_data)));
-
-   BOTAN_STATE_CHECK(capability_data->capability == TPM2_CAP_TPM_PROPERTIES &&
-                     capability_data->data.tpmProperties.count > 0);
-   std::array<uint8_t, sizeof(TPM2_PT) + 1 /* ensure zero termination */> manufacturer_data{};
-   store_be(std::span{manufacturer_data}.first<4>(), capability_data->data.tpmProperties.tpmProperty[0].value);
+   std::array<uint8_t, 4 + 1 /* ensure zero termination */> manufacturer_data{};
+   store_be(std::span{manufacturer_data}.first<4>(), get_tpm_property(m_impl->m_ctx, TPM2_PT_MANUFACTURER));
    return std::string(cast_uint8_ptr_to_char(manufacturer_data.data()));
+}
+
+size_t Context::max_random_bytes_per_request() const {
+   return get_tpm_property(m_impl->m_ctx, TPM2_PT_MAX_DIGEST);
 }
 
 std::vector<uint32_t> Context::persistent_handles() const {

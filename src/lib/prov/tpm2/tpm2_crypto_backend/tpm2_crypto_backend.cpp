@@ -8,13 +8,20 @@
 
 #include <botan/internal/tpm2_crypto_backend.h>
 
+#include <botan/internal/eme.h>
 #include <botan/internal/fmt.h>
 #include <botan/internal/tpm2_algo_mappings.h>
 #include <botan/internal/tpm2_util.h>
 
+#if defined(BOTAN_HAS_EME_OAEP)
+   #include <botan/internal/oaep.h>
+#endif
+
 #include <botan/cipher_mode.h>
 #include <botan/hash.h>
 #include <botan/mac.h>
+#include <botan/mem_ops.h>
+#include <botan/pubkey.h>
 #include <botan/tpm2_context.h>
 
 #include <tss2/tss2_esys.h>
@@ -156,35 +163,6 @@ template <std::invocable<> F>
 }  // namespace
 
 extern "C" {
-
-/** Encryption of a buffer using a public (RSA) key.
- *
- * Encrypting a buffer using a public key is used for example during
- * Esys_StartAuthSession in order to encrypt the salt value.
- * @param[in] pub_tpm_key The key to be used for encryption.
- * @param[in] in_size The size of the buffer to be encrypted.
- * @param[in] in_buffer The data buffer to be encrypted.
- * @param[in] max_out_size The maximum size for the output encrypted buffer.
- * @param[out] out_buffer The encrypted buffer.
- * @param[out] out_size The size of the encrypted output.
- * @param[in] label The label used in the encryption scheme.
- * @param[in,out] userdata information.
- * @retval TSS2_RC_SUCCESS on success
- * @retval USER_DEFINED user defined errors on failure.
- */
-TSS2_RC rsa_pk_encrypt(TPM2B_PUBLIC* pub_tpm_key,
-                       size_t in_size,
-                       BYTE* in_buffer,
-                       size_t max_out_size,
-                       BYTE* out_buffer,
-                       size_t* out_size,
-                       const char* label,
-                       void* userdata) {
-   BOTAN_UNUSED(pub_tpm_key, in_size, in_buffer, max_out_size, out_buffer, out_size, label, userdata);
-   // This is currently not required for the exposed functionality.
-   // TODO: Implement this function if required.
-   return TSS2_ESYS_RC_NOT_IMPLEMENTED;
-}
 
 /** Provide the context for the computation of a hash digest.
  *
@@ -397,6 +375,151 @@ TSS2_RC get_random2b(TPM2B_NONCE* nonce, size_t num_bytes, void* userdata) {
    });
 }
 
+/** Encryption of a buffer using a public (RSA) key.
+ *
+ * Encrypting a buffer using a public key is used for example during
+ * Esys_StartAuthSession in order to encrypt the salt value.
+ * @param[in] pub_tpm_key The key to be used for encryption.
+ * @param[in] in_size The size of the buffer to be encrypted.
+ * @param[in] in_buffer The data buffer to be encrypted.
+ * @param[in] max_out_size The maximum size for the output encrypted buffer.
+ * @param[out] out_buffer The encrypted buffer.
+ * @param[out] out_size The size of the encrypted output.
+ * @param[in] label The label used in the encryption scheme.
+ * @param[in,out] userdata information.
+ * @retval TSS2_RC_SUCCESS on success
+ * @retval USER_DEFINED user defined errors on failure.
+ */
+TSS2_RC rsa_pk_encrypt(TPM2B_PUBLIC* pub_tpm_key,
+                       size_t in_size,
+                       BYTE* in_buffer,
+                       size_t max_out_size,
+                       BYTE* out_buffer,
+                       size_t* out_size,
+                       const char* label,
+                       void* userdata) {
+   auto create_eme = [&](
+                        const TPMT_RSA_SCHEME& scheme,
+                        [[maybe_unused]] TPM2_ALG_ID name_algo,
+                        [[maybe_unused]] TPMU_ASYM_SCHEME scheme_detail) -> std::optional<std::unique_ptr<Botan::EME>> {
+      // OAEP is more complex by requiring a hash function and an optional
+      // label. To avoid marshalling this into Botan's algorithm descriptor
+      // we create an OAEP instance manually.
+      auto create_oaep = [&]() -> std::optional<std::unique_ptr<Botan::EME>> {
+   #if defined(BOTAN_HAS_EME_OAEP)
+         // TPM Library, Part 1: Architecture, Annex B.4
+         //    The RSA key's scheme hash algorithm (or, if it is TPM_ALG_NULL,
+         //    the RSA key's Name algorithm) is used to compute H(label).
+         const auto label_hash = Botan::TPM2::hash_algo_tss2_to_botan(
+            (scheme_detail.oaep.hashAlg == TPM2_ALG_NULL || scheme_detail.oaep.hashAlg == TPM2_ALG_ERROR)
+               ? pub_tpm_key->publicArea.nameAlg
+               : scheme_detail.oaep.hashAlg);
+
+         // TPM Library, Part 1: Architecture, Annex B.4
+         //    The mask-generation function uses the Name algorithm of the RSA
+         //    key as the hash algorithm.
+         const auto mgf1_hash = Botan::TPM2::hash_algo_tss2_to_botan(name_algo);
+         if(!label_hash || !mgf1_hash) {
+            return std::nullopt;  // -> not supported
+         }
+
+         auto H_label = Botan::HashFunction::create(label_hash.value());
+         auto H_mgf1 = Botan::HashFunction::create(mgf1_hash.value());
+         if(!H_label || !H_mgf1) {
+            return nullptr;  // -> not implemented
+         }
+
+         // TPM Library, Part 1: Architecture, Annex B.4
+         //    [...] is used to compute lhash := H(label), and the null
+         //    termination octet is included in the digest.
+         std::string_view label_with_zero_terminator{label, std::strlen(label) + 1};
+         return std::make_unique<Botan::OAEP>(std::move(H_label), std::move(H_mgf1), label_with_zero_terminator);
+   #else
+         return nullptr;  // -> not implemented
+   #endif
+      };
+
+      try {  // EME::create throws if algorithm is not available
+         switch(scheme.scheme) {
+            case TPM2_ALG_OAEP:
+               return create_oaep();
+            case TPM2_ALG_NULL:
+               return Botan::EME::create("Raw");
+            case TPM2_ALG_RSAES:
+               return Botan::EME::create("PKCS1v15");
+            default:
+               return std::nullopt;  // -> not supported
+         }
+      } catch(const Botan::Algorithm_Not_Found&) {
+         /* ignore */
+      }
+
+      return nullptr;  // -> not implemented (EME::create() threw)
+   };
+
+   return thunk([&] {
+      BOTAN_ASSERT_NONNULL(pub_tpm_key);
+      BOTAN_ASSERT_NOMSG(pub_tpm_key->publicArea.type == TPM2_ALG_RSA);
+
+      const auto maybe_eme = create_eme(pub_tpm_key->publicArea.parameters.rsaDetail.scheme,
+                                        pub_tpm_key->publicArea.nameAlg,
+                                        pub_tpm_key->publicArea.parameters.rsaDetail.scheme.details);
+      if(!maybe_eme.has_value()) {
+         return TSS2_ESYS_RC_NOT_SUPPORTED;
+      }
+
+      const auto& eme = maybe_eme.value();
+      if(!eme) {
+         return TSS2_ESYS_RC_NOT_IMPLEMENTED;
+      }
+
+      // The code below is duplicated logic with Botan's PK_Encryptor_EME.
+      // Currently, there's no way to instantiate the encryptor without
+      // marshalling the optional `label` into Botan's algorithm name.
+      //
+      // The label contains characters that are not allowed in Botan's string-
+      // based algorithm names, namely the \0 terminator. We currently handle
+      // the padding manually and then encrypt the padded data with raw RSA.
+      //
+      // TODO: Provide a way to instantiate an PK_Encryptor_EME that accepts a
+      //       pre-made EME object.
+
+      const auto pubkey = Botan::TPM2::rsa_pubkey_from_tss2_public(pub_tpm_key);
+      const auto keybits = pubkey.key_length();
+      const auto output_size = keybits / 8;
+      if(eme->maximum_input_size(keybits) < in_size) {
+         return TSS2_ESYS_RC_BAD_VALUE;
+      }
+
+      if(output_size > max_out_size) {
+         return TSS2_ESYS_RC_INSUFFICIENT_BUFFER;
+      }
+
+      auto ccs = get(userdata);
+      if(!ccs) {
+         return TSS2_ESYS_RC_BAD_REFERENCE;
+      }
+
+      Botan::RandomNumberGenerator& rng = *ccs->get().rng;
+
+      const auto max_raw_bits = keybits - 1;
+      const auto max_raw_bytes = (max_raw_bits + 7) / 8;
+      const auto padded_bytes = eme->pad({out_buffer, max_raw_bytes}, {in_buffer, in_size}, max_raw_bits, rng);
+
+      // PK_Encryptor_EME does not provide a way to pass in an output buffer.
+      // TODO: provide an `.encrypt()` overload that accepts an output buffer.
+      Botan::PK_Encryptor_EME encryptor(pubkey, rng, "Raw");
+      const auto encrypted = encryptor.encrypt({out_buffer, padded_bytes}, rng);
+
+      // We abused the `out_buffer` to hold the result of the padding. Hence, we
+      // now have to copy the encrypted data over the padded plaintext data.
+      *out_size = encrypted.size();
+      Botan::copy_mem(std::span{out_buffer, *out_size}, encrypted);
+
+      return TSS2_RC_SUCCESS;
+   });
+}
+
 /** Computation of an ephemeral ECC key and shared secret Z.
  *
  * According to the description in TPM spec part 1 C 6.1 a shared secret
@@ -604,6 +727,12 @@ namespace Botan::TPM2 {
  *
  * The runtime crypto backend is available since TSS2 4.0.0 and later. Explicit
  * support for SM4 was added in TSS2 4.1.0.
+ *
+ * Error code conventions:
+ *
+ *  * TSS2_ESYS_RC_BAD_REFERENCE:   reference (typically userdata) invalid
+ *  * TSS2_ESYS_RC_NOT_SUPPORTED:   algorithm identifier not mapped to Botan
+ *  * TSS2_ESYS_RC_NOT_IMPLEMENTED: algorithm not available (e.g. disabled)
  */
 void enable_crypto_callbacks(const std::shared_ptr<Context>& ctx) {
 #if defined(BOTAN_TSS2_SUPPORTS_CRYPTO_CALLBACKS)

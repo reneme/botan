@@ -3,6 +3,7 @@
 #include <tss2/tss2_rc.h>
 #include <tss2/tss2_tcti.h>
 #include <tss2/tss2_tctildr.h>
+#include <tss2/tss2_mu.h>
 #include <string.h>
 #include <openssl/sha.h>
 #include <openssl/rand.h>
@@ -184,9 +185,12 @@ int main() {
         .publicArea = {
             .type = TPM2_ALG_RSA,
             .nameAlg = TPM2_ALG_SHA256,
-            .objectAttributes = (TPMA_OBJECT_SIGN_ENCRYPT | TPMA_OBJECT_USERWITHAUTH |
+            .objectAttributes = (TPMA_OBJECT_SIGN_ENCRYPT | TPMA_OBJECT_USERWITHAUTH | TPMA_OBJECT_RESTRICTED |
                                  TPMA_OBJECT_FIXEDTPM | TPMA_OBJECT_FIXEDPARENT |
                                  TPMA_OBJECT_SENSITIVEDATAORIGIN),
+
+// TPMA_OBJECT_USERWITHAUTH | TPMA_OBJECT_RESTRICTED | TPMA_OBJECT_FIXEDTPM |
+//  TPMA_OBJECT_FIXEDPARENT | TPMA_OBJECT_SENSITIVEDATAORIGIN | TPMA_OBJECT_SIGN_ENCRYPT
             .authPolicy = {0},
             .parameters.rsaDetail = {
                 .symmetric = {
@@ -195,8 +199,8 @@ int main() {
                     .mode = {.aes = 0}
                 },
                 .scheme = {
-                    .scheme = TPM2_ALG_RSASSA,
-                    .details = {.rsassa = {.hashAlg = TPM2_ALG_SHA256}}
+                    .scheme = TPM2_ALG_RSAPSS,
+                    .details = {.rsapss = {.hashAlg = TPM2_ALG_SHA256}}
                 },
                 .keyBits = 2048,
                 .exponent = 0
@@ -207,6 +211,19 @@ int main() {
             }
         }
     };
+
+    // For CreateLoaded
+    TPM2B_TEMPLATE generation_template = {};
+    size_t offset = 0;
+
+    rc = Tss2_MU_TPMT_PUBLIC_Marshal(&inPublic.publicArea, generation_template.buffer, sizeof(TPMT_PUBLIC), &offset);
+    if(rc != TSS2_RC_SUCCESS) {
+        fprintf(stderr, "Tss2_MU_TPMT_PUBLIC_Marshal failed: 0x%s\n", Tss2_RC_Decode(rc));
+        goto cleanup;
+    }
+    generation_template.size = offset;
+    // end For CreatLoaded
+
 
     // Sensitive data for signing key (auth value)
     const char *signingAuthValue = "signingKey123";
@@ -234,41 +251,53 @@ int main() {
     TPMT_TK_CREATION *creationTicket = NULL;
     ESYS_TR signingKeyHandle = ESYS_TR_NONE;
 
-    // Create the signing key
-    rc = Esys_Create(
-        ectx,
-        public_handle,
-        session,
-        ESYS_TR_NONE,
-        ESYS_TR_NONE,
-        &inSensitive,
-        &inPublic,
-        &outsideInfo,
-        &creationPCR,
-        &outPrivate,
-        &outPublic,
-        &creationData,
-        &creationHash,
-        &creationTicket
-    );
 
-    if (rc != TSS2_RC_SUCCESS) {
-        printf("Esys_Create Signing failed: 0x%s\n", Tss2_RC_Decode(rc));
-        goto cleanup;
-    }
-    printf("Signing key created successfully.\n");
+   rc = Esys_CreateLoaded(ectx,
+                          public_handle,
+                          session,
+                          ESYS_TR_NONE,
+                          ESYS_TR_NONE,
+                          &inSensitive,
+                          &generation_template,
+                          &signingKeyHandle,
+                          &outPrivate,
+                          &outPublic);
 
-    // Load the signing key
-    rc = Esys_Load(
-        ectx,
-        public_handle,
-        ESYS_TR_PASSWORD,
-        ESYS_TR_NONE,
-        ESYS_TR_NONE,
-        outPrivate,
-        outPublic,
-        &signingKeyHandle
-    );
+    // // Create the signing key
+    // rc = Esys_Create(
+    //     ectx,
+    //     public_handle,
+    //     session,
+    //     ESYS_TR_NONE,
+    //     ESYS_TR_NONE,
+    //     &inSensitive,
+    //     &inPublic,
+    //     &outsideInfo,
+    //     &creationPCR,
+    //     &outPrivate,
+    //     &outPublic,
+    //     &creationData,
+    //     &creationHash,
+    //     &creationTicket
+    // );
+
+    // if (rc != TSS2_RC_SUCCESS) {
+    //     printf("Esys_Create Signing failed: 0x%s\n", Tss2_RC_Decode(rc));
+    //     goto cleanup;
+    // }
+    // printf("Signing key created successfully.\n");
+
+    // // Load the signing key
+    // rc = Esys_Load(
+    //     ectx,
+    //     public_handle,
+    //     ESYS_TR_PASSWORD,
+    //     ESYS_TR_NONE,
+    //     ESYS_TR_NONE,
+    //     outPrivate,
+    //     outPublic,
+    //     &signingKeyHandle
+    // );
 
     if (rc != TSS2_RC_SUCCESS) {
         printf("Esys_Load Signing failed: 0x%s\n", Tss2_RC_Decode(rc));
@@ -279,11 +308,11 @@ int main() {
     // signingAuth.buffer[0] = 0; // Mess it up to test auth
 
     // Set the authorization value for the signing key
-    rc = Esys_TR_SetAuth(ectx, signingKeyHandle, &signingAuth);
-    if (rc != TSS2_RC_SUCCESS) {
-        printf("Esys_TR_SetAuth failed: 0x%s\n", Tss2_RC_Decode(rc));
-    }
-    printf("Authorization value set for signing key successfully.\n");
+    // rc = Esys_TR_SetAuth(ectx, signingKeyHandle, &signingAuth);
+    // if (rc != TSS2_RC_SUCCESS) {
+    //     printf("Esys_TR_SetAuth failed: 0x%s\n", Tss2_RC_Decode(rc));
+    // }
+    // printf("Authorization value set for signing key successfully.\n");
 
     // printf("Evicting Signing key...\n");
     // ESYS_TR sign_persistent_handle_out;
@@ -303,36 +332,40 @@ int main() {
 
     // Sign some data
     // Define the data to be signed
-    const char *dataToSign = "Hello, TPM!";
-    TPM2B_DIGEST digest = {
-        .size = 32, // SHA-256 produces a 32-byte hash
+    const char *dataToSign = "\xFF\x54\x43\x47 Hello, TPM!";
+    // TPM2B_DIGEST digest = {
+    //     .size = 32, // SHA-256 produces a 32-byte hash
+    //     .buffer = {0}
+    // };
+
+    TPM2B_MAX_BUFFER msg = {
+        .size = strlen(dataToSign),
         .buffer = {0}
     };
+    memcpy(msg.buffer, dataToSign, msg.size);
 
     // Compute the SHA-256 hash of the data
-    SHA256_CTX sha256;
-    SHA256_Init(&sha256);
-    SHA256_Update(&sha256, dataToSign, strlen(dataToSign));
-    SHA256_Final(digest.buffer, &sha256);
+
+    TPM2B_DIGEST *digest;
+    TPMT_TK_HASHCHECK* validation;
+
+    rc = Esys_Hash(ectx, session, ESYS_TR_NONE, ESYS_TR_NONE, &msg, TPM2_ALG_SHA256, ESYS_TR_RH_OWNER, &digest, &validation);
+    if (rc != TSS2_RC_SUCCESS) {
+        printf("Esys_Hash failed: 0x%s\n", Tss2_RC_Decode(rc));
+        goto cleanup;
+    }
+
 
     // Define the scheme to be used for signing
     TPMT_SIG_SCHEME inScheme = {
-        .scheme = TPM2_ALG_RSASSA,
+        .scheme = TPM2_ALG_RSAPSS,
         .details = {
-            .rsassa = {
+            .rsapss = {
                 .hashAlg = TPM2_ALG_SHA256
             }
         }
     };
 
-    // Placeholder for the signature
-    TPMT_TK_HASHCHECK validation = {
-        .tag = TPM2_ST_HASHCHECK,
-        .hierarchy = TPM2_RH_NULL,
-        .digest = {.size = 0, .buffer = {0}}
-    };
-
-    TPM2B_ATTEST *quoted = NULL;
     TPMT_SIGNATURE *signature = NULL;
 
     // Sign the data
@@ -342,9 +375,9 @@ int main() {
         session,
         ESYS_TR_NONE,
         ESYS_TR_NONE,
-        &digest,
+        digest,
         &inScheme,
-        &validation,
+        validation,
         &signature
     );
 
@@ -355,9 +388,9 @@ int main() {
 
     // Output the signature
     printf("Signature generated successfully.\n");
-    printf("Signature size: %d\n", signature->signature.rsassa.sig.size);
-    for (int i = 0; i < signature->signature.rsassa.sig.size; i++) {
-        printf("%02X", signature->signature.rsassa.sig.buffer[i]);
+    printf("Signature size: %d\n", signature->signature.rsapss.sig.size);
+    for (int i = 0; i < signature->signature.rsapss.sig.size; i++) {
+        printf("%02X", signature->signature.rsapss.sig.buffer[i]);
     }
     printf("\n");
 

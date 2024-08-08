@@ -39,18 +39,22 @@ int main() {
         fprintf(stderr, "Esys_TR_FromTPMPublic failed: 0x%s\n", Tss2_RC_Decode(rc));
         goto cleanup;
     }
-    rc = Esys_ReadPublic(ectx, public_handle, ESYS_TR_NONE, ESYS_TR_NONE, ESYS_TR_NONE, &spk_public, NULL, NULL);
-    if (rc != TSS2_RC_SUCCESS) {
-        fprintf(stderr, "Esys_ReadPublic failed: 0x%s\n", Tss2_RC_Decode(rc));
-        goto cleanup;
-    }
-    // TODO: Sometimes the above crashes and TPM needs a restart? => something not properly de-allocated?
-    printf("Storage Primary Key (SPK):");
-    for(int i = 0; i < spk_public->size; i++) {
-        printf("%02x", spk_public->publicArea.unique.rsa.buffer[i]);
-    }
-    printf("\n");
-    Esys_Free(spk_public);
+
+    TPM2_HANDLE spk_tpm_handle;
+    Esys_TR_GetTpmHandle(ectx, public_handle, &spk_tpm_handle);
+
+    // rc = Esys_ReadPublic(ectx, public_handle, ESYS_TR_NONE, ESYS_TR_NONE, ESYS_TR_NONE, &spk_public, NULL, NULL);
+    // if (rc != TSS2_RC_SUCCESS) {
+    //     fprintf(stderr, "Esys_ReadPublic failed: 0x%s\n", Tss2_RC_Decode(rc));
+    //     goto cleanup;
+    // }
+    // // TODO: Sometimes the above crashes and TPM needs a restart? => something not properly de-allocated?
+    // printf("Storage Primary Key (SPK):");
+    // for(int i = 0; i < spk_public->size; i++) {
+    //     printf("%02x", spk_public->publicArea.unique.rsa.buffer[i]);
+    // }
+    // printf("\n");
+    // Esys_Free(spk_public);
 
     // Start an authorization session
     ESYS_TR session = ESYS_TR_NONE;
@@ -67,7 +71,7 @@ int main() {
         goto cleanup;
     }
 
-    TPMA_SESSION sessionAttributes = TPMA_SESSION_CONTINUESESSION | TPMA_SESSION_AUDIT;/* to sign*/;
+    TPMA_SESSION sessionAttributes = TPMA_SESSION_CONTINUESESSION | TPMA_SESSION_ENCRYPT | TPMA_SESSION_DECRYPT;
     rc = Esys_TRSess_SetAttributes(ectx, session, sessionAttributes, 0xFF);
     if (rc != TSS2_RC_SUCCESS) {
         fprintf(stderr, "Esys_TRSess_SetAttributes failed: 0x%x\n", rc);
@@ -281,21 +285,21 @@ int main() {
     }
     printf("Authorization value set for signing key successfully.\n");
 
-    printf("Evicting Signing key...\n");
-    ESYS_TR sign_persistent_handle_out;
-    TPMI_DH_PERSISTENT sign_persistent_handle_in = TPM2_PERSISTENT_FIRST + 7;
-    rc = Esys_EvictControl(ectx, ESYS_TR_RH_OWNER, signingKeyHandle, session, ESYS_TR_NONE, ESYS_TR_NONE, sign_persistent_handle_in, &sign_persistent_handle_out);
-    if (rc != TSS2_RC_SUCCESS) {
-        fprintf(stderr, "Esys_EvictControl failed: 0x%s\n", Tss2_RC_Decode(rc));
-        goto cleanup;
-    }
-    TPM2_HANDLE sign_tpm_handle;
-    rc = Esys_TR_GetTpmHandle(ectx, sign_persistent_handle_out, &sign_tpm_handle);
-    if (rc != TSS2_RC_SUCCESS) {
-        fprintf(stderr, "Esys_TR_GetTpmHandle failed: 0x%s\n", Tss2_RC_Decode(rc));
-        goto cleanup;
-    }
-    printf("Signing key made persistent with handle: 0x%08x\n", sign_tpm_handle);
+    // printf("Evicting Signing key...\n");
+    // ESYS_TR sign_persistent_handle_out;
+    // TPMI_DH_PERSISTENT sign_persistent_handle_in = TPM2_PERSISTENT_FIRST + 7;
+    // rc = Esys_EvictControl(ectx, ESYS_TR_RH_OWNER, signingKeyHandle, session, ESYS_TR_NONE, ESYS_TR_NONE, sign_persistent_handle_in, &sign_persistent_handle_out);
+    // if (rc != TSS2_RC_SUCCESS) {
+    //     fprintf(stderr, "Esys_EvictControl failed: 0x%s\n", Tss2_RC_Decode(rc));
+    //     goto cleanup;
+    // }
+    // TPM2_HANDLE sign_tpm_handle;
+    // rc = Esys_TR_GetTpmHandle(ectx, sign_persistent_handle_out, &sign_tpm_handle);
+    // if (rc != TSS2_RC_SUCCESS) {
+    //     fprintf(stderr, "Esys_TR_GetTpmHandle failed: 0x%s\n", Tss2_RC_Decode(rc));
+    //     goto cleanup;
+    // }
+    // printf("Signing key made persistent with handle: 0x%08x\n", sign_tpm_handle);
 
     // Sign some data
     // Define the data to be signed

@@ -150,8 +150,7 @@ RSA_PrivateKey::CreationData create_transient_key(const std::shared_ptr<Context>
       .type = TPM2_ALG_RSA,
       .nameAlg = TPM2_ALG_SHA256,
       .objectAttributes = (TPMA_OBJECT_USERWITHAUTH | TPMA_OBJECT_RESTRICTED | TPMA_OBJECT_FIXEDTPM |
-                           TPMA_OBJECT_FIXEDPARENT | TPMA_OBJECT_SENSITIVEDATAORIGIN) |
-                          TPMA_OBJECT_SIGN_ENCRYPT,
+                           TPMA_OBJECT_FIXEDPARENT | TPMA_OBJECT_SENSITIVEDATAORIGIN | TPMA_OBJECT_SIGN_ENCRYPT),
       .authPolicy = init_empty<TPM2B_DIGEST>(),
       .parameters =
          {
@@ -160,8 +159,8 @@ RSA_PrivateKey::CreationData create_transient_key(const std::shared_ptr<Context>
                   .symmetric =
                      {
                         .algorithm = TPM2_ALG_NULL,
-                        .keyBits = {.aes = 256},
-                        .mode = {.aes = TPM2_ALG_CFB},
+                        .keyBits = {.aes = 0},
+                        .mode = {.aes = 0},
                      },
                   .scheme =
                      {
@@ -199,6 +198,7 @@ RSA_PrivateKey::CreationData create_transient_key(const std::shared_ptr<Context>
                               out_ptr(public_info)));
    BOTAN_ASSERT_NONNULL(private_bytes);
    BOTAN_ASSERT_NOMSG(public_info->publicArea.type == TPM2_ALG_RSA);
+   BOTAN_ASSERT_NOMSG(handle.has_transient_handle());
 
    return {
       .handle = std::move(handle),

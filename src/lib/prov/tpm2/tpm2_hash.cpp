@@ -28,8 +28,14 @@ TPMI_ALG_HASH get_tpm2_hash_type(std::string_view hash_name) {
 
 }  // namespace
 
-HashFunction::HashFunction(std::shared_ptr<Context> ctx, std::string_view algorithm, SessionBundle sessions) :
-      m_hash_type(get_tpm2_hash_type(algorithm)), m_handle(std::move(ctx)), m_sessions(std::move(sessions)) {
+HashFunction::HashFunction(std::shared_ptr<Context> ctx,
+                           std::string_view algorithm,
+                           TPMI_RH_HIERARCHY hierarchy,
+                           SessionBundle sessions) :
+      m_hash_type(get_tpm2_hash_type(algorithm)),
+      m_hierarchy(hierarchy),
+      m_handle(std::move(ctx)),
+      m_sessions(std::move(sessions)) {
    // When creating a new hash object we assume that the call will use it to
    // hash data and therefore setup the hash object immediately.
    lazy_setup();
@@ -73,7 +79,7 @@ std::unique_ptr<Botan::HashFunction> HashFunction::copy_state() const {
 }
 
 std::unique_ptr<Botan::HashFunction> HashFunction::new_object() const {
-   return std::make_unique<HashFunction>(m_handle.context(), name(), m_sessions);
+   return std::make_unique<HashFunction>(m_handle.context(), name(), m_hierarchy, m_sessions);
 }
 
 void HashFunction::lazy_setup() {
@@ -127,7 +133,7 @@ std::pair<unique_esys_ptr<TPM2B_DIGEST>, unique_esys_ptr<TPMT_TK_HASHCHECK>> Has
                                   m_sessions[1],
                                   m_sessions[2],
                                   &nodata,
-                                  ESYS_TR_RH_NULL,
+                                  m_hierarchy,
                                   out_ptr(result.first),
                                   out_ptr(result.second)));
    BOTAN_ASSERT_NONNULL(result.first);

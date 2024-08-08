@@ -22,7 +22,10 @@ namespace Botan::TPM2 {
 
 class BOTAN_TEST_API HashFunction final : public Botan::HashFunction {
    public:
-      HashFunction(std::shared_ptr<Context> ctx, std::string_view algorithm, SessionBundle sessions = {});
+      HashFunction(std::shared_ptr<Context> ctx,
+                   std::string_view algorithm,
+                   TPMI_RH_HIERARCHY hierarchy = ESYS_TR_RH_NULL,
+                   SessionBundle sessions = {});
 
       std::string name() const override;
       size_t output_length() const override;
@@ -42,6 +45,7 @@ class BOTAN_TEST_API HashFunction final : public Botan::HashFunction {
 
    private:
       TPMI_ALG_HASH m_hash_type;
+      TPMI_RH_HIERARCHY m_hierarchy;
       Object m_handle;
       SessionBundle m_sessions;
 };

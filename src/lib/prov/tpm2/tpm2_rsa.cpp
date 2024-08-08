@@ -28,10 +28,29 @@ namespace Botan::TPM2 {
 
 namespace {
 
-std::pair<TPMT_SIG_SCHEME, HashFunction> select_scheme(const std::shared_ptr<Context>& ctx,
+std::pair<TPMT_SIG_SCHEME, HashFunction> select_scheme(const Object& handle,
                                                        const SessionBundle& sessions,
                                                        std::string_view padding) {
    SCAN_Name req(padding);
+
+   const auto& pubinfo = handle._public_info(sessions);
+
+   // Restricted keys require to provide the hash validation ticket that is
+   // provided when hashing the data to sign on the TPM under a specific
+   // hierarchy.
+   //
+   // TODO: If we implement a way to do the hashing in software, there is no
+   //       validation and the validation ticket will be null/in null hierachy.
+   //       We will then have to prevent users from using that with restricted
+   //       keys. It won't work.
+   const bool is_restricted = pubinfo.pub->publicArea.objectAttributes & TPMA_OBJECT_RESTRICTED;
+
+   // TODO: this could also be ENDORSEMENT or PLATFORM, and we're not 100% sure
+   //       that OWNER is always the right choice here.
+   const TPMI_RH_HIERARCHY hierarchy = ESYS_TR_RH_OWNER;
+
+   BOTAN_ASSERT(!is_restricted || hierarchy != ESYS_TR_RH_NULL,
+                "NULL hierarchy for validation not possible with restricted key");
 
    const auto scheme = [&]() -> TPMI_ALG_SIG_SCHEME {
       if(req.algo_name() == "EMSA_PKCS1" || req.algo_name() == "PKCS1v15" || req.algo_name() == "EMSA-PKCS1-v1_5" ||
@@ -54,7 +73,7 @@ std::pair<TPMT_SIG_SCHEME, HashFunction> select_scheme(const std::shared_ptr<Con
       throw Invalid_Argument("RSA signing padding scheme must at least specify a hash function");
    }
 
-   auto hash = HashFunction(ctx, req.arg(0), sessions);
+   auto hash = HashFunction(handle.context(), req.arg(0), hierarchy, sessions);
    const auto hash_type = hash.type();
 
    return {TPMT_SIG_SCHEME{
@@ -235,6 +254,7 @@ RSA_PrivateKey::RSA_PrivateKey(RSA_PrivateKey::CreationData data, SessionBundle 
       m_private_blob(std::move(data.private_blob)) {}
 
 namespace {
+
 class RSA_Signature_Operation : public PK_Ops::Signature {
    private:
       RSA_Signature_Operation(const Object& object,
@@ -244,7 +264,7 @@ class RSA_Signature_Operation : public PK_Ops::Signature {
 
    public:
       RSA_Signature_Operation(const Object& object, const SessionBundle& sessions, std::string_view padding) :
-            RSA_Signature_Operation(object, sessions, select_scheme(object.context(), sessions, padding)) {}
+            RSA_Signature_Operation(object, sessions, select_scheme(object, sessions, padding)) {}
 
       void update(std::span<const uint8_t> msg) override { m_hash.update(msg); }
 
@@ -301,7 +321,7 @@ class RSA_Verification_Operation : public PK_Ops::Verification {
 
    public:
       RSA_Verification_Operation(const Object& object, const SessionBundle& sessions, std::string_view padding) :
-            RSA_Verification_Operation(object, sessions, select_scheme(object.context(), sessions, padding)) {}
+            RSA_Verification_Operation(object, sessions, select_scheme(object, sessions, padding)) {}
 
       void update(std::span<const uint8_t> msg) override { m_hash.update(msg); }
 

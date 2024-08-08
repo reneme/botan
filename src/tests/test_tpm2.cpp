@@ -330,14 +330,18 @@ std::vector<Test::Result> test_tpm2_rsa() {
             [&](Test::Result& result) {
                auto srk = ctx->storage_root_key({}, {});
 
+               auto authed_session = Botan::TPM2::Session::salted_session(ctx, *srk);
+
                const std::array<uint8_t, 6> secret = {'s', 'e', 'c', 'r', 'e', 't'};
 
-               auto sk = Botan::TPM2::RSA_PrivateKey(ctx, *srk, secret, session, 2048);
+               auto sk = Botan::TPM2::RSA_PrivateKey(ctx, *srk, secret, authed_session, 2048);
                result.confirm("is transient", sk.handles().has_transient_handle());
                result.confirm("is not persistent", !sk.handles().has_persistent_handle());
 
                const auto sk_blob = sk.private_key_bits();
                const auto pk = sk.public_key();
+
+               result.confirm("secret blog is not empty", !sk_blob.empty());
 
                // Perform a round-trip sign/verify test with the new key pair
                std::vector<uint8_t> message = {'h', 'e', 'l', 'l', 'o'};

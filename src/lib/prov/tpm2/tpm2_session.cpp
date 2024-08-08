@@ -8,6 +8,8 @@
 
 #include <botan/tpm2_session.h>
 
+#include <botan/tpm2_rsa.h>
+
 #include <botan/internal/stl_util.h>
 #include <botan/internal/tpm2_util.h>
 
@@ -27,6 +29,37 @@ std::shared_ptr<Session> Session::unauthenticated_session(const std::shared_ptr<
             Esys_StartAuthSession(inner(ctx),
                                   ESYS_TR_NONE,
                                   ESYS_TR_NONE,
+                                  ESYS_TR_NONE,
+                                  ESYS_TR_NONE,
+                                  ESYS_TR_NONE,
+                                  nullptr /*NonceCaller generated automatically*/,
+                                  TPM2_SE_HMAC,
+                                  &auth_sym,
+                                  TPM2_ALG_SHA256,
+                                  out_transient_handle(session)));
+
+   return std::shared_ptr<Session>(new Session(std::move(session),
+                                               {
+                                                  .continue_session = true,
+                                                  .decrypt = true,
+                                                  .encrypt = true,
+                                                  .audit = false,
+                                               }));
+}
+
+std::shared_ptr<Session> Session::salted_session(const std::shared_ptr<Context>& ctx, const RSA_PrivateKey& tpm_key) {
+   Object session(ctx);
+
+   const TPMT_SYM_DEF auth_sym = {
+      .algorithm = TPM2_ALG_AES,
+      .keyBits = {.aes = 256},
+      .mode = {.aes = TPM2_ALG_CFB},
+   };
+
+   check_rc("Esys_StartSession",
+            Esys_StartAuthSession(inner(ctx),
+                                  tpm_key.handles().transient_handle(),
+                                  tpm_key.handles().transient_handle(),
                                   ESYS_TR_NONE,
                                   ESYS_TR_NONE,
                                   ESYS_TR_NONE,

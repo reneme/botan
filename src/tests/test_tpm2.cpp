@@ -362,7 +362,7 @@ std::vector<Test::Result> test_tpm2_hash() {
       auto tpm_hash = [&]() -> std::unique_ptr<Botan::TPM2::HashFunction> {
          try {
             return std::make_unique<Botan::TPM2::HashFunction>(
-               ctx, algo, Botan::TPM2::Session::unauthenticated_session(ctx));
+               ctx, algo, ESYS_TR_RH_NULL, Botan::TPM2::Session::unauthenticated_session(ctx));
          } catch(const Botan::Lookup_Error&) {
             return {};
          }
@@ -443,19 +443,32 @@ std::vector<Test::Result> test_tpm2_hash() {
 
       CHECK("validation ticket",
             [&](Test::Result& result) {
-               auto tpm_hash =
-                  Botan::TPM2::HashFunction(ctx, "SHA-256", Botan::TPM2::Session::unauthenticated_session(ctx));
+               // using the NULL hierarchy essentially disables the validation ticket
+               auto tpm_hash_null = Botan::TPM2::HashFunction(
+                  ctx, "SHA-256", ESYS_TR_RH_NULL, Botan::TPM2::Session::unauthenticated_session(ctx));
+               tpm_hash_null.update("Hola mundo!");
+               const auto [digest_null, ticket_null] = tpm_hash_null.final_with_ticket();
+               result.require("digest is set", digest_null != nullptr);
+               result.require("ticket is set", ticket_null != nullptr);
+               result.confirm("ticket is empty", ticket_null->digest.size == 0);
 
-               tpm_hash.update("Hola mundo!");
+               // using the OWNER hierarchy (for instance) enables the validation ticket
+               auto tpm_hash_owner = Botan::TPM2::HashFunction(
+                  ctx, "SHA-256", ESYS_TR_RH_OWNER, Botan::TPM2::Session::unauthenticated_session(ctx));
+               tpm_hash_owner.update("Hola mundo!");
+               const auto [digest_owner, ticket_owner] = tpm_hash_owner.final_with_ticket();
+               result.require("digest is set", digest_owner != nullptr);
+               result.require("ticket is set", ticket_owner != nullptr);
+               result.confirm("ticket is not empty", ticket_owner->digest.size > 0);
 
-               const auto [digest, ticket] = tpm_hash.final_with_ticket();
-               result.require("digest is set", digest != nullptr);
-               result.test_not_null("ticket is set", ticket);
-
-               const auto digest_vec = Botan::TPM2::copy_into<Botan::secure_vector<uint8_t>>(*digest);
+               const auto digest_vec = Botan::TPM2::copy_into<Botan::secure_vector<uint8_t>>(*digest_owner);
                result.test_eq("digest",
                               digest_vec,
                               Botan::hex_decode("1e479f4d871e59e9054aad62105a259726801d5f494acbfcd40591c82f9b3136"));
+
+               result.test_eq("digests are the same, regardless of ticket",
+                              Botan::TPM2::copy_into<std::vector<uint8_t>>(*digest_null),
+                              digest_vec);
             }),
    };
 }

@@ -74,8 +74,8 @@ namespace Botan::TPM2 {
  *          @p mode_name are known, otherwise std::nullopt
  */
 [[nodiscard]] inline std::optional<std::string> cipher_mode_tss2_to_botan(TPM2_ALG_ID cipher_id,
-                                                                             TPM2_KEY_BITS key_bits,
-                                                                             TPM2_ALG_ID mode_id) noexcept {
+                                                                          TPM2_KEY_BITS key_bits,
+                                                                          TPM2_ALG_ID mode_id) noexcept {
    const auto cipher_name = [&]() -> std::optional<std::string> {
       if(cipher_id == TPM2_ALG_AES) {
          if(key_bits == 128) {

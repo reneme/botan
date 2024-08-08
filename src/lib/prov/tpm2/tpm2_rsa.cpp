@@ -83,20 +83,6 @@ std::pair<TPMT_SIG_SCHEME, HashFunction> select_scheme(const Object& handle,
            std::move(hash)};
 }
 
-BigInt n(const unique_esys_ptr<TPM2B_PUBLIC>& pub) {
-   BOTAN_ASSERT_NONNULL(pub);
-   BOTAN_ASSERT_NOMSG(pub->publicArea.type == TPM2_ALG_RSA);
-   return BigInt(as_span(pub->publicArea.unique.rsa));
-}
-
-BigInt e(const unique_esys_ptr<TPM2B_PUBLIC>& pub) {
-   // TPM2 may report 0 when the exponent is 'the default' (2^16 + 1)
-   BOTAN_ASSERT_NONNULL(pub);
-   BOTAN_ASSERT_NOMSG(pub->publicArea.type == TPM2_ALG_RSA);
-   const auto exponent = pub->publicArea.parameters.rsaDetail.exponent;
-   return (exponent == 0) ? 65537 : exponent;
-}
-
 Object make_persistent_object(const std::shared_ptr<Context>& ctx,
                               uint32_t persistent_object_handle,
                               std::span<const uint8_t> auth_value,
@@ -203,8 +189,7 @@ RSA_PrivateKey::CreationData create_transient_key(const std::shared_ptr<Context>
    return {
       .handle = std::move(handle),
       .private_blob = copy_into<std::vector<uint8_t>>(*private_bytes),
-      .n = n(public_info),
-      .e = e(public_info),
+      .public_key = rsa_pubkey_from_tss2_public(public_info.get()),
    };
 }
 
@@ -228,8 +213,7 @@ RSA_PrivateKey::RSA_PrivateKey(const std::shared_ptr<Context>& ctx,
          sessions) {}
 
 RSA_PublicKey::RSA_PublicKey(Object object, SessionBundle sessions) :
-      Botan::RSA_PublicKey(n(object._public_info(sessions, TPM2_ALG_RSA).pub),
-                           e(object._public_info(sessions, TPM2_ALG_RSA).pub)),
+      Botan::RSA_PublicKey(rsa_pubkey_from_tss2_public(object._public_info(sessions, TPM2_ALG_RSA).pub.get())),
       m_handle(std::move(object)),
       m_sessions(std::move(sessions)) {}
 
@@ -242,13 +226,12 @@ std::unique_ptr<RSA_PrivateKey> RSA_PrivateKey::from_persistent(const std::share
 }
 
 RSA_PrivateKey::RSA_PrivateKey(Object object, SessionBundle sessions) :
-      Botan::RSA_PublicKey(n(object._public_info(sessions, TPM2_ALG_RSA).pub),
-                           e(object._public_info(sessions, TPM2_ALG_RSA).pub)),
+      Botan::RSA_PublicKey(rsa_pubkey_from_tss2_public(object._public_info(sessions, TPM2_ALG_RSA).pub.get())),
       m_handle(std::move(object)),
       m_sessions(std::move(sessions)) {}
 
 RSA_PrivateKey::RSA_PrivateKey(RSA_PrivateKey::CreationData data, SessionBundle sessions) :
-      Botan::RSA_PublicKey(data.n, data.e),
+      Botan::RSA_PublicKey(std::move(data.public_key)),
       m_handle(std::move(data.handle)),
       m_sessions(std::move(sessions)),
       m_private_blob(std::move(data.private_blob)) {}

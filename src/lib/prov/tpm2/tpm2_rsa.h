@@ -93,8 +93,7 @@ class BOTAN_PUBLIC_API(3, 6) RSA_PrivateKey final : public virtual Botan::RSA_Pu
       struct CreationData {
             Object handle;
             std::vector<uint8_t> private_blob = {};
-            Botan::BigInt n;
-            Botan::BigInt e;
+            RSA_PublicKey public_key;
       };
 
    protected:

@@ -183,6 +183,48 @@ bool Context::in_persistent_handles(uint32_t persistent_handle) const {
           persistent_handles.end();
 }
 
+void Context::make_key_persistent(RSA_PrivateKey& key, uint32_t persistent_handle, const SessionBundle& sessions) {
+   if(in_persistent_handles(persistent_handle)) {
+      throw Invalid_Argument("Persistent handle already in use");
+   }
+
+   ESYS_TR persistent_handle_out;
+
+   check_rc("Esys_EvictControl",
+            Esys_EvictControl(m_impl->m_ctx,
+                              ESYS_TR_RH_OWNER /*TODO: hierarchy*/,
+                              key.handles().transient_handle(),
+                              sessions[0],
+                              sessions[1],
+                              sessions[2],
+                              persistent_handle,
+                              &persistent_handle_out));
+
+   check_rc("Esys_TR_GetTpmHandle",
+            Esys_TR_GetTpmHandle(m_impl->m_ctx, persistent_handle_out, out_persistent_handle(key.mutable_handles())));
+
+   BOTAN_ASSERT_NOMSG(persistent_handle == key.handles().persistent_handle());
+}
+
+void Context::evict_persistent_key(RSA_PrivateKey& key, const SessionBundle& sessions) {
+   ESYS_TR persistent_handle_out;
+
+   // TODO: This is not the right call yet...
+   check_rc("Esys_EvictControl",
+            Esys_EvictControl(m_impl->m_ctx,
+                              ESYS_TR_RH_OWNER /*TODO: hierarchy*/,
+                              key.handles().transient_handle(),
+                              sessions[0],
+                              sessions[1],
+                              sessions[2],
+                              key.handles().persistent_handle(),
+                              &persistent_handle_out));
+
+   // TODO: Will this clear the persistent handle in the key object?
+   // check_rc("Esys_TR_GetTpmHandle",
+   //          Esys_TR_GetTpmHandle(m_impl->m_ctx, persistent_handle_out, out_persistent_handle(key.mutable_handles())));
+}
+
 Context::~Context() {
    if(m_impl) {
       Esys_Finalize(&m_impl->m_ctx);

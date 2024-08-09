@@ -95,6 +95,8 @@ std::vector<Test::Result> test_tpm2_context() {
                result.confirm("At least one persistent handle", !handles.empty());
                result.confirm("SRK is in the list", Botan::value_exists(handles, 0x81000001));
                result.confirm("Test private key is in the list", Botan::value_exists(handles, persistent_key_id));
+               result.confirm("Test persistence location is not in the list",
+                              !Botan::value_exists(handles, persistent_key_id + 1));
             }),
 
       CHECK("Fetch Storage Root Key",
@@ -352,6 +354,35 @@ std::vector<Test::Result> test_tpm2_rsa() {
 
                Botan::PK_Verifier verifier(*pk, "PSS(SHA-256)");
                result.confirm("Signature is valid", verifier.verify_message(message, signature));
+            }),
+
+      CHECK("Make a transient key persistent then remove it again",
+            [&](Test::Result& result) {
+               //Create Key
+               auto srk = ctx->storage_root_key({}, {});
+
+               auto authed_session = Botan::TPM2::Session::salted_session(ctx, *srk);
+
+               const std::array<uint8_t, 6> secret = {'s', 'e', 'c', 'r', 'e', 't'};
+
+               auto sk = Botan::TPM2::RSA_PrivateKey(ctx, *srk, secret, authed_session, 2048);
+               result.confirm("is transient", sk.handles().has_transient_handle());
+               result.confirm("is not persistent", !sk.handles().has_persistent_handle());
+
+               // Make it persistent
+               const auto new_location = persistent_key_id + 1;
+               ctx->make_key_persistent(sk, new_location, authed_session);
+               result.confirm("New location occupied", ctx->in_persistent_handles(new_location));
+               result.confirm("is persistent", sk.handles().has_persistent_handle());
+               result.test_throws<Botan::Invalid_Argument>("Cannot persist to the same location", [&] {
+                  ctx->make_key_persistent(sk, new_location, authed_session);
+               });
+
+               //Evict it
+               ctx->evict_persistent_key(sk, authed_session);
+               result.confirm("New location no longer occupied", ctx->in_persistent_handles(new_location));
+               result.confirm("is transient", sk.handles().has_transient_handle());
+               result.confirm("is not persistent", !sk.handles().has_persistent_handle());
             }),
    };
 }

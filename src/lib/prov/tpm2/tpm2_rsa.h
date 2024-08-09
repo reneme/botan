@@ -64,19 +64,6 @@ class BOTAN_PUBLIC_API(3, 6) RSA_PrivateKey final : public virtual Botan::RSA_Pu
                      uint16_t keylength,
                      std::optional<uint32_t> exponent = {});
 
-      // static std::unique_ptr<RSA_PrivateKey> create_transient(const std::shared_ptr<Context>& ctx,
-      //                                                         std::span<const uint8_t> auth_value,
-      //                                                         const SessionBundle& sessions);
-
-      // static std::unique_ptr<RSA_PrivateKey> create_persistent(const std::shared_ptr<Context>& ctx,
-      //                                                          uint32_t persistent_object_handle,
-      //                                                          std::span<const uint8_t> auth_value,
-      //                                                          const SessionBundle& sessions);
-
-      // Somewhere:
-      // evict_object(m_handle, sessions) // Evicts from persistent storage
-      // make_persistent(m_handle, persistent_object_handle, sessions)
-
    public:
       std::unique_ptr<Public_Key> public_key() const override {
          return std::make_unique<Botan::RSA_PublicKey>(algorithm_identifier(), public_key_bits());
@@ -99,6 +86,12 @@ class BOTAN_PUBLIC_API(3, 6) RSA_PrivateKey final : public virtual Botan::RSA_Pu
    protected:
       RSA_PrivateKey(Object obj, SessionBundle sessions);
       RSA_PrivateKey(CreationData data, SessionBundle sessions);
+
+   private:
+      Object& mutable_handles() { return m_handle; }
+
+      friend void Context::make_key_persistent(RSA_PrivateKey&, uint32_t, const SessionBundle&);
+      friend void Context::evict_persistent_key(RSA_PrivateKey&, const SessionBundle&);
 
    private:
       Object m_handle;

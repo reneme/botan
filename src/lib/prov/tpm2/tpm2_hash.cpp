@@ -16,18 +16,6 @@
 
 namespace Botan::TPM2 {
 
-namespace {
-
-TPMI_ALG_HASH get_tpm2_hash_type(std::string_view hash_name) {
-   if(auto hash_id = hash_algo_botan_to_tss2(hash_name)) {
-      return hash_id.value();
-   }
-
-   throw Lookup_Error("TPM 2.0 Hash ", hash_name);
-}
-
-}  // namespace
-
 HashFunction::HashFunction(std::shared_ptr<Context> ctx,
                            std::string_view algorithm,
                            TPMI_RH_HIERARCHY hierarchy,
@@ -42,11 +30,7 @@ HashFunction::HashFunction(std::shared_ptr<Context> ctx,
 }
 
 std::string HashFunction::name() const {
-   if(auto hash_name = hash_algo_tss2_to_botan(m_hash_type)) {
-      return hash_name.value();
-   }
-
-   throw Invalid_State("TPM 2.0 hash object with unexpected hash type");
+   return get_botan_hash_name(m_hash_type);
 }
 
 size_t HashFunction::output_length() const {

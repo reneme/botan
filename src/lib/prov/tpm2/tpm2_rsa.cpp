@@ -17,6 +17,7 @@
 #include <botan/internal/fmt.h>
 #include <botan/internal/scan_name.h>
 #include <botan/internal/stl_util.h>
+#include <botan/internal/tpm2_algo_mappings.h>
 #include <botan/internal/tpm2_hash.h>
 #include <botan/internal/tpm2_util.h>
 #include <botan/internal/workfactor.h>
@@ -28,59 +29,115 @@ namespace Botan::TPM2 {
 
 namespace {
 
-std::pair<TPMT_SIG_SCHEME, HashFunction> select_scheme(const Object& handle,
-                                                       const SessionBundle& sessions,
-                                                       std::string_view padding) {
-   SCAN_Name req(padding);
+std::pair<std::string, std::string> schemes_from_padding(std::string_view padding) {
+   const SCAN_Name req(padding);
+   if(req.arg_count() == 0) {
+      throw Invalid_Argument("RSA signing padding scheme must at least specify a hash function");
+   }
+   return {req.algo_name() /*Padding Scheme*/, req.arg(0) /*Hash Scheme*/};
+}
 
-   const auto& pubinfo = handle._public_info(sessions);
+class HashFunctionWrapper {
+      // This class wraps a TPM2 HashFunction or a software Botan::HashFunction,
+      // and returns the final hash and validation ticket. In case of a software
+      // hash, the validation ticket will be null.
 
-   // Restricted keys require to provide the hash validation ticket that is
-   // provided when hashing the data to sign on the TPM under a specific
-   // hierarchy.
-   //
-   // TODO: If we implement a way to do the hashing in software, there is no
-   //       validation and the validation ticket will be null/in null hierachy.
-   //       We will then have to prevent users from using that with restricted
-   //       keys. It won't work.
-   const bool is_restricted = pubinfo.pub->publicArea.objectAttributes & TPMA_OBJECT_RESTRICTED;
+   public:
+      static HashFunctionWrapper create_with_hashing_in_tpm(std::shared_ptr<Context> ctx,
+                                                            std::string_view algorithm,
+                                                            TPMI_RH_HIERARCHY hierarchy,
+                                                            SessionBundle sessions) {
+         return HashFunctionWrapper(
+            std::make_unique<HashFunction>(std::move(ctx), algorithm, hierarchy, std::move(sessions)));
+      }
 
-   // TODO: this could also be ENDORSEMENT or PLATFORM, and we're not 100% sure
-   //       that OWNER is always the right choice here.
-   const TPMI_RH_HIERARCHY hierarchy = ESYS_TR_RH_OWNER;
+      static HashFunctionWrapper create_with_hashing_in_software(std::string_view algorithm) {
+         return HashFunctionWrapper(Botan::HashFunction::create_or_throw(algorithm));
+      }
 
-   BOTAN_ASSERT(!is_restricted || hierarchy != ESYS_TR_RH_NULL,
-                "NULL hierarchy for validation not possible with restricted key");
+   public:
+      void update(std::span<const uint8_t> msg) { m_hash->update(msg); }
+
+      std::pair<unique_esys_ptr<TPM2B_DIGEST>, unique_esys_ptr<TPMT_TK_HASHCHECK>> final_with_ticket() {
+         if(auto tpm2_hash = dynamic_cast<HashFunction*>(m_hash.get())) {
+            // Use the TPM2 hash object to get the validation ticket.
+            return tpm2_hash->final_with_ticket();
+         }
+
+         // No validation ticket for software hashes.
+         // TODO: Make this prettier
+         unique_esys_ptr<TPM2B_DIGEST> digest(new TPM2B_DIGEST(init_empty<TPM2B_DIGEST>()));
+         copy_into<TPM2B_DIGEST>(*digest, m_hash->final_stdvec());
+
+         unique_esys_ptr<TPMT_TK_HASHCHECK> dummy_validation(new TPMT_TK_HASHCHECK(
+            {.tag = TPM2_ST_HASHCHECK, .hierarchy = TPM2_RH_NULL, .digest = init_empty<TPM2B_DIGEST>()}));
+
+         return {std::move(digest), std::move(dummy_validation)};
+      }
+
+      std::string name() const { return m_hash->name(); }
+
+      TPMI_ALG_HASH type() const { return get_tpm2_hash_type(m_hash->name()); }
+
+   private:
+      HashFunctionWrapper(std::unique_ptr<Botan::HashFunction> hash) : m_hash(std::move(hash)) {}
+
+   private:
+      std::unique_ptr<Botan::HashFunction> m_hash;
+};
+
+TPMT_SIG_SCHEME select_tpmt_sig_scheme(std::string_view padding) {
+   const auto [name, hash] = schemes_from_padding(padding);
 
    const auto scheme = [&]() -> TPMI_ALG_SIG_SCHEME {
-      if(req.algo_name() == "EMSA_PKCS1" || req.algo_name() == "PKCS1v15" || req.algo_name() == "EMSA-PKCS1-v1_5" ||
-         req.algo_name() == "EMSA3") {
+      if(name == "EMSA_PKCS1" || name == "PKCS1v15" || name == "EMSA-PKCS1-v1_5" || name == "EMSA3") {
          return TPM2_ALG_RSASSA;
       }
 
-      if(req.algo_name() == "PSS" || req.algo_name() == "PSSR" || req.algo_name() == "EMSA-PSS" ||
-         req.algo_name() == "PSS-MGF1" || req.algo_name() == "EMSA4") {
-         if(req.arg_count() != 1) {
+      if(name == "PSS" || name == "PSSR" || name == "EMSA-PSS" || name == "PSS-MGF1" || name == "EMSA4") {
+         if(SCAN_Name(padding).arg_count() != 1) {
             throw Not_Implemented("RSA signing using PSS with MGF1");
          }
          return TPM2_ALG_RSAPSS;
       }
 
-      throw Not_Implemented("RSA signing with padding scheme " + req.algo_name());
+      throw Not_Implemented("RSA signing with padding scheme " + name);
    }();
 
-   if(req.arg_count() == 0) {
-      throw Invalid_Argument("RSA signing padding scheme must at least specify a hash function");
-   }
-
-   auto hash = HashFunction(handle.context(), req.arg(0), hierarchy, sessions);
-   const auto hash_type = hash.type();
-
    return {TPMT_SIG_SCHEME{
-              .scheme = scheme,
-              .details = {.any = {.hashAlg = hash_type}},
-           },
-           std::move(hash)};
+      .scheme = scheme,
+      .details = {.any = {.hashAlg = get_tpm2_hash_type(hash)}},
+   }};
+}
+
+HashFunctionWrapper select_hash_for_signing(const Object& handle,
+                                            const SessionBundle& sessions,
+                                            std::string_view padding) {
+   // When signing, we have to hash in the TPM if the key is restricted.
+   // Otherwise, we can hash in software. In this function we create a
+   // HashFunctionWrapper that hashes in hardware if and only if
+   // the key is restricted.
+   const auto& pubinfo = handle._public_info(sessions);
+
+   // Restricted keys require to provide the hash validation ticket that is
+   // provided when hashing the data to sign on the TPM under a specific
+   // hierarchy.
+   const bool is_restricted = pubinfo.pub->publicArea.objectAttributes & TPMA_OBJECT_RESTRICTED;
+
+   const auto hash = schemes_from_padding(padding).second;
+
+   if(is_restricted) {
+      // For restricted keys, we have to use the validation ticket from a TPM created hash
+
+      // TODO: this could also be ENDORSEMENT or PLATFORM, and we're not 100% sure
+      //       that OWNER is always the right choice here.
+      const TPMI_RH_HIERARCHY hierarchy = ESYS_TR_RH_OWNER;
+      BOTAN_ASSERT(hierarchy != ESYS_TR_RH_NULL, "NULL hierarchy for validation not possible with restricted key");
+
+      return HashFunctionWrapper::create_with_hashing_in_tpm(handle.context(), hash, hierarchy, sessions);
+   } else {
+      return HashFunctionWrapper::create_with_hashing_in_software(hash);
+   }
 }
 
 Object make_persistent_object(const std::shared_ptr<Context>& ctx,
@@ -242,12 +299,14 @@ class RSA_Signature_Operation : public PK_Ops::Signature {
    private:
       RSA_Signature_Operation(const Object& object,
                               const SessionBundle& sessions,
-                              std::pair<TPMT_SIG_SCHEME, HashFunction> scheme) :
-            m_key_handle(object), m_sessions(sessions), m_scheme(scheme.first), m_hash(std::move(scheme.second)) {}
+                              TPMT_SIG_SCHEME scheme,
+                              HashFunctionWrapper hash) :
+            m_key_handle(object), m_sessions(sessions), m_scheme(scheme), m_hash(std::move(hash)) {}
 
    public:
       RSA_Signature_Operation(const Object& object, const SessionBundle& sessions, std::string_view padding) :
-            RSA_Signature_Operation(object, sessions, select_scheme(object, sessions, padding)) {}
+            RSA_Signature_Operation(
+               object, sessions, select_tpmt_sig_scheme(padding), select_hash_for_signing(object, sessions, padding)) {}
 
       void update(std::span<const uint8_t> msg) override { m_hash.update(msg); }
 
@@ -292,19 +351,25 @@ class RSA_Signature_Operation : public PK_Ops::Signature {
       const Object& m_key_handle;
       const SessionBundle& m_sessions;
       TPMT_SIG_SCHEME m_scheme;
-      HashFunction m_hash;
+      HashFunctionWrapper m_hash;
 };
 
 class RSA_Verification_Operation : public PK_Ops::Verification {
    private:
       RSA_Verification_Operation(const Object& object,
                                  const SessionBundle& sessions,
-                                 std::pair<TPMT_SIG_SCHEME, HashFunction> scheme) :
-            m_key_handle(object), m_sessions(sessions), m_scheme(scheme.first), m_hash(std::move(scheme.second)) {}
+                                 TPMT_SIG_SCHEME scheme,
+                                 HashFunctionWrapper hash) :
+            m_key_handle(object), m_sessions(sessions), m_scheme(scheme), m_hash(std::move(hash)) {}
 
    public:
+      /// Verification using a TPM2 key (Hashing performed in software)
       RSA_Verification_Operation(const Object& object, const SessionBundle& sessions, std::string_view padding) :
-            RSA_Verification_Operation(object, sessions, select_scheme(object, sessions, padding)) {}
+            RSA_Verification_Operation(
+               object,
+               sessions,
+               select_tpmt_sig_scheme(padding),
+               HashFunctionWrapper::create_with_hashing_in_software(schemes_from_padding(padding).second)) {}
 
       void update(std::span<const uint8_t> msg) override { m_hash.update(msg); }
 
@@ -347,7 +412,7 @@ class RSA_Verification_Operation : public PK_Ops::Verification {
       const Object& m_key_handle;
       const SessionBundle& m_sessions;
       TPMT_SIG_SCHEME m_scheme;
-      HashFunction m_hash;
+      HashFunctionWrapper m_hash;
 };
 
 }  // namespace

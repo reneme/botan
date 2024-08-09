@@ -15,6 +15,8 @@
 
 #include <tss2/tss2_tpm2_types.h>
 
+#include <botan/exceptn.h>
+
 #include <botan/internal/fmt.h>
 
 namespace Botan::TPM2 {
@@ -45,6 +47,18 @@ namespace Botan::TPM2 {
 }
 
 /**
+ * @returns a TPMI_ALG_HASH value if the @p hash_name is known,
+ *         otherwise throws Lookup_Error
+  */
+inline TPMI_ALG_HASH get_tpm2_hash_type(std::string_view hash_name) {
+   if(auto hash_id = hash_algo_botan_to_tss2(hash_name)) {
+      return hash_id.value();
+   }
+
+   throw Lookup_Error("TPM 2.0 Hash ", hash_name);
+}
+
+/**
  * @returns a Botan hash name string if the @p hash_id value is known,
  *          otherwise std::nullopt
  */
@@ -67,6 +81,18 @@ namespace Botan::TPM2 {
       default:  // TPM2_ALG_ID is not an enum
          return std::nullopt;
    }
+}
+
+/**
+ * @returns a Botan hash name string if the @p hash_id value is known,
+ *          otherwise throws Invalid_State
+ */
+inline std::string get_botan_hash_name(TPM2_ALG_ID hash_id) {
+   if(auto hash_name = hash_algo_tss2_to_botan(hash_id)) {
+      return hash_name.value();
+   }
+
+   throw Invalid_State("TPM 2.0 hash object with unexpected hash type");
 }
 
 /**

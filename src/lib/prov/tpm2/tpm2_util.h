@@ -125,10 +125,16 @@ constexpr OutT copy_into(const tpm2_buffer auto& data) {
 }
 
 template <tpm2_buffer T>
-constexpr T init_empty() {
+constexpr T init_with_size(size_t length) {
    T result;
-   result.size = 0;
+   BOTAN_ARG_CHECK(length <= sizeof(result.buffer), "Not enough capacity in TPM2 buffer type");
+   result.size = static_cast<decltype(result.size)>(length);
    return result;
+}
+
+template <tpm2_buffer T>
+constexpr T init_empty() {
+   return init_with_size<T>(0);
 }
 
 inline ESYS_CONTEXT* inner(const std::shared_ptr<Context>& ctx) {

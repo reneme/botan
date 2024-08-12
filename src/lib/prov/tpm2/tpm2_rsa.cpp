@@ -29,118 +29,6 @@ namespace Botan::TPM2 {
 
 namespace {
 
-/// @returns a pair of the padding scheme and the hash function names
-std::pair<std::string, std::string> schemes_from_padding(std::string_view padding) {
-   const SCAN_Name req(padding);
-   if(req.arg_count() == 0) {
-      throw Invalid_Argument("RSA signing padding scheme must at least specify a hash function");
-   }
-   return {req.algo_name() /*Padding Scheme*/, req.arg(0) /*Hash Scheme*/};
-}
-
-class HashFunctionWrapper {
-      // This class wraps a TPM2 HashFunction or a software Botan::HashFunction,
-      // and returns the final hash and validation ticket. In case of a software
-      // hash, the validation ticket will be null.
-
-   public:
-      static HashFunctionWrapper create_with_hashing_in_tpm(std::shared_ptr<Context> ctx,
-                                                            std::string_view algorithm,
-                                                            TPMI_RH_HIERARCHY hierarchy,
-                                                            SessionBundle sessions) {
-         return HashFunctionWrapper(
-            std::make_unique<HashFunction>(std::move(ctx), algorithm, hierarchy, std::move(sessions)));
-      }
-
-      static HashFunctionWrapper create_with_hashing_in_software(std::string_view algorithm) {
-         return HashFunctionWrapper(Botan::HashFunction::create_or_throw(algorithm));
-      }
-
-   public:
-      void update(std::span<const uint8_t> msg) { m_hash->update(msg); }
-
-      std::pair<unique_esys_ptr<TPM2B_DIGEST>, unique_esys_ptr<TPMT_TK_HASHCHECK>> final_with_ticket() {
-         if(auto tpm2_hash = dynamic_cast<HashFunction*>(m_hash.get())) {
-            // Use the TPM2 hash object to get the validation ticket.
-            return tpm2_hash->final_with_ticket();
-         }
-
-         // No validation ticket for software hashes.
-         // TODO: Make this prettier
-         unique_esys_ptr<TPM2B_DIGEST> digest(new TPM2B_DIGEST(init_empty<TPM2B_DIGEST>()));
-         copy_into<TPM2B_DIGEST>(*digest, m_hash->final_stdvec());
-
-         unique_esys_ptr<TPMT_TK_HASHCHECK> dummy_validation(new TPMT_TK_HASHCHECK(
-            {.tag = TPM2_ST_HASHCHECK, .hierarchy = TPM2_RH_NULL, .digest = init_empty<TPM2B_DIGEST>()}));
-
-         return {std::move(digest), std::move(dummy_validation)};
-      }
-
-      std::string name() const { return m_hash->name(); }
-
-      TPMI_ALG_HASH type() const { return get_tpm2_hash_type(m_hash->name()); }
-
-   private:
-      HashFunctionWrapper(std::unique_ptr<Botan::HashFunction> hash) : m_hash(std::move(hash)) {}
-
-   private:
-      std::unique_ptr<Botan::HashFunction> m_hash;
-};
-
-TPMT_SIG_SCHEME select_tpmt_sig_scheme(std::string_view padding) {
-   const auto [name, hash] = schemes_from_padding(padding);
-
-   const auto scheme = [&]() -> TPMI_ALG_SIG_SCHEME {
-      if(name == "EMSA_PKCS1" || name == "PKCS1v15" || name == "EMSA-PKCS1-v1_5" || name == "EMSA3") {
-         return TPM2_ALG_RSASSA;
-      }
-
-      if(name == "PSS" || name == "PSSR" || name == "EMSA-PSS" || name == "PSS-MGF1" || name == "EMSA4") {
-         if(SCAN_Name(padding).arg_count() != 1) {
-            throw Not_Implemented("RSA signing using PSS with MGF1");
-         }
-         return TPM2_ALG_RSAPSS;
-      }
-
-      throw Not_Implemented("RSA signing with padding scheme " + name);
-   }();
-
-   return {TPMT_SIG_SCHEME{
-      .scheme = scheme,
-      .details = {.any = {.hashAlg = get_tpm2_hash_type(hash)}},
-   }};
-}
-
-HashFunctionWrapper select_hash_for_signing(const Object& handle,
-                                            const SessionBundle& sessions,
-                                            std::string_view padding) {
-   // When signing, we have to hash in the TPM if the key is restricted.
-   // Otherwise, we can hash in software. In this function we create a
-   // HashFunctionWrapper that hashes in hardware if and only if
-   // the key is restricted.
-   const auto& pubinfo = handle._public_info(sessions);
-
-   // Restricted keys require to provide the hash validation ticket that is
-   // provided when hashing the data to sign on the TPM under a specific
-   // hierarchy.
-   const bool is_restricted = pubinfo.pub->publicArea.objectAttributes & TPMA_OBJECT_RESTRICTED;
-
-   const auto hash = schemes_from_padding(padding).second;
-
-   if(is_restricted) {
-      // For restricted keys, we have to use the validation ticket from a TPM created hash
-
-      // TODO: this could also be ENDORSEMENT or PLATFORM, and we're not 100% sure
-      //       that OWNER is always the right choice here.
-      const TPMI_RH_HIERARCHY hierarchy = ESYS_TR_RH_OWNER;
-      BOTAN_ASSERT(hierarchy != ESYS_TR_RH_NULL, "NULL hierarchy for validation not possible with restricted key");
-
-      return HashFunctionWrapper::create_with_hashing_in_tpm(handle.context(), hash, hierarchy, sessions);
-   } else {
-      return HashFunctionWrapper::create_with_hashing_in_software(hash);
-   }
-}
-
 Object make_persistent_object(const std::shared_ptr<Context>& ctx,
                               uint32_t persistent_object_handle,
                               std::span<const uint8_t> auth_value,
@@ -296,24 +184,117 @@ RSA_PrivateKey::RSA_PrivateKey(RSA_PrivateKey::CreationData data, SessionBundle 
 
 namespace {
 
+struct AlgorithmSelection {
+      TPMT_SIG_SCHEME signature_scheme;
+      std::string hash_name;
+};
+
+AlgorithmSelection select_algorithms(std::string_view padding) {
+   const SCAN_Name req(padding);
+   if(req.arg_count() == 0) {
+      throw Invalid_Argument("RSA signing padding scheme must at least specify a hash function");
+   }
+
+   const auto scheme = signature_scheme_botan_to_tss2(req.algo_name());
+   if(!scheme) {
+      throw Not_Implemented("RSA signing with padding scheme " + req.algo_name());
+   }
+
+   if(scheme.value() == TPM2_ALG_RSAPSS && req.arg_count() != 1) {
+      throw Not_Implemented("RSA signing using PSS with MGF1");
+   }
+
+   return {TPMT_SIG_SCHEME{
+              .scheme = scheme.value(),
+              .details = {.any = {.hashAlg = get_tpm2_hash_type(req.arg(0))}},
+           },
+           req.arg(0)};
+}
+
+/**
+ * Signing with a restricted key requires a validation ticket that is provided
+ * when hashing the data to sign on the TPM. Otherwise, it is fine to hash the
+ * data in software.
+ *
+ * @param key_handle  the key to create the signature with
+ * @param sessions    the sessions to use for the TPM operations
+ * @param hash_name   the name of the hash function to use
+ *
+ * @return a HashFunction that hashes in hardware if the key is restricted
+ */
+std::unique_ptr<Botan::HashFunction> create_hash_function(const Object& key_handle,
+                                                          const SessionBundle& sessions,
+                                                          std::string_view hash_name) {
+   const bool is_restricted =
+      key_handle._public_info(sessions, TPM2_ALG_RSA).pub->publicArea.objectAttributes & TPMA_OBJECT_RESTRICTED;
+
+   if(is_restricted) {
+      // TODO: this could also be ENDORSEMENT or PLATFORM, and we're not 100% sure
+      //       that OWNER is always the right choice here.
+      const TPMI_RH_HIERARCHY hierarchy = ESYS_TR_RH_OWNER;
+      return std::make_unique<HashFunction>(key_handle.context(), hash_name, hierarchy, sessions);
+   } else {
+      return Botan::HashFunction::create_or_throw(hash_name);
+   }
+}
+
+/**
+ * If the key is restricted, this will transparently use the TPM to hash the
+ * data to obtain a validation ticket.
+ *
+ * TPM Library, Part 1: Architecture", Section 11.4.6.3 (4)
+ *    This ticket is used to indicate that a digest of external data is safe to
+ *    sign using a restricted signing key. A restricted signing key may only
+ *    sign a digest that was produced by the TPM. [...] This prevents forgeries
+ *    of attestation data.
+ */
 class RSA_Signature_Operation : public PK_Ops::Signature {
    private:
       RSA_Signature_Operation(const Object& object,
                               const SessionBundle& sessions,
-                              TPMT_SIG_SCHEME scheme,
-                              HashFunctionWrapper hash) :
-            m_key_handle(object), m_sessions(sessions), m_scheme(scheme), m_hash(std::move(hash)) {}
+                              const AlgorithmSelection& algorithms) :
+            m_key_handle(object),
+            m_sessions(sessions),
+            m_scheme(algorithms.signature_scheme),
+            m_hash(create_hash_function(m_key_handle, m_sessions, algorithms.hash_name)) {
+         BOTAN_ASSERT_NONNULL(m_hash);
+      }
 
    public:
       RSA_Signature_Operation(const Object& object, const SessionBundle& sessions, std::string_view padding) :
-            RSA_Signature_Operation(
-               object, sessions, select_tpmt_sig_scheme(padding), select_hash_for_signing(object, sessions, padding)) {}
+            RSA_Signature_Operation(object, sessions, select_algorithms(padding)) {}
 
-      void update(std::span<const uint8_t> msg) override { m_hash.update(msg); }
+      void update(std::span<const uint8_t> msg) override { m_hash->update(msg); }
 
       std::vector<uint8_t> sign(RandomNumberGenerator& /* rng */) override {
-         auto [digest, validation] = m_hash.final_with_ticket();
+         if(auto hash = dynamic_cast<HashFunction*>(m_hash.get())) {
+            // This is a TPM2-based hash object that calculated the digest on
+            // the TPM. We can use the validation ticket to create the signature.
+            auto [digest, validation] = hash->final_with_ticket();
+            return create_signature(digest.get(), validation.get());
+         } else {
+            // This is a software hash, so we have to stub the validation ticket
+            // and create the signature without it.
+            TPMT_TK_HASHCHECK dummy_validation = {
+               .tag = TPM2_ST_HASHCHECK,
+               .hierarchy = TPM2_RH_NULL,
+               .digest = init_empty<TPM2B_DIGEST>(),
+            };
 
+            auto digest = init_with_size<TPM2B_DIGEST>(m_hash->output_length());
+            m_hash->final(as_span(digest));
+            return create_signature(&digest, &dummy_validation);
+         }
+      }
+
+      size_t signature_length() const override {
+         return m_key_handle._public_info(m_sessions, TPM2_ALG_RSA).pub->publicArea.parameters.rsaDetail.keyBits / 8;
+      }
+
+      std::string hash_function() const override { return m_hash->name(); }
+
+   private:
+      std::vector<uint8_t> create_signature(const TPM2B_DIGEST* digest, const TPMT_TK_HASHCHECK* validation) {
          unique_esys_ptr<TPMT_SIGNATURE> signature;
          check_rc("Esys_Sign",
                   Esys_Sign(inner(m_key_handle.context()),
@@ -321,13 +302,13 @@ class RSA_Signature_Operation : public PK_Ops::Signature {
                             m_sessions[0],
                             m_sessions[1],
                             m_sessions[2],
-                            digest.get(),
+                            digest,
                             &m_scheme,
-                            validation.get(),
+                            validation,
                             out_ptr(signature)));
 
          BOTAN_ASSERT_NONNULL(signature);
-         const auto& sig = [&]() -> TPMS_SIGNATURE_RSA {
+         const auto& sig = [&]() -> TPMS_SIGNATURE_RSA& {
             if(signature->sigAlg == TPM2_ALG_RSASSA) {
                return signature->signature.rsassa;
             } else if(signature->sigAlg == TPM2_ALG_RSAPSS) {
@@ -337,40 +318,35 @@ class RSA_Signature_Operation : public PK_Ops::Signature {
             throw Invalid_State(fmt("TPM2 returned an unexpected signature scheme {}", signature->sigAlg));
          }();
 
-         BOTAN_ASSERT_NOMSG(sig.hash == m_hash.type());
+         BOTAN_ASSERT_NOMSG(sig.hash == m_scheme.details.any.hashAlg);
 
          return copy_into<std::vector<uint8_t>>(sig.sig);
-      }
-
-      size_t signature_length() const override {
-         return m_key_handle._public_info(m_sessions, TPM2_ALG_RSA).pub->publicArea.parameters.rsaDetail.keyBits / 8;
-      }
-
-      std::string hash_function() const override { return m_hash.name(); }
+      };
 
    private:
       const Object& m_key_handle;
       const SessionBundle& m_sessions;
       TPMT_SIG_SCHEME m_scheme;
-      HashFunctionWrapper m_hash;
+      std::unique_ptr<Botan::HashFunction> m_hash;
 };
 
+/**
+ * Signature verification on the TPM. This does not require a validation ticket,
+ * therefore the hash is always calculated in software.
+ */
 class RSA_Verification_Operation : public PK_Ops::Verification {
    private:
       RSA_Verification_Operation(const Object& object,
                                  const SessionBundle& sessions,
-                                 TPMT_SIG_SCHEME scheme,
-                                 std::string_view hash_name) :
+                                 const AlgorithmSelection& algorithms) :
             m_key_handle(object),
             m_sessions(sessions),
-            m_scheme(scheme),
-            m_hash(Botan::HashFunction::create_or_throw(hash_name)) {}
+            m_scheme(algorithms.signature_scheme),
+            m_hash(Botan::HashFunction::create_or_throw(algorithms.hash_name)) {}
 
    public:
-      /// Verification using a TPM2 key (Hashing performed in software)
       RSA_Verification_Operation(const Object& object, const SessionBundle& sessions, std::string_view padding) :
-            RSA_Verification_Operation(
-               object, sessions, select_tpmt_sig_scheme(padding), schemes_from_padding(padding).second) {}
+            RSA_Verification_Operation(object, sessions, select_algorithms(padding)) {}
 
       void update(std::span<const uint8_t> msg) override { m_hash->update(msg); }
 

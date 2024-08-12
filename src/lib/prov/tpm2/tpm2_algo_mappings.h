@@ -154,6 +154,16 @@ inline std::string get_botan_hash_name(TPM2_ALG_ID hash_id) {
    return Botan::fmt("{}({})", mode_name.value(), cipher_name.value());
 }
 
+[[nodiscard]] inline std::optional<TPMI_ALG_SIG_SCHEME> signature_scheme_botan_to_tss2(std::string_view name) noexcept {
+   if(name == "EMSA_PKCS1" || name == "PKCS1v15" || name == "EMSA-PKCS1-v1_5" || name == "EMSA3") {
+      return TPM2_ALG_RSASSA;
+   } else if(name == "PSS" || name == "PSSR" || name == "EMSA-PSS" || name == "PSS-MGF1" || name == "EMSA4") {
+      return TPM2_ALG_RSAPSS;
+   } else {
+      return std::nullopt;
+   }
+}
+
 }  // namespace Botan::TPM2
 
 #endif

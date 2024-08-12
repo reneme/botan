@@ -360,27 +360,28 @@ class RSA_Verification_Operation : public PK_Ops::Verification {
       RSA_Verification_Operation(const Object& object,
                                  const SessionBundle& sessions,
                                  TPMT_SIG_SCHEME scheme,
-                                 HashFunctionWrapper hash) :
-            m_key_handle(object), m_sessions(sessions), m_scheme(scheme), m_hash(std::move(hash)) {}
+                                 std::string_view hash_name) :
+            m_key_handle(object),
+            m_sessions(sessions),
+            m_scheme(scheme),
+            m_hash(Botan::HashFunction::create_or_throw(hash_name)) {}
 
    public:
       /// Verification using a TPM2 key (Hashing performed in software)
       RSA_Verification_Operation(const Object& object, const SessionBundle& sessions, std::string_view padding) :
             RSA_Verification_Operation(
-               object,
-               sessions,
-               select_tpmt_sig_scheme(padding),
-               HashFunctionWrapper::create_with_hashing_in_software(schemes_from_padding(padding).second)) {}
+               object, sessions, select_tpmt_sig_scheme(padding), schemes_from_padding(padding).second) {}
 
-      void update(std::span<const uint8_t> msg) override { m_hash.update(msg); }
+      void update(std::span<const uint8_t> msg) override { m_hash->update(msg); }
 
       bool is_valid_signature(std::span<const uint8_t> sig_data) override {
-         auto [digest, validation] = m_hash.final_with_ticket();
+         auto digest = init_with_size<TPM2B_DIGEST>(m_hash->output_length());
+         m_hash->final(as_span(digest));
 
          const auto signature = [&]() -> TPMT_SIGNATURE {
             TPMT_SIGNATURE sig;
             sig.sigAlg = m_scheme.scheme;
-            sig.signature.any.hashAlg = m_hash.type();
+            sig.signature.any.hashAlg = m_scheme.details.any.hashAlg;
 
             if(sig.sigAlg == TPM2_ALG_RSASSA) {
                copy_into(sig.signature.rsassa.sig, sig_data);
@@ -400,20 +401,20 @@ class RSA_Verification_Operation : public PK_Ops::Verification {
                                                                                     m_sessions[0],
                                                                                     m_sessions[1],
                                                                                     m_sessions[2],
-                                                                                    digest.get(),
+                                                                                    &digest,
                                                                                     &signature,
                                                                                     nullptr /* validation */));
 
          return rc == TPM2_RC_SUCCESS;
       }
 
-      std::string hash_function() const override { return m_hash.name(); }
+      std::string hash_function() const override { return m_hash->name(); }
 
    private:
       const Object& m_key_handle;
       const SessionBundle& m_sessions;
       TPMT_SIG_SCHEME m_scheme;
-      HashFunctionWrapper m_hash;
+      std::unique_ptr<Botan::HashFunction> m_hash;
 };
 
 }  // namespace

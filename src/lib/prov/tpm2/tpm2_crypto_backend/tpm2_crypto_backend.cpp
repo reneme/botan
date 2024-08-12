@@ -435,6 +435,7 @@ TSS2_RC rsa_pk_encrypt(TPM2B_PUBLIC* pub_tpm_key,
          std::string_view label_with_zero_terminator{label, std::strlen(label) + 1};
          return std::make_unique<Botan::OAEP>(std::move(H_label), std::move(H_mgf1), label_with_zero_terminator);
    #else
+         BOTAN_UNUSED(label);
          return nullptr;  // -> not implemented
    #endif
       };

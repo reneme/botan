@@ -83,13 +83,13 @@ class BOTAN_PUBLIC_API(3, 6) Context final : public std::enable_shared_from_this
 
       std::vector<uint32_t> persistent_handles() const;
 
-      /// @return true if @param persistent_handle is in the list of persistent handles
+      /// @return true if @p persistent_handle is in the list of persistent handles
       bool in_persistent_handles(uint32_t persistent_handle) const;
 
-      /// Makes @param key persistent at location @param persistent_handle
+      /// Makes @p key persistent at location @p persistent_handle
       void make_key_persistent(RSA_PrivateKey& key, uint32_t persistent_handle, const SessionBundle& sessions);
 
-      /// Evicts the persistent key @param key
+      /// Evicts the persistent key @p key
       void evict_persistent_key(RSA_PrivateKey& key, const SessionBundle& sessions);
 
       // TODO: This should return a TPM2::Private_Key base class of some sort

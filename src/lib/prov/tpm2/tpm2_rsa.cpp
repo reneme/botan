@@ -29,6 +29,7 @@ namespace Botan::TPM2 {
 
 namespace {
 
+/// @returns a pair of the padding scheme and the hash function names
 std::pair<std::string, std::string> schemes_from_padding(std::string_view padding) {
    const SCAN_Name req(padding);
    if(req.arg_count() == 0) {

@@ -78,7 +78,7 @@ BOTAN_DIAGNOSTIC_PUSH
 BOTAN_DIAGNOSTIC_IGNORE_INHERITED_VIA_DOMINANCE
 
 class BOTAN_PUBLIC_API(2, 0) DH_PrivateKey final : public DH_PublicKey,
-                                                   public PK_Key_Agreement_Key,
+                                                   public virtual PK_Key_Agreement_Key,
                                                    public virtual Private_Key {
    public:
       /**
@@ -101,19 +101,6 @@ class BOTAN_PUBLIC_API(2, 0) DH_PrivateKey final : public DH_PublicKey,
       * @param rng the RNG to use
       */
       DH_PrivateKey(RandomNumberGenerator& rng, const DL_Group& group);
-
-      /* Work around a bug/oddity in clang-cl on Windows - the default move assignment operator
-       * generates multiple calls to Public_Key(Public_Key&&) as a technically-valid-but-dangerous
-       * side-effect of the class having the dllexport attribute. In the cast of the Public_Key
-       * class, this isn't actually a problem since its just an interface and has no data members,
-       * but Clang still raises a warning for it.
-       *
-       * We implement an explicit move assignment operator to silence this warning.
-      */
-      DH_PrivateKey(const DH_PrivateKey&) = default;
-      DH_PrivateKey& operator=(const DH_PrivateKey&) = default;
-      DH_PrivateKey(DH_PrivateKey&&) = default;
-      DH_PrivateKey& operator=(DH_PrivateKey&& other) noexcept;
 
       std::unique_ptr<Public_Key> public_key() const override;
 

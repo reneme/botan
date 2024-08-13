@@ -39,14 +39,14 @@ bool not_zero_64(std::span<const uint8_t> in) {
    return true;
 }
 
-std::shared_ptr<Botan::TPM2::Context> get_tpm2_context() {
+std::shared_ptr<Botan::TPM2::Context> get_tpm2_context(std::string_view rng_tag) {
    auto ctx = Botan::TPM2::Context::create(Test::options().tpm2_tcti_name(), Test::options().tpm2_tcti_conf());
    if(ctx->vendor() != "SW   TPM" || ctx->manufacturer() != "IBM") {
       return {};
    }
 
    if(ctx->supports_botan_crypto_backend()) {
-      ctx->use_botan_crypto_backend(Test::new_rng(__func__));
+      ctx->use_botan_crypto_backend(Test::new_rng(rng_tag));
    }
 
    return ctx;
@@ -59,7 +59,7 @@ Test::Result bail_out() {
 }
 
 std::vector<Test::Result> test_tpm2_properties() {
-   auto ctx = get_tpm2_context();
+   auto ctx = get_tpm2_context(__func__);
    if(!ctx) {
       return {bail_out()};
    }
@@ -81,7 +81,7 @@ std::vector<Test::Result> test_tpm2_properties() {
 }
 
 std::vector<Test::Result> test_tpm2_context() {
-   auto ctx = get_tpm2_context();
+   auto ctx = get_tpm2_context(__func__);
    if(!ctx) {
       return {bail_out()};
    }
@@ -111,7 +111,7 @@ std::vector<Test::Result> test_tpm2_context() {
 }
 
 std::vector<Test::Result> test_tpm2_rng() {
-   auto ctx = get_tpm2_context();
+   auto ctx = get_tpm2_context(__func__);
    if(!ctx) {
       return {bail_out()};
    }
@@ -185,7 +185,7 @@ std::unique_ptr<KeyT> load_persistent(Test::Result& result,
 }
 
 std::vector<Test::Result> test_tpm2_rsa() {
-   auto ctx = get_tpm2_context();
+   auto ctx = get_tpm2_context(__func__);
    if(!ctx) {
       return {bail_out()};
    }
@@ -336,19 +336,20 @@ std::vector<Test::Result> test_tpm2_rsa() {
 
                const std::array<uint8_t, 6> secret = {'s', 'e', 'c', 'r', 'e', 't'};
 
-               auto sk = Botan::TPM2::RSA_PrivateKey(ctx, *srk, secret, authed_session, 2048);
-               result.confirm("is transient", sk.handles().has_transient_handle());
-               result.confirm("is not persistent", !sk.handles().has_persistent_handle());
+               auto sk = Botan::TPM2::RSA_PrivateKey::create_transient(ctx, authed_session, secret, *srk, 2048);
+               result.require("key was created", sk != nullptr);
+               result.confirm("is transient", sk->handles().has_transient_handle());
+               result.confirm("is not persistent", !sk->handles().has_persistent_handle());
 
-               const auto sk_blob = sk.private_key_bits();
-               const auto pk = sk.public_key();
+               const auto sk_blob = sk->private_key_bits();
+               const auto pk = sk->public_key();
 
                result.confirm("secret blog is not empty", !sk_blob.empty());
 
                // Perform a round-trip sign/verify test with the new key pair
                std::vector<uint8_t> message = {'h', 'e', 'l', 'l', 'o'};
                Botan::Null_RNG null_rng;
-               Botan::PK_Signer signer(sk, null_rng /* TPM takes care of this */, "PSS(SHA-256)");
+               Botan::PK_Signer signer(*sk, null_rng /* TPM takes care of this */, "PSS(SHA-256)");
                const auto signature = signer.sign_message(message, null_rng);
                result.require("signature is not empty", !signature.empty());
 
@@ -388,7 +389,7 @@ std::vector<Test::Result> test_tpm2_rsa() {
 }
 
 std::vector<Test::Result> test_tpm2_hash() {
-   auto ctx = get_tpm2_context();
+   auto ctx = get_tpm2_context(__func__);
    if(!ctx) {
       return {bail_out()};
    }

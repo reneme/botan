@@ -203,6 +203,30 @@ std::unique_ptr<RSA_PrivateKey> Context::storage_root_key(std::span<const uint8_
    return RSA_PrivateKey::from_persistent(shared_from_this(), storage_root_key_handle, auth_value, sessions);
 }
 
+std::optional<uint32_t> Context::find_free_persistent_handle() const {
+   const auto occupied_handles = persistent_handles();
+
+   // This is modeled after the implementation in tpm2-tools, which also takes
+   // "platform persistent" handles into account. We don't do that here, but
+   // we might need to in the future.
+   //
+   // See: https://github.com/tpm2-software/tpm2-tools/blob/bd832d3f79299c5aaaf86667a74c3230f3101e44/lib/tpm2_capability.c#L143-L196
+
+   // all persistent handles are occupied
+   if(occupied_handles.size() >= TPM2_MAX_CAP_HANDLES) {
+      return std::nullopt;
+   }
+
+   // find the lowest handle that is not occupied
+   for(uint32_t i = TPM2_PERSISTENT_FIRST; i < TPM2_PERSISTENT_LAST; ++i) {
+      if(!value_exists(occupied_handles, i)) {
+         return i;
+      }
+   }
+
+   BOTAN_ASSERT_UNREACHABLE();
+}
+
 std::vector<uint32_t> Context::persistent_handles() const {
    return get_tpm_property_list<TPM2_CAP_HANDLES>(m_impl->m_ctx, TPM2_PERSISTENT_FIRST, TPM2_MAX_CAP_HANDLES);
 }

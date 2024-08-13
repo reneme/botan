@@ -81,6 +81,10 @@ class BOTAN_PUBLIC_API(3, 6) Context final : public std::enable_shared_from_this
       /// @returns the maximum number of random bytes to be requested at once
       size_t max_random_bytes_per_request() const;
 
+      /// @returns a persistent handle that is currently not in use
+      ///          or std::nullopt if no such handle is available
+      std::optional<uint32_t> find_free_persistent_handle() const;
+
       std::vector<uint32_t> persistent_handles() const;
 
       /// @return true if @p persistent_handle is in the list of persistent handles

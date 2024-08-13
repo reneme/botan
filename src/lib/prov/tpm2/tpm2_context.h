@@ -81,6 +81,8 @@ class BOTAN_PUBLIC_API(3, 6) Context final : public std::enable_shared_from_this
       /// @returns the maximum number of random bytes to be requested at once
       size_t max_random_bytes_per_request() const;
 
+      std::vector<uint32_t> transient_handles() const;
+
       /// @returns a persistent handle that is currently not in use
       ///          or std::nullopt if no such handle is available
       std::optional<uint32_t> find_free_persistent_handle() const;
@@ -88,13 +90,20 @@ class BOTAN_PUBLIC_API(3, 6) Context final : public std::enable_shared_from_this
       std::vector<uint32_t> persistent_handles() const;
 
       /// @return true if @p persistent_handle is in the list of persistent handles
+      /// TODO: remove - use range-operations (or value_exists()) instead
       bool in_persistent_handles(uint32_t persistent_handle) const;
 
-      /// Makes @p key persistent at location @p persistent_handle
-      void make_key_persistent(RSA_PrivateKey& key, uint32_t persistent_handle, const SessionBundle& sessions);
+      /// Makes @p key persistent at location @p persistent_handle or any free
+      /// location if @p persistent_handle is not set.
+      /// @returns the handle of the persistent object
+      uint32_t persist(RSA_PrivateKey& key,
+                       const SessionBundle& sessions,
+                       std::span<const uint8_t> auth_value = {},
+                       std::optional<uint32_t> persistent_handle = std::nullopt);
 
-      /// Evicts the persistent key @p key
-      void evict_persistent_key(RSA_PrivateKey& key, const SessionBundle& sessions);
+      /// Evicts a persistent @p key
+      void evict(RSA_PrivateKey key, const SessionBundle& sessions);
+      void evict(std::unique_ptr<RSA_PrivateKey> key, const SessionBundle& sessions);
 
       // TODO: This should return a TPM2::Private_Key base class of some sort
       // TODO: Currently this assumes that the SRK is a persistent object,

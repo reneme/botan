@@ -34,7 +34,7 @@ Object make_persistent_object(const std::shared_ptr<Context>& ctx,
    BOTAN_ARG_CHECK(
       TPM2_PERSISTENT_FIRST <= persistent_object_handle && persistent_object_handle <= TPM2_PERSISTENT_LAST,
       "persistent_object_handle out of range");
-   const bool is_persistent = ctx->in_persistent_handles(persistent_object_handle);
+   const bool is_persistent = value_exists(ctx->persistent_handles(), persistent_object_handle);
    BOTAN_STATE_CHECK(is_persistent);
 
    Object object(ctx);

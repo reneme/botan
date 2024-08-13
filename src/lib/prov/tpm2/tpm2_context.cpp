@@ -203,6 +203,10 @@ std::unique_ptr<RSA_PrivateKey> Context::storage_root_key(std::span<const uint8_
    return RSA_PrivateKey::from_persistent(shared_from_this(), storage_root_key_handle, auth_value, sessions);
 }
 
+std::vector<uint32_t> Context::transient_handles() const {
+   return get_tpm_property_list<TPM2_CAP_HANDLES>(m_impl->m_ctx, TPM2_TRANSIENT_FIRST, TPM2_MAX_CAP_HANDLES);
+}
+
 std::optional<uint32_t> Context::find_free_persistent_handle() const {
    const auto occupied_handles = persistent_handles();
 
@@ -210,7 +214,7 @@ std::optional<uint32_t> Context::find_free_persistent_handle() const {
    // "platform persistent" handles into account. We don't do that here, but
    // we might need to in the future.
    //
-   // See: https://github.com/tpm2-software/tpm2-tools/blob/bd832d3f79299c5aaaf86667a74c3230f3101e44/lib/tpm2_capability.c#L143-L196
+   // See: https://github.com/tpm2-software/tpm2-tools/blob/bd832d3f79/lib/tpm2_capability.c#L143-L196
 
    // all persistent handles are occupied
    if(occupied_handles.size() >= TPM2_MAX_CAP_HANDLES) {
@@ -237,46 +241,89 @@ bool Context::in_persistent_handles(uint32_t persistent_handle) const {
           persistent_handles.end();
 }
 
-void Context::make_key_persistent(RSA_PrivateKey& key, uint32_t persistent_handle, const SessionBundle& sessions) {
-   if(in_persistent_handles(persistent_handle)) {
-      throw Invalid_Argument("Persistent handle already in use");
+uint32_t Context::persist(RSA_PrivateKey& key,
+                          const SessionBundle& sessions,
+                          std::span<const uint8_t> auth_value,
+                          std::optional<uint32_t> persistent_handle) {
+   auto& handles = key.handles();
+
+   BOTAN_ARG_CHECK(!persistent_handle || !value_exists(persistent_handles(), persistent_handle.value()),
+                   "Persistent handle already in use");
+   BOTAN_ARG_CHECK(!handles.has_persistent_handle(), "Key already has a persistent handle assigned");
+
+   // 1. Decide on the location to persist the key to.
+   //    This uses either the handle provided by the caller or a free handle.
+   const TPMI_DH_PERSISTENT new_persistent_handle = [&] {
+      if(persistent_handle.has_value()) {
+         return persistent_handle.value();
+      } else {
+         const auto free_persistent_handle = find_free_persistent_handle();
+         BOTAN_STATE_CHECK(free_persistent_handle.has_value());
+         return free_persistent_handle.value();
+      }
+   }();
+
+   // 2. Persist the transient key in the TPM's NV storage
+   //    This will flush the transient key handle and replace it with a new
+   //    transient handle that references the persisted key.
+   check_rc("Esys_EvictControl",
+            Esys_EvictControl(m_impl->m_ctx,
+                              ESYS_TR_RH_OWNER /*TODO: hierarchy*/,
+                              handles.transient_handle(),
+                              sessions[0],
+                              sessions[1],
+                              sessions[2],
+                              new_persistent_handle,
+                              out_transient_handle(handles)));
+   BOTAN_ASSERT_NOMSG(handles.has_transient_handle());
+
+   // 3. Reset the auth value of the key object
+   //    This is necessary to ensure that the key object remains usable after
+   //    the transient handle was recreated inside Esys_EvictControl().
+   if(!auth_value.empty()) {
+      const auto user_auth = copy_into<TPM2B_AUTH>(auth_value);
+      check_rc("Esys_TR_SetAuth", Esys_TR_SetAuth(m_impl->m_ctx, handles.transient_handle(), &user_auth));
    }
 
-   ESYS_TR persistent_handle_out;
-
-   check_rc("Esys_EvictControl",
-            Esys_EvictControl(m_impl->m_ctx,
-                              ESYS_TR_RH_OWNER /*TODO: hierarchy*/,
-                              key.handles().transient_handle(),
-                              sessions[0],
-                              sessions[1],
-                              sessions[2],
-                              persistent_handle,
-                              &persistent_handle_out));
-
+   // 4. Update the key object with the new persistent handle
+   //    This double-checks that the key was persisted at the correct location,
+   //    but also brings the key object into a consistent state.
    check_rc("Esys_TR_GetTpmHandle",
-            Esys_TR_GetTpmHandle(m_impl->m_ctx, persistent_handle_out, out_persistent_handle(key.mutable_handles())));
+            Esys_TR_GetTpmHandle(m_impl->m_ctx, handles.transient_handle(), out_persistent_handle(handles)));
 
-   BOTAN_ASSERT_NOMSG(persistent_handle == key.handles().persistent_handle());
+   BOTAN_ASSERT_NOMSG(handles.has_persistent_handle());
+   BOTAN_ASSERT_EQUAL(new_persistent_handle, handles.persistent_handle(), "key was persisted at the correct location");
+
+   return new_persistent_handle;
 }
 
-void Context::evict_persistent_key(RSA_PrivateKey& key, const SessionBundle& sessions) {
-   ESYS_TR persistent_handle_out;
+void Context::evict(RSA_PrivateKey key, const SessionBundle& sessions) {
+   auto& handles = key.handles();
+   BOTAN_ARG_CHECK(handles.has_persistent_handle(), "Key does not have a persistent handle assigned");
 
-   // TODO: This is not the right call yet...
+   // 1. Evict the key from the TPM's NV storage
+   //    This will free the persistent handle, but the transient handle will
+   //    still be valid.
+   ESYS_TR no_new_handle = ESYS_TR_NONE;
    check_rc("Esys_EvictControl",
             Esys_EvictControl(m_impl->m_ctx,
                               ESYS_TR_RH_OWNER /*TODO: hierarchy*/,
-                              key.handles().transient_handle(),
+                              handles.transient_handle(),
                               sessions[0],
                               sessions[1],
                               sessions[2],
-                              key.handles().persistent_handle(),
-                              &persistent_handle_out));
+                              0,
+                              &no_new_handle));
+   BOTAN_ASSERT(no_new_handle == ESYS_TR_NONE, "When deleting a key, no new handle is returned");
 
-   // TODO: Will this clear the persistent handle in the key object?
-   // check_rc("Esys_TR_GetTpmHandle",
-   //          Esys_TR_GetTpmHandle(m_impl->m_ctx, persistent_handle_out, out_persistent_handle(key.mutable_handles())));
+   // 2. The persistent key was deleted and the transient key was flushed by
+   //    Esys_EvictControl().
+   handles._disengage();
+}
+
+void Context::evict(std::unique_ptr<RSA_PrivateKey> key, const SessionBundle& sessions) {
+   BOTAN_ASSERT_NONNULL(key);
+   evict(std::move(*key), sessions);
 }
 
 Context::~Context() {

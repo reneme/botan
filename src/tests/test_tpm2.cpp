@@ -359,31 +359,49 @@ std::vector<Test::Result> test_tpm2_rsa() {
 
       CHECK("Make a transient key persistent then remove it again",
             [&](Test::Result& result) {
-               //Create Key
                auto srk = ctx->storage_root_key({}, {});
 
+               auto sign_verify_roundtrip = [&](const Botan::TPM2::RSA_PrivateKey& key) {
+                  std::vector<uint8_t> message = {'h', 'e', 'l', 'l', 'o'};
+                  Botan::Null_RNG null_rng;
+                  Botan::PK_Signer signer(key, null_rng /* TPM takes care of this */, "PSS(SHA-256)");
+                  const auto signature = signer.sign_message(message, null_rng);
+                  result.require("signature is not empty", !signature.empty());
+
+                  auto pk = key.public_key();
+                  Botan::PK_Verifier verifier(*pk, "PSS(SHA-256)");
+                  result.confirm("Signature is valid", verifier.verify_message(message, signature));
+               };
+
+               // Create Key
                auto authed_session = Botan::TPM2::Session::salted_session(ctx, *srk);
 
                const std::array<uint8_t, 6> secret = {'s', 'e', 'c', 'r', 'e', 't'};
-
-               auto sk = Botan::TPM2::RSA_PrivateKey(ctx, *srk, secret, authed_session, 2048);
-               result.confirm("is transient", sk.handles().has_transient_handle());
-               result.confirm("is not persistent", !sk.handles().has_persistent_handle());
+               auto sk = Botan::TPM2::RSA_PrivateKey::create_transient(ctx, authed_session, secret, *srk, 2048);
+               result.require("key was created", sk != nullptr);
+               result.confirm("is transient", sk->handles().has_transient_handle());
+               result.confirm("is not persistent", !sk->handles().has_persistent_handle());
+               result.test_no_throw("use key after creation", [&] { sign_verify_roundtrip(*sk); });
 
                // Make it persistent
-               const auto new_location = persistent_key_id + 1;
-               ctx->make_key_persistent(sk, new_location, authed_session);
-               result.confirm("New location occupied", ctx->in_persistent_handles(new_location));
-               result.confirm("is persistent", sk.handles().has_persistent_handle());
-               result.test_throws<Botan::Invalid_Argument>("Cannot persist to the same location", [&] {
-                  ctx->make_key_persistent(sk, new_location, authed_session);
-               });
+               const auto handles = ctx->persistent_handles().size();
+               const auto new_location = ctx->persist(*sk, authed_session, secret);
+               result.test_eq("One more handle", ctx->persistent_handles().size(), handles + 1);
+               result.confirm("New location occupied", Botan::value_exists(ctx->persistent_handles(), new_location));
+               result.confirm("is persistent", sk->handles().has_persistent_handle());
+               result.test_is_eq(
+                  "Persistent handle is the new handle", sk->handles().persistent_handle(), new_location);
+               result.test_throws<Botan::Invalid_Argument>(
+                  "Cannot persist to the same location", [&] { ctx->persist(*sk, authed_session, {}, new_location); });
+               result.test_throws<Botan::Invalid_Argument>("Cannot persist and already persistent key",
+                                                           [&] { ctx->persist(*sk, authed_session); });
+               result.test_no_throw("use key after persisting", [&] { sign_verify_roundtrip(*sk); });
 
-               //Evict it
-               ctx->evict_persistent_key(sk, authed_session);
-               result.confirm("New location no longer occupied", ctx->in_persistent_handles(new_location));
-               result.confirm("is transient", sk.handles().has_transient_handle());
-               result.confirm("is not persistent", !sk.handles().has_persistent_handle());
+               // Evict it
+               ctx->evict(std::move(sk), authed_session);
+               result.test_eq("One less handle", ctx->persistent_handles().size(), handles);
+               result.confirm("New location no longer occupied",
+                              !Botan::value_exists(ctx->persistent_handles(), new_location));
             }),
    };
 }

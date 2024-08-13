@@ -106,6 +106,8 @@ class BOTAN_PUBLIC_API(3, 6) RSA_PrivateKey final : public virtual Botan::RSA_Pu
 
       secure_vector<uint8_t> private_key_bits() const override;
 
+      Object& handles() { return m_handle; }
+
       const Object& handles() const { return m_handle; }
 
       std::unique_ptr<PK_Ops::Signature> create_signature_op(RandomNumberGenerator& rng,
@@ -123,12 +125,6 @@ class BOTAN_PUBLIC_API(3, 6) RSA_PrivateKey final : public virtual Botan::RSA_Pu
             m_private_blob(std::move(private_blob)) {}
 
       RSA_PrivateKey(Object handle, SessionBundle sessions);
-
-   private:
-      Object& mutable_handles() { return m_handle; }
-
-      friend void Context::make_key_persistent(RSA_PrivateKey&, uint32_t, const SessionBundle&);
-      friend void Context::evict_persistent_key(RSA_PrivateKey&, const SessionBundle&);
 
    private:
       Object m_handle;

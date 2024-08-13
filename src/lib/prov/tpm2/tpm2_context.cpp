@@ -112,11 +112,58 @@ uint32_t get_tpm_property(ESYS_CONTEXT* ctx, TPM2_PT property) {
                                property_count,
                                nullptr /* more data? - we don't care here */,
                                out_ptr(capability_data)));
+   BOTAN_ASSERT_NONNULL(capability_data);
    BOTAN_ASSERT_NOMSG(capability_data->capability == capability);
    BOTAN_ASSERT_NOMSG(capability_data->data.tpmProperties.count == property_count);
    BOTAN_ASSERT_NOMSG(capability_data->data.tpmProperties.tpmProperty[0].property == property);
 
    return capability_data->data.tpmProperties.tpmProperty[0].value;
+}
+
+template <TPM2_CAP capability>
+[[nodiscard]] auto get_tpm_property_list(ESYS_CONTEXT* ctx, TPM2_PT property, uint32_t count) {
+   auto extract = [](const TPMU_CAPABILITIES& caps, uint32_t max_count) {
+      if constexpr(capability == TPM2_CAP_HANDLES) {
+         const auto to_read = std::min(caps.handles.count, max_count);
+         std::vector<uint32_t> result;
+         result.reserve(to_read);
+         for(size_t i = 0; i < to_read; ++i) {
+            result.push_back(caps.handles.handle[i]);
+         }
+         return result;
+      } else {
+         // TODO: support reading other capability types as needed
+         static_assert(capability != TPM2_CAP_HANDLES, "Unsupported capability");
+      }
+   };
+
+   using return_vector_t = decltype(extract(std::declval<const TPMU_CAPABILITIES&>(), 0));
+   static_assert(concepts::reservable_container<return_vector_t>);
+
+   TPMI_YES_NO more_data = TPM2_YES;
+   return_vector_t properties;
+   while(more_data == TPM2_YES && count > 0) {
+      unique_esys_ptr<TPMS_CAPABILITY_DATA> capability_data;
+      check_rc("Esys_GetCapability",
+               Esys_GetCapability(ctx,
+                                  ESYS_TR_NONE,
+                                  ESYS_TR_NONE,
+                                  ESYS_TR_NONE,
+                                  capability,
+                                  property,
+                                  count,
+                                  &more_data,
+                                  out_ptr(capability_data)));
+      BOTAN_ASSERT_NONNULL(capability_data);
+      BOTAN_ASSERT_NOMSG(capability_data->capability == capability);
+
+      const auto new_properties = extract(capability_data->data, count);
+      BOTAN_ASSERT_NOMSG(new_properties.size() <= count);
+      properties.insert(properties.end(), new_properties.begin(), new_properties.end());
+      count -= new_properties.size();
+   }
+
+   return properties;
 }
 
 }  // namespace
@@ -157,24 +204,7 @@ std::unique_ptr<RSA_PrivateKey> Context::storage_root_key(std::span<const uint8_
 }
 
 std::vector<uint32_t> Context::persistent_handles() const {
-   TPMI_YES_NO more_data;
-   unique_esys_ptr<TPMS_CAPABILITY_DATA> capability_data;
-
-   check_rc("Esys_GetCapability",
-            Esys_GetCapability(m_impl->m_ctx,
-                               ESYS_TR_NONE,
-                               ESYS_TR_NONE,
-                               ESYS_TR_NONE,
-                               TPM2_CAP_HANDLES,
-                               TPM2_PERSISTENT_FIRST,
-                               TPM2_MAX_CAP_HANDLES,
-                               &more_data,
-                               out_ptr(capability_data)));
-
-   // TODO: Check if we have `more_data`
-
-   return {capability_data->data.handles.handle,
-           capability_data->data.handles.handle + capability_data->data.handles.count};
+   return get_tpm_property_list<TPM2_CAP_HANDLES>(m_impl->m_ctx, TPM2_PERSISTENT_FIRST, TPM2_MAX_CAP_HANDLES);
 }
 
 bool Context::in_persistent_handles(uint32_t persistent_handle) const {

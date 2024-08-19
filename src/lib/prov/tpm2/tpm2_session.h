@@ -25,6 +25,7 @@ struct SessionAttributes {
 };
 
 class Session;
+class PrivateKey;
 
 namespace detail {
 

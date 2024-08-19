@@ -101,8 +101,7 @@ class BOTAN_PUBLIC_API(3, 6) Context final : public std::enable_shared_from_this
                        std::span<const uint8_t> auth_value = {},
                        std::optional<uint32_t> persistent_handle = std::nullopt);
 
-      /// Evicts a persistent @p key
-      void evict(TPM2::PrivateKey&& key, const SessionBundle& sessions);
+      /// Evicts a persistent @p key from the TPM. The key cannot be used after.
       void evict(std::unique_ptr<TPM2::PrivateKey> key, const SessionBundle& sessions);
 
       // TODO: Currently this assumes that the SRK is a persistent object,

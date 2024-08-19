@@ -294,8 +294,10 @@ uint32_t Context::persist(TPM2::PrivateKey& key,
    return new_persistent_handle;
 }
 
-void Context::evict(TPM2::PrivateKey&& key, const SessionBundle& sessions) {
-   auto& handles = key.handles();
+void Context::evict(std::unique_ptr<TPM2::PrivateKey> key, const SessionBundle& sessions) {
+   BOTAN_ASSERT_NONNULL(key);
+
+   auto& handles = key->handles();
    BOTAN_ARG_CHECK(handles.has_persistent_handle(), "Key does not have a persistent handle assigned");
 
    // 1. Evict the key from the TPM's NV storage
@@ -316,11 +318,6 @@ void Context::evict(TPM2::PrivateKey&& key, const SessionBundle& sessions) {
    // 2. The persistent key was deleted and the transient key was flushed by
    //    Esys_EvictControl().
    handles._disengage();
-}
-
-void Context::evict(std::unique_ptr<TPM2::PrivateKey> key, const SessionBundle& sessions) {
-   BOTAN_ASSERT_NONNULL(key);
-   evict(std::move(*key), sessions);
 }
 
 Context::~Context() {

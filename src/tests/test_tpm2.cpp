@@ -328,6 +328,25 @@ std::vector<Test::Result> test_tpm2_rsa() {
                                                       [&] { signer.sign_message(message, null_rng); });
             }),
 
+      CHECK("Encrypt a message",
+            [&](Test::Result& result) {
+               auto pk = load_persistent<Botan::TPM2::RSA_PublicKey>(result, ctx, persistent_key_id, password, session);
+               auto sk =
+                  load_persistent<Botan::TPM2::RSA_PrivateKey>(result, ctx, persistent_key_id, password, session);
+
+               const auto plaintext = Botan::hex_decode("feedc0debaadcafe");
+
+               // encrypt a message using the TPM's public key
+               Botan::Null_RNG null_rng;
+               Botan::PK_Encryptor_EME enc(*pk, null_rng, "OAEP(SHA-256)");
+               const auto ciphertext = enc.encrypt(plaintext, null_rng);
+
+               // decrypt the message using the TPM's private RSA key
+               Botan::PK_Decryptor_EME dec(*sk, null_rng, "OAEP(SHA-256)");
+               const auto decrypted = dec.decrypt(ciphertext);
+               result.test_eq("decrypted message", decrypted, plaintext);
+            }),
+
       CHECK("Decrypt a message",
             [&](Test::Result& result) {
                auto key =

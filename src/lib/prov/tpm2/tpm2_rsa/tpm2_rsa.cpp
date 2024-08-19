@@ -166,7 +166,7 @@ std::unique_ptr<Botan::HashFunction> create_hash_function(const Object& key_hand
  *    sign a digest that was produced by the TPM. [...] This prevents forgeries
  *    of attestation data.
  */
-class RSA_Signature_Operation : public PK_Ops::Signature {
+class RSA_Signature_Operation final : public PK_Ops::Signature {
    private:
       RSA_Signature_Operation(const Object& object,
                               const SessionBundle& sessions,
@@ -252,7 +252,7 @@ class RSA_Signature_Operation : public PK_Ops::Signature {
  * Signature verification on the TPM. This does not require a validation ticket,
  * therefore the hash is always calculated in software.
  */
-class RSA_Verification_Operation : public PK_Ops::Verification {
+class RSA_Verification_Operation final : public PK_Ops::Verification {
    private:
       RSA_Verification_Operation(const Object& object,
                                  const SessionBundle& sessions,
@@ -332,7 +332,78 @@ TPMT_RSA_DECRYPT select_encryption_algorithms(std::string_view padding) {
    return result;
 }
 
-class RSA_Decryption_Operation : public PK_Ops::Decryption {
+class RSA_Encryption_Operation final : public PK_Ops::Encryption {
+   public:
+      RSA_Encryption_Operation(const Object& object, const SessionBundle& sessions, std::string_view padding) :
+            m_key_handle(object), m_sessions(sessions), m_scheme(select_encryption_algorithms(padding)) {}
+
+      std::vector<uint8_t> encrypt(std::span<const uint8_t> msg, Botan::RandomNumberGenerator& /* rng */) override {
+         const auto plaintext = copy_into<TPM2B_PUBLIC_KEY_RSA>(msg);
+         const auto label = init_empty<TPM2B_DATA>();  // TODO: implement?
+
+         unique_esys_ptr<TPM2B_PUBLIC_KEY_RSA> ciphertext;
+         check_rc("Esys_RSA_Encrypt",
+                  Esys_RSA_Encrypt(inner(m_key_handle.context()),
+                                   m_key_handle.transient_handle(),
+                                   m_sessions[0],
+                                   m_sessions[1],
+                                   m_sessions[2],
+                                   &plaintext,
+                                   &m_scheme,
+                                   &label,
+                                   out_ptr(ciphertext)));
+         BOTAN_ASSERT_NONNULL(ciphertext);
+         return copy_into<std::vector<uint8_t>>(*ciphertext);
+      }
+
+      size_t max_input_bits() const override {
+         const auto max_ptext_bytes =
+            (m_key_handle._public_info(m_sessions, TPM2_ALG_RSA).pub->publicArea.parameters.rsaDetail.keyBits - 1) / 8;
+         auto hash_output_bytes = [](TPM2_ALG_ID hash) -> size_t {
+            switch(hash) {
+               case TPM2_ALG_SHA1:
+                  return 160 / 8;
+               case TPM2_ALG_SHA256:
+               case TPM2_ALG_SHA3_256:
+                  return 256 / 8;
+               case TPM2_ALG_SHA384:
+               case TPM2_ALG_SHA3_384:
+                  return 384 / 8;
+               case TPM2_ALG_SHA512:
+               case TPM2_ALG_SHA3_512:
+                  return 512 / 8;
+               default:
+                  throw Invalid_State("Unexpected hash algorithm");
+            }
+         };
+
+         const auto max_input_bytes = [&]() -> size_t {
+            switch(m_scheme.scheme) {
+               case TPM2_ALG_RSAES:
+                  return max_ptext_bytes - 10;
+               case TPM2_ALG_OAEP:
+                  return max_ptext_bytes - 2 * hash_output_bytes(m_scheme.details.oaep.hashAlg) - 1;
+               case TPM2_ALG_NULL:
+                  return max_ptext_bytes;
+               default:
+                  throw Invalid_State("Unexpected RSA encryption scheme");
+            }
+         }();
+
+         return max_input_bytes * 8;
+      }
+
+      size_t ciphertext_length(size_t /* ptext_len */) const override {
+         return m_key_handle._public_info(m_sessions, TPM2_ALG_RSA).pub->publicArea.parameters.rsaDetail.keyBits - 1;
+      }
+
+   private:
+      const Object& m_key_handle;
+      const SessionBundle& m_sessions;
+      TPMT_RSA_DECRYPT m_scheme;
+};
+
+class RSA_Decryption_Operation final : public PK_Ops::Decryption {
    public:
       RSA_Decryption_Operation(const Object& object, const SessionBundle& sessions, std::string_view padding) :
             m_key_handle(object), m_sessions(sessions), m_scheme(select_encryption_algorithms(padding)) {}
@@ -385,6 +456,13 @@ std::unique_ptr<PK_Ops::Signature> RSA_PrivateKey::create_signature_op(Botan::Ra
    BOTAN_UNUSED(rng);
    BOTAN_UNUSED(provider);
    return std::make_unique<RSA_Signature_Operation>(handles(), sessions(), params);
+}
+
+std::unique_ptr<PK_Ops::Encryption> RSA_PublicKey::create_encryption_op(Botan::RandomNumberGenerator& rng,
+                                                                        std::string_view params,
+                                                                        std::string_view provider) const {
+   BOTAN_UNUSED(rng, provider);
+   return std::make_unique<RSA_Encryption_Operation>(handles(), sessions(), params);
 }
 
 std::unique_ptr<PK_Ops::Decryption> RSA_PrivateKey::create_decryption_op(Botan::RandomNumberGenerator& rng,

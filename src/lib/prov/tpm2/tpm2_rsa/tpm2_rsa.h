@@ -34,6 +34,10 @@ class BOTAN_PUBLIC_API(3, 6) RSA_PublicKey final : public virtual Botan::TPM2::P
       std::unique_ptr<PK_Ops::Verification> create_verification_op(std::string_view params,
                                                                    std::string_view provider) const override;
 
+      std::unique_ptr<PK_Ops::Encryption> create_encryption_op(Botan::RandomNumberGenerator& rng,
+                                                               std::string_view params,
+                                                               std::string_view provider) const override;
+
    protected:
       friend class TPM2::PublicKey;
 

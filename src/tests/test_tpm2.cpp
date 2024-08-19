@@ -181,9 +181,9 @@ auto load_persistent(Test::Result& result,
 
    auto key = [&] {
       if constexpr(std::same_as<Botan::TPM2::RSA_PublicKey, KeyT>) {
-         return KeyT::from_persistent(ctx, persistent_key_id, session);
+         return KeyT::load_persistent(ctx, persistent_key_id, session);
       } else {
-         return KeyT::from_persistent(ctx, persistent_key_id, auth_value, session);
+         return KeyT::load_persistent(ctx, persistent_key_id, auth_value, session);
       }
    }();
 
@@ -334,6 +334,8 @@ std::vector<Test::Result> test_tpm2_rsa() {
                   load_persistent<Botan::TPM2::RSA_PrivateKey>(result, ctx, persistent_key_id, password, session);
                result.test_throws<Botan::Not_Implemented>("Export private key blob not implemented",
                                                           [&] { key->private_key_bits(); });
+               result.test_throws<Botan::Invalid_State>("Export raw private key blob not implemented",
+                                                        [&] { key->raw_private_key_bits(); });
             }),
 
       CHECK("Create a new transient key",
@@ -349,10 +351,12 @@ std::vector<Test::Result> test_tpm2_rsa() {
                result.confirm("is transient", sk->handles().has_transient_handle());
                result.confirm("is not persistent", !sk->handles().has_persistent_handle());
 
-               const auto sk_blob = sk->private_key_bits();
+               const auto sk_blob = sk->raw_private_key_bits();
+               const auto pk_blob = sk->raw_public_key_bits();
                const auto pk = sk->public_key();
 
-               result.confirm("secret blog is not empty", !sk_blob.empty());
+               result.confirm("secret blob is not empty", !sk_blob.empty());
+               result.confirm("public blob is not empty", !pk_blob.empty());
 
                // Perform a round-trip sign/verify test with the new key pair
                std::vector<uint8_t> message = {'h', 'e', 'l', 'l', 'o'};
@@ -363,6 +367,35 @@ std::vector<Test::Result> test_tpm2_rsa() {
 
                Botan::PK_Verifier verifier(*pk, "PSS(SHA-256)");
                result.confirm("Signature is valid", verifier.verify_message(message, signature));
+
+               // Destruct the key and load it again from the encrypted blob
+               sk.reset();
+               auto sk_loaded =
+                  Botan::TPM2::PrivateKey::load_transient(ctx, secret, *srk, pk_blob, sk_blob, authed_session);
+               result.require("key was loaded", sk_loaded != nullptr);
+               result.test_eq("loaded key is RSA", sk_loaded->algo_name(), "RSA");
+
+               const auto sk_blob_loaded = sk_loaded->raw_private_key_bits();
+               const auto pk_blob_loaded = sk_loaded->raw_public_key_bits();
+
+               result.test_is_eq("secret blob did not change", sk_blob, sk_blob_loaded);
+               result.test_is_eq("public blob did not change", pk_blob, pk_blob_loaded);
+
+               // Perform a round-trip sign/verify test with the new key pair
+               std::vector<uint8_t> message_loaded = {'g', 'u', 't', 'e', 'n', ' ', 't', 'a', 'g'};
+               Botan::PK_Signer signer_loaded(*sk_loaded, null_rng /* TPM takes care of this */, "PSS(SHA-256)");
+               const auto signature_loaded = signer_loaded.sign_message(message_loaded, null_rng);
+               result.require("Next signature is not empty", !signature_loaded.empty());
+               result.confirm("Existing verifier can validate signature",
+                              verifier.verify_message(message_loaded, signature_loaded));
+
+               // Load the public portion of the key
+               auto pk_loaded = Botan::TPM2::PublicKey::load_transient(ctx, pk_blob, {});
+               result.require("public key was loaded", pk_loaded != nullptr);
+
+               Botan::PK_Verifier verifier_loaded(*pk_loaded, "PSS(SHA-256)");
+               result.confirm("TPM-verified signature is valid",
+                              verifier_loaded.verify_message(message_loaded, signature_loaded));
             }),
 
       CHECK("Make a transient key persistent then remove it again",

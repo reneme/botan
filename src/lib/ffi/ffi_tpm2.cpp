@@ -212,7 +212,7 @@ int botan_tpm2_persistent_privkey_open(botan_privkey_t* key_out,
          return BOTAN_FFI_ERROR_NULL_POINTER;
       }
 
-      *key_out = new botan_privkey_struct(Botan::TPM2::PrivateKey::from_persistent(
+      *key_out = new botan_privkey_struct(Botan::TPM2::PrivateKey::load_persistent(
          ctx_wrapper.ctx, handle, {auth_value, auth_len}, sessions(s1, s2, s3)));
       return BOTAN_FFI_SUCCESS;
    });

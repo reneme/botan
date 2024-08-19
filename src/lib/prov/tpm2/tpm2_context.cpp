@@ -197,7 +197,7 @@ size_t Context::max_random_bytes_per_request() const {
 
 std::unique_ptr<TPM2::PrivateKey> Context::storage_root_key(std::span<const uint8_t> auth_value,
                                                             const SessionBundle& sessions) {
-   return TPM2::PrivateKey::from_persistent(shared_from_this(), storage_root_key_handle, auth_value, sessions);
+   return TPM2::PrivateKey::load_persistent(shared_from_this(), storage_root_key_handle, auth_value, sessions);
 }
 
 std::vector<uint32_t> Context::transient_handles() const {

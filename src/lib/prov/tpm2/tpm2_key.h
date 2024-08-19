@@ -20,14 +20,23 @@ namespace Botan::TPM2 {
 
 class BOTAN_PUBLIC_API(3, 6) PublicKey : public virtual Botan::Public_Key {
    public:
-      static std::unique_ptr<PublicKey> from_persistent(const std::shared_ptr<Context>& ctx,
+      static std::unique_ptr<PublicKey> load_persistent(const std::shared_ptr<Context>& ctx,
                                                         uint32_t persistent_object_handle,
                                                         const SessionBundle& sessions = {});
+
+      static std::unique_ptr<PublicKey> load_transient(const std::shared_ptr<Context>& ctx,
+                                                       std::span<const uint8_t> public_blob,
+                                                       const SessionBundle& sessions);
 
    public:
       std::unique_ptr<Private_Key> generate_another(RandomNumberGenerator&) const override {
          throw Not_Implemented("Cannot generate a new TPM-based keypair from this asymmetric key");
       }
+
+      /**
+       * @returns a TPM2-specific marshalled representation of the public key
+       */
+      std::vector<uint8_t> raw_public_key_bits() const override;
 
       const Object& handles() const { return m_handle; }
 
@@ -46,10 +55,17 @@ BOTAN_DIAGNOSTIC_IGNORE_INHERITED_VIA_DOMINANCE
 
 class BOTAN_PUBLIC_API(3, 6) PrivateKey : public virtual Private_Key {
    public:
-      static std::unique_ptr<PrivateKey> from_persistent(const std::shared_ptr<Context>& ctx,
+      static std::unique_ptr<PrivateKey> load_persistent(const std::shared_ptr<Context>& ctx,
                                                          uint32_t persistent_object_handle,
                                                          std::span<const uint8_t> auth_value,
                                                          const SessionBundle& sessions);
+
+      static std::unique_ptr<PrivateKey> load_transient(const std::shared_ptr<Context>& ctx,
+                                                        std::span<const uint8_t> auth_value,
+                                                        const TPM2::PrivateKey& parent,
+                                                        std::span<const uint8_t> public_blob,
+                                                        std::span<const uint8_t> private_blob,
+                                                        const SessionBundle& sessions);
 
       /**
        * This is a wrapper around Esys_CreateLoaded creating a transient key
@@ -76,14 +92,21 @@ class BOTAN_PUBLIC_API(3, 6) PrivateKey : public virtual Private_Key {
                                                                         const TPM2B_SENSITIVE_CREATE* sensitive_data);
 
    public:
+      /// @throws Not_Implemented keys hosted in a TPM2 cannot be exported
       secure_vector<uint8_t> private_key_bits() const override {
-         if(m_handle.has_persistent_handle()) {
-            throw Not_Implemented("cannot export private key bits from a TPM2 key");
-         } else {
-            BOTAN_ASSERT_NOMSG(!m_private_blob.empty());
-            return Botan::lock(m_private_blob);
-         }
+         throw Not_Implemented("cannot export private key bits from a TPM2 key, maybe use raw_private_key_bits()?");
       }
+
+      /**
+       * @returns the encrypted private key blob, if the key is transient
+       * @throws Invalid_State if the key is persistent
+       */
+      secure_vector<uint8_t> raw_private_key_bits() const override;
+
+      /**
+       * @returns a TPM2-specific marshalled representation of the public key
+       */
+      std::vector<uint8_t> raw_public_key_bits() const override;
 
       Object& handles() { return m_handle; }
 

@@ -8,7 +8,7 @@
 
 #include <botan/tpm2_context.h>
 
-#include <botan/tpm2_rsa.h>
+#include <botan/tpm2_key.h>
 #include <botan/tpm2_session.h>
 
 #include <botan/internal/fmt.h>
@@ -195,12 +195,9 @@ size_t Context::max_random_bytes_per_request() const {
    return get_tpm_property(m_impl->m_ctx, TPM2_PT_MAX_DIGEST);
 }
 
-std::unique_ptr<RSA_PrivateKey> Context::storage_root_key(std::span<const uint8_t> auth_value,
-                                                          const SessionBundle& sessions) {
-   // TODO: allow loading ECC-based keys as well
-   //       (probably by providing a generic 'from_persistent' function that
-   //       detects the key type automatically and returns a suitable object)
-   return RSA_PrivateKey::from_persistent(shared_from_this(), storage_root_key_handle, auth_value, sessions);
+std::unique_ptr<TPM2::PrivateKey> Context::storage_root_key(std::span<const uint8_t> auth_value,
+                                                            const SessionBundle& sessions) {
+   return TPM2::PrivateKey::from_persistent(shared_from_this(), storage_root_key_handle, auth_value, sessions);
 }
 
 std::vector<uint32_t> Context::transient_handles() const {
@@ -241,7 +238,7 @@ bool Context::in_persistent_handles(uint32_t persistent_handle) const {
           persistent_handles.end();
 }
 
-uint32_t Context::persist(RSA_PrivateKey& key,
+uint32_t Context::persist(TPM2::PrivateKey& key,
                           const SessionBundle& sessions,
                           std::span<const uint8_t> auth_value,
                           std::optional<uint32_t> persistent_handle) {
@@ -297,7 +294,7 @@ uint32_t Context::persist(RSA_PrivateKey& key,
    return new_persistent_handle;
 }
 
-void Context::evict(RSA_PrivateKey key, const SessionBundle& sessions) {
+void Context::evict(TPM2::PrivateKey&& key, const SessionBundle& sessions) {
    auto& handles = key.handles();
    BOTAN_ARG_CHECK(handles.has_persistent_handle(), "Key does not have a persistent handle assigned");
 
@@ -321,7 +318,7 @@ void Context::evict(RSA_PrivateKey key, const SessionBundle& sessions) {
    handles._disengage();
 }
 
-void Context::evict(std::unique_ptr<RSA_PrivateKey> key, const SessionBundle& sessions) {
+void Context::evict(std::unique_ptr<TPM2::PrivateKey> key, const SessionBundle& sessions) {
    BOTAN_ASSERT_NONNULL(key);
    evict(std::move(*key), sessions);
 }

@@ -13,8 +13,8 @@
 
 #if defined(BOTAN_HAS_TPM2)
    #include <botan/tpm2_context.h>
+   #include <botan/tpm2_key.h>
    #include <botan/tpm2_rng.h>
-   #include <botan/tpm2_rsa.h>
    #include <botan/tpm2_session.h>
 #endif
 
@@ -212,8 +212,7 @@ int botan_tpm2_persistent_privkey_open(botan_privkey_t* key_out,
          return BOTAN_FFI_ERROR_NULL_POINTER;
       }
 
-      // TODO: come up with an abstraction over the TPM2 key types
-      *key_out = new botan_privkey_struct(Botan::TPM2::RSA_PrivateKey::from_persistent(
+      *key_out = new botan_privkey_struct(Botan::TPM2::PrivateKey::from_persistent(
          ctx_wrapper.ctx, handle, {auth_value, auth_len}, sessions(s1, s2, s3)));
       return BOTAN_FFI_SUCCESS;
    });

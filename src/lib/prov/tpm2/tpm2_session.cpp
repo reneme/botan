@@ -8,7 +8,7 @@
 
 #include <botan/tpm2_session.h>
 
-#include <botan/tpm2_rsa.h>
+#include <botan/tpm2_key.h>
 
 #include <botan/internal/stl_util.h>
 #include <botan/internal/tpm2_util.h>
@@ -47,7 +47,7 @@ std::shared_ptr<Session> Session::unauthenticated_session(const std::shared_ptr<
                                                }));
 }
 
-std::shared_ptr<Session> Session::salted_session(const std::shared_ptr<Context>& ctx, const RSA_PrivateKey& tpm_key) {
+std::shared_ptr<Session> Session::salted_session(const std::shared_ptr<Context>& ctx, const TPM2::PrivateKey& tpm_key) {
    Object session(ctx);
 
    const TPMT_SYM_DEF auth_sym = {

@@ -11,7 +11,6 @@
 
 #include <botan/concepts.h>
 #include <botan/mem_ops.h>
-#include <botan/rsa.h>
 #include <botan/tpm2_context.h>
 #include <botan/tpm2_error.h>
 #include <botan/tpm2_object.h>
@@ -201,18 +200,6 @@ constexpr auto out_transient_handle(Object& object) {
 
 constexpr auto out_persistent_handle(Object& object) {
    return ObjectSetter{object, true};
-}
-
-// TODO: generalize this to with both RSA and ECC keys
-inline Botan::RSA_PublicKey rsa_pubkey_from_tss2_public(const TPM2B_PUBLIC* public_area) {
-   BOTAN_ASSERT_NONNULL(public_area);
-   const auto& pub = public_area->publicArea;
-   BOTAN_ASSERT_NOMSG(pub.type == TPM2_ALG_RSA);
-
-   // TPM2 may report 0 when the exponent is 'the default' (2^16 + 1)
-   const auto exponent = (pub.parameters.rsaDetail.exponent == 0) ? 65537 : pub.parameters.rsaDetail.exponent;
-
-   return Botan::RSA_PublicKey(BigInt(as_span(pub.unique.rsa)), exponent);
 }
 
 }  // namespace Botan::TPM2

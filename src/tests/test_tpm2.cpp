@@ -161,11 +161,11 @@ std::vector<Test::Result> test_tpm2_rng() {
 }
 
 template <typename KeyT>
-std::unique_ptr<KeyT> load_persistent(Test::Result& result,
-                                      const std::shared_ptr<Botan::TPM2::Context>& ctx,
-                                      uint32_t persistent_key_id,
-                                      std::span<const uint8_t> auth_value,
-                                      const std::shared_ptr<Botan::TPM2::Session>& session) {
+auto load_persistent(Test::Result& result,
+                     const std::shared_ptr<Botan::TPM2::Context>& ctx,
+                     uint32_t persistent_key_id,
+                     std::span<const uint8_t> auth_value,
+                     const std::shared_ptr<Botan::TPM2::Session>& session) {
    const auto persistent_handles = ctx->persistent_handles();
    result.confirm(
       "Persistent key available",
@@ -361,7 +361,7 @@ std::vector<Test::Result> test_tpm2_rsa() {
             [&](Test::Result& result) {
                auto srk = ctx->storage_root_key({}, {});
 
-               auto sign_verify_roundtrip = [&](const Botan::TPM2::RSA_PrivateKey& key) {
+               auto sign_verify_roundtrip = [&](const Botan::TPM2::PrivateKey& key) {
                   std::vector<uint8_t> message = {'h', 'e', 'l', 'l', 'o'};
                   Botan::Null_RNG null_rng;
                   Botan::PK_Signer signer(key, null_rng /* TPM takes care of this */, "PSS(SHA-256)");

@@ -23,6 +23,7 @@
 #include <botan/mem_ops.h>
 #include <botan/pubkey.h>
 #include <botan/tpm2_context.h>
+#include <botan/tpm2_rsa.h>
 
 #include <tss2/tss2_esys.h>
 
@@ -483,7 +484,7 @@ TSS2_RC rsa_pk_encrypt(TPM2B_PUBLIC* pub_tpm_key,
       // the padding manually and then encrypt the padded data with raw RSA.
       //
       // TODO: Provide a way to instantiate an PK_Encryptor_EME that accepts a
-      //       pre-made EME object.
+      //       pre-made EME object. See: https://github.com/randombit/botan/pull/4318
 
       const auto pubkey = Botan::TPM2::rsa_pubkey_from_tss2_public(pub_tpm_key);
       const auto keybits = pubkey.key_length();
@@ -766,7 +767,7 @@ void enable_crypto_callbacks(const std::shared_ptr<Context>& ctx) {
    BOTAN_UNUSED(ctx);
    throw Not_Implemented(
       "This build of botan was compiled with a TSS2 version lower than 4.0.0, "
-      "which dos not support custom runtime crypto backends");
+      "which does not support custom runtime crypto backends");
 #endif
 }
 

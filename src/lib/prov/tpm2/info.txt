@@ -27,6 +27,7 @@ tpm2_util.h
 <header:public>
 tpm2_context.h
 tpm2_error.h
+tpm2_key.h
 tpm2_object.h
 tpm2_rng.h
 tpm2_rsa.h

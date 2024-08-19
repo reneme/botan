@@ -31,6 +31,11 @@ class BOTAN_PUBLIC_API(3, 6) RSA_PublicKey final : public virtual Botan::TPM2::P
 
       std::vector<uint8_t> raw_public_key_bits() const override { return TPM2::PublicKey::raw_public_key_bits(); }
 
+      bool supports_operation(PublicKeyOperation op) const override {
+         // TODO: Support RSA-KEM
+         return op == PublicKeyOperation::Encryption || op == PublicKeyOperation::Signature;
+      }
+
       std::unique_ptr<PK_Ops::Verification> create_verification_op(std::string_view params,
                                                                    std::string_view provider) const override;
 
@@ -74,6 +79,11 @@ class BOTAN_PUBLIC_API(3, 6) RSA_PrivateKey final : public virtual Botan::TPM2::
       }
 
       std::vector<uint8_t> raw_public_key_bits() const override { return TPM2::PrivateKey::raw_public_key_bits(); }
+
+      bool supports_operation(PublicKeyOperation op) const override {
+         // TODO: Support RSA-KEM
+         return op == PublicKeyOperation::Encryption || op == PublicKeyOperation::Signature;
+      }
 
       std::unique_ptr<PK_Ops::Signature> create_signature_op(Botan::RandomNumberGenerator& rng,
                                                              std::string_view params,

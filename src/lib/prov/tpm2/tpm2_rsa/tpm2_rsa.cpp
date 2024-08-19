@@ -453,8 +453,7 @@ std::unique_ptr<PK_Ops::Verification> RSA_PublicKey::create_verification_op(std:
 std::unique_ptr<PK_Ops::Signature> RSA_PrivateKey::create_signature_op(Botan::RandomNumberGenerator& rng,
                                                                        std::string_view params,
                                                                        std::string_view provider) const {
-   BOTAN_UNUSED(rng);
-   BOTAN_UNUSED(provider);
+   BOTAN_UNUSED(rng, provider);
    return std::make_unique<RSA_Signature_Operation>(handles(), sessions(), params);
 }
 

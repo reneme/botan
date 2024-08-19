@@ -47,7 +47,8 @@ std::shared_ptr<Session> Session::unauthenticated_session(const std::shared_ptr<
                                                }));
 }
 
-std::shared_ptr<Session> Session::salted_session(const std::shared_ptr<Context>& ctx, const TPM2::PrivateKey& tpm_key) {
+std::shared_ptr<Session> Session::authenticated_session(const std::shared_ptr<Context>& ctx,
+                                                        const TPM2::PrivateKey& tpm_key) {
    Object session(ctx);
 
    const TPMT_SYM_DEF auth_sym = {

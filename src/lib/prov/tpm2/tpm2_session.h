@@ -56,8 +56,8 @@ class BOTAN_UNSTABLE_API SessionHandle final {
 class BOTAN_PUBLIC_API(3, 6) Session {
    public:
       static std::shared_ptr<Session> unauthenticated_session(const std::shared_ptr<Context>& ctx);
-      static std::shared_ptr<Session> salted_session(const std::shared_ptr<Context>& ctx,
-                                                     const TPM2::PrivateKey& tpm_key);
+      static std::shared_ptr<Session> authenticated_session(const std::shared_ptr<Context>& ctx,
+                                                            const TPM2::PrivateKey& tpm_key);
 
    public:
       [[nodiscard]] detail::SessionHandle handle() { return *this; }

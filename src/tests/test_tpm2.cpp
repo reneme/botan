@@ -342,7 +342,7 @@ std::vector<Test::Result> test_tpm2_rsa() {
             [&](Test::Result& result) {
                auto srk = ctx->storage_root_key({}, {});
 
-               auto authed_session = Botan::TPM2::Session::salted_session(ctx, *srk);
+               auto authed_session = Botan::TPM2::Session::authenticated_session(ctx, *srk);
 
                const std::array<uint8_t, 6> secret = {'s', 'e', 'c', 'r', 'e', 't'};
 
@@ -415,7 +415,7 @@ std::vector<Test::Result> test_tpm2_rsa() {
                };
 
                // Create Key
-               auto authed_session = Botan::TPM2::Session::salted_session(ctx, *srk);
+               auto authed_session = Botan::TPM2::Session::authenticated_session(ctx, *srk);
 
                const std::array<uint8_t, 6> secret = {'s', 'e', 'c', 'r', 'e', 't'};
                auto sk = Botan::TPM2::RSA_PrivateKey::create_transient(ctx, authed_session, secret, *srk, 2048);

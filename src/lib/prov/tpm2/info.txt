@@ -15,7 +15,7 @@ all -> tss2-esys,tss2-rc,tss2-tctildr,tss2-mu
 
 <requires>
 rng
-rsa
+pubkey
 </requires>
 
 <header:internal>
@@ -30,6 +30,5 @@ tpm2_error.h
 tpm2_key.h
 tpm2_object.h
 tpm2_rng.h
-tpm2_rsa.h
 tpm2_session.h
 </header:public>

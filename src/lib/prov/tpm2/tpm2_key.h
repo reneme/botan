@@ -22,7 +22,7 @@ class BOTAN_PUBLIC_API(3, 6) PublicKey : public virtual Botan::Public_Key {
    public:
       static std::unique_ptr<PublicKey> from_persistent(const std::shared_ptr<Context>& ctx,
                                                         uint32_t persistent_object_handle,
-                                                        SessionBundle sessions = {});
+                                                        const SessionBundle& sessions = {});
 
    public:
       std::unique_ptr<Private_Key> generate_another(RandomNumberGenerator&) const override {
@@ -49,7 +49,7 @@ class BOTAN_PUBLIC_API(3, 6) PrivateKey : public virtual Private_Key {
       static std::unique_ptr<PrivateKey> from_persistent(const std::shared_ptr<Context>& ctx,
                                                          uint32_t persistent_object_handle,
                                                          std::span<const uint8_t> auth_value,
-                                                         SessionBundle sessions);
+                                                         const SessionBundle& sessions);
 
       /**
        * This is a wrapper around Esys_CreateLoaded creating a transient key
@@ -70,7 +70,7 @@ class BOTAN_PUBLIC_API(3, 6) PrivateKey : public virtual Private_Key {
        *                       value) to use for the key creation.
        */
       static std::unique_ptr<PrivateKey> create_transient_from_template(const std::shared_ptr<Context>& ctx,
-                                                                        SessionBundle sessions,
+                                                                        const SessionBundle& sessions,
                                                                         const TPM2::PrivateKey& parent,
                                                                         const TPMT_PUBLIC* key_template,
                                                                         const TPM2B_SENSITIVE_CREATE* sensitive_data);

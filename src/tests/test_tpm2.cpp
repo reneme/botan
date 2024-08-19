@@ -16,9 +16,13 @@
 #if defined(BOTAN_HAS_TPM2)
    #include <botan/internal/tpm2_hash.h>
 
+   #include <botan/tpm2_key.h>
    #include <botan/tpm2_rng.h>
-   #include <botan/tpm2_rsa.h>
    #include <botan/tpm2_session.h>
+
+   #if defined(BOTAN_HAS_TPM2_RSA_ADAPTER)
+      #include <botan/tpm2_rsa.h>
+   #endif
 #endif
 
 namespace Botan_Tests {
@@ -99,14 +103,16 @@ std::vector<Test::Result> test_tpm2_context() {
                               !Botan::value_exists(handles, persistent_key_id + 1));
             }),
 
-      CHECK("Fetch Storage Root Key",
-            [&](Test::Result& result) {
-               auto srk = ctx->storage_root_key({}, {});
-               result.require("SRK is not null", srk != nullptr);
-               result.test_eq("Algo", srk->algo_name(), "RSA");
-               result.test_eq("Key size", srk->key_length(), 2048);
-               result.confirm("Has persistent handle", srk->handles().has_persistent_handle());
-            }),
+   // TODO: once ECC support is added, add an ifdef and test for ECC keys
+   #if defined(BOTAN_HAS_TPM2_RSA_ADAPTER)
+         CHECK("Fetch Storage Root Key", [&](Test::Result& result) {
+            auto srk = ctx->storage_root_key({}, {});
+            result.require("SRK is not null", srk != nullptr);
+            result.test_eq("Algo", srk->algo_name(), "RSA");
+            result.test_eq("Key size", srk->key_length(), 2048);
+            result.confirm("Has persistent handle", srk->handles().has_persistent_handle());
+         }),
+   #endif
    };
 }
 
@@ -159,6 +165,8 @@ std::vector<Test::Result> test_tpm2_rng() {
             }),
    };
 }
+
+   #if defined(BOTAN_HAS_TPM2_RSA_ADAPTER)
 
 template <typename KeyT>
 auto load_persistent(Test::Result& result,
@@ -406,6 +414,8 @@ std::vector<Test::Result> test_tpm2_rsa() {
    };
 }
 
+   #endif
+
 std::vector<Test::Result> test_tpm2_hash() {
    auto ctx = get_tpm2_context(__func__);
    if(!ctx) {
@@ -532,7 +542,9 @@ std::vector<Test::Result> test_tpm2_hash() {
 BOTAN_REGISTER_TEST_FN("tpm2", "tpm2_props", test_tpm2_properties);
 BOTAN_REGISTER_TEST_FN("tpm2", "tpm2_ctx", test_tpm2_context);
 BOTAN_REGISTER_TEST_FN("tpm2", "tpm2_rng", test_tpm2_rng);
+   #if defined(BOTAN_HAS_TPM2_RSA_ADAPTER)
 BOTAN_REGISTER_TEST_FN("tpm2", "tpm2_rsa", test_tpm2_rsa);
+   #endif
 BOTAN_REGISTER_TEST_FN("tpm2", "tpm2_hash", test_tpm2_hash);
 
 #endif

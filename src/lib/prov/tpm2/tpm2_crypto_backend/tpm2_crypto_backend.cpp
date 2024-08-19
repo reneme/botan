@@ -23,7 +23,10 @@
 #include <botan/mem_ops.h>
 #include <botan/pubkey.h>
 #include <botan/tpm2_context.h>
-#include <botan/tpm2_rsa.h>
+
+#if defined(BOTAN_HAS_TPM2_RSA_ADAPTER)
+   #include <botan/tpm2_rsa.h>
+#endif
 
 #include <tss2/tss2_esys.h>
 
@@ -399,6 +402,7 @@ TSS2_RC rsa_pk_encrypt(TPM2B_PUBLIC* pub_tpm_key,
                        size_t* out_size,
                        const char* label,
                        void* userdata) {
+   #if defined(BOTAN_HAS_TPM2_RSA_ADAPTER)
    auto create_eme = [&](
                         const TPMT_RSA_SCHEME& scheme,
                         [[maybe_unused]] TPM2_ALG_ID name_algo,
@@ -407,7 +411,7 @@ TSS2_RC rsa_pk_encrypt(TPM2B_PUBLIC* pub_tpm_key,
       // label. To avoid marshalling this into Botan's algorithm descriptor
       // we create an OAEP instance manually.
       auto create_oaep = [&]() -> std::optional<std::unique_ptr<Botan::EME>> {
-   #if defined(BOTAN_HAS_EME_OAEP)
+      #if defined(BOTAN_HAS_EME_OAEP)
          // TPM Library, Part 1: Architecture, Annex B.4
          //    The RSA key's scheme hash algorithm (or, if it is TPM_ALG_NULL,
          //    the RSA key's Name algorithm) is used to compute H(label).
@@ -435,10 +439,10 @@ TSS2_RC rsa_pk_encrypt(TPM2B_PUBLIC* pub_tpm_key,
          //    termination octet is included in the digest.
          std::string_view label_with_zero_terminator{label, std::strlen(label) + 1};
          return std::make_unique<Botan::OAEP>(std::move(H_label), std::move(H_mgf1), label_with_zero_terminator);
-   #else
+      #else
          BOTAN_UNUSED(label);
          return nullptr;  // -> not implemented
-   #endif
+      #endif
       };
 
       try {  // EME::create throws if algorithm is not available
@@ -520,6 +524,10 @@ TSS2_RC rsa_pk_encrypt(TPM2B_PUBLIC* pub_tpm_key,
 
       return TSS2_RC_SUCCESS;
    });
+   #else
+   BOTAN_UNUSED(pub_tpm_key, in_size, in_buffer, max_out_size, out_buffer, out_size, label, userdata);
+   return TSS2_ESYS_RC_NOT_IMPLEMENTED;
+   #endif
 }
 
 /** Computation of an ephemeral ECC key and shared secret Z.

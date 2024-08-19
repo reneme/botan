@@ -7,10 +7,6 @@ name -> "TPM2 Crypto Backend"
 brief -> "Implementation of the TPM2-TSS crypto callbacks"
 </module_info>
 
-<libs>
-all -> tss2-esys,tss2-rc
-</libs>
-
 <requires>
 hash
 hmac

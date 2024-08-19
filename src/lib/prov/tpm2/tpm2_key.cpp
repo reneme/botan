@@ -8,7 +8,9 @@
 
 #include <botan/tpm2_key.h>
 
-#include <botan/tpm2_rsa.h>
+#if defined(BOTAN_HAS_TPM2_RSA_ADAPTER)
+   #include <botan/tpm2_rsa.h>
+#endif
 
 #include <botan/internal/fmt.h>
 #include <botan/internal/stl_util.h>
@@ -58,12 +60,19 @@ Object load_persistent_object(const std::shared_ptr<Context>& ctx,
 }  // namespace
 
 std::unique_ptr<PrivateKey> PrivateKey::create_transient_from_template(const std::shared_ptr<Context>& ctx,
-                                                                       SessionBundle sessions,
+                                                                       const SessionBundle& sessions,
                                                                        const TPM2::PrivateKey& parent,
                                                                        const TPMT_PUBLIC* key_template,
                                                                        const TPM2B_SENSITIVE_CREATE* sensitive_data) {
-   BOTAN_ARG_CHECK(key_template->type == TPM2_ALG_RSA || key_template->type == TPM2_ALG_ECC,
-                   "key_template is neither RSA nor ECC");
+#if not defined(BOTAN_HAS_TPM2_RSA_ADAPTER)
+   if(key_template->type == TPM2_ALG_RSA) {
+      throw Not_Implemented("TPM2-based RSA keys are not supported in this build");
+   }
+#endif
+
+   if(key_template->type == TPM2_ALG_ECC) {
+      throw Not_Implemented("TPM2-based ECC keys are not yet supported");
+   }
 
    const auto marshalled_template = [&] {
       TPM2B_TEMPLATE result = {};
@@ -93,39 +102,45 @@ std::unique_ptr<PrivateKey> PrivateKey::create_transient_from_template(const std
    BOTAN_ASSERT_NOMSG(public_info->publicArea.type == key_template->type);
    BOTAN_ASSERT_NOMSG(handle.has_transient_handle());
 
+#if defined(BOTAN_HAS_TPM2_RSA_ADAPTER)
    if(key_template->type == TPM2_ALG_RSA) {
       return std::unique_ptr<RSA_PrivateKey>(
-         new RSA_PrivateKey(std::move(handle), std::move(sessions), public_info.get(), as_span(*private_bytes)));
-   } else {
-      throw Not_Implemented("TPM2-based ECC keys are not yet supported");
+         new RSA_PrivateKey(std::move(handle), sessions, public_info.get(), as_span(*private_bytes)));
    }
+#endif
+
+   BOTAN_ASSERT_UNREACHABLE();
 }
 
 std::unique_ptr<PublicKey> PublicKey::from_persistent(const std::shared_ptr<Context>& ctx,
                                                       uint32_t persistent_object_handle,
-                                                      SessionBundle sessions) {
+                                                      const SessionBundle& sessions) {
    auto handles = load_persistent_object(ctx, persistent_object_handle, {}, sessions);
 
-   const auto* pubinfo = handles._public_info(sessions).pub.get();
+   [[maybe_unused]] const auto* pubinfo = handles._public_info(sessions).pub.get();
+#if defined(BOTAN_HAS_TPM2_RSA_ADAPTER)
    if(pubinfo->publicArea.type == TPM2_ALG_RSA) {
-      return std::unique_ptr<PublicKey>(new RSA_PublicKey(std::move(handles), std::move(sessions), pubinfo));
-   } else {
-      throw Not_Implemented("TPM2-based ECC keys are not yet supported");
+      return std::unique_ptr<PublicKey>(new RSA_PublicKey(std::move(handles), sessions, pubinfo));
    }
+#endif
+
+   throw Not_Implemented("Loaded a persistent public key of an unsupported type");
 }
 
 std::unique_ptr<PrivateKey> PrivateKey::from_persistent(const std::shared_ptr<Context>& ctx,
                                                         uint32_t persistent_object_handle,
                                                         std::span<const uint8_t> auth_value,
-                                                        SessionBundle sessions) {
+                                                        const SessionBundle& sessions) {
    auto handles = load_persistent_object(ctx, persistent_object_handle, auth_value, sessions);
 
-   const auto* pubinfo = handles._public_info(sessions).pub.get();
+   [[maybe_unused]] const auto* pubinfo = handles._public_info(sessions).pub.get();
+#if defined(BOTAN_HAS_TPM2_RSA_ADAPTER)
    if(pubinfo->publicArea.type == TPM2_ALG_RSA) {
-      return std::unique_ptr<RSA_PrivateKey>(new RSA_PrivateKey(std::move(handles), std::move(sessions), pubinfo));
-   } else {
-      throw Not_Implemented("TPM2-based ECC keys are not yet supported");
+      return std::unique_ptr<RSA_PrivateKey>(new RSA_PrivateKey(std::move(handles), sessions, pubinfo));
    }
+#endif
+
+   throw Not_Implemented("Loaded a persistent private key of an unsupported type");
 }
 
 }  // namespace Botan::TPM2

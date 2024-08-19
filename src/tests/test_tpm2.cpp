@@ -122,7 +122,7 @@ std::vector<Test::Result> test_tpm2_rng() {
       return {bail_out()};
    }
 
-   auto rng = Botan::TPM2::RNG(ctx, Botan::TPM2::Session::unauthenticated_session(ctx));
+   auto rng = Botan::TPM2::RandomNumberGenerator(ctx, Botan::TPM2::Session::unauthenticated_session(ctx));
 
    return {
       CHECK("Basic functionalities",

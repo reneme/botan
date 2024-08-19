@@ -162,7 +162,7 @@ int botan_tpm2_rng_init(botan_rng_t* rng_out, botan_tpm2_ctx_t ctx) {
          return BOTAN_FFI_ERROR_NULL_POINTER;
       }
 
-      *rng_out = new botan_rng_struct(std::make_unique<Botan::TPM2::RNG>(ctx_wrapper.ctx));
+      *rng_out = new botan_rng_struct(std::make_unique<Botan::TPM2::RandomNumberGenerator>(ctx_wrapper.ctx));
       return BOTAN_FFI_SUCCESS;
    });
 #else

@@ -25,7 +25,7 @@ BOTAN_PUBLIC_API(3, 6) Botan::RSA_PublicKey rsa_pubkey_from_tss2_public(const TP
 class BOTAN_PUBLIC_API(3, 6) RSA_PublicKey final : public virtual Botan::TPM2::PublicKey,
                                                    public virtual Botan::RSA_PublicKey {
    public:
-      std::unique_ptr<Private_Key> generate_another(RandomNumberGenerator& rng) const override {
+      std::unique_ptr<Private_Key> generate_another(Botan::RandomNumberGenerator& rng) const override {
          return TPM2::PublicKey::generate_another(rng);
       }
 
@@ -71,7 +71,7 @@ class BOTAN_PUBLIC_API(3, 6) RSA_PrivateKey final : public virtual Botan::TPM2::
 
       std::vector<uint8_t> raw_public_key_bits() const override { return TPM2::PrivateKey::raw_public_key_bits(); }
 
-      std::unique_ptr<PK_Ops::Signature> create_signature_op(RandomNumberGenerator& rng,
+      std::unique_ptr<PK_Ops::Signature> create_signature_op(Botan::RandomNumberGenerator& rng,
                                                              std::string_view params,
                                                              std::string_view provider) const override;
 

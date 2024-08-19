@@ -183,7 +183,7 @@ class RSA_Signature_Operation : public PK_Ops::Signature {
 
       void update(std::span<const uint8_t> msg) override { m_hash->update(msg); }
 
-      std::vector<uint8_t> sign(RandomNumberGenerator& /* rng */) override {
+      std::vector<uint8_t> sign(Botan::RandomNumberGenerator& /* rng */) override {
          if(auto hash = dynamic_cast<HashFunction*>(m_hash.get())) {
             // This is a TPM2-based hash object that calculated the digest on
             // the TPM. We can use the validation ticket to create the signature.
@@ -318,7 +318,7 @@ std::unique_ptr<PK_Ops::Verification> RSA_PublicKey::create_verification_op(std:
    return std::make_unique<RSA_Verification_Operation>(handles(), sessions(), params);
 }
 
-std::unique_ptr<PK_Ops::Signature> RSA_PrivateKey::create_signature_op(RandomNumberGenerator& rng,
+std::unique_ptr<PK_Ops::Signature> RSA_PrivateKey::create_signature_op(Botan::RandomNumberGenerator& rng,
                                                                        std::string_view params,
                                                                        std::string_view provider) const {
    BOTAN_UNUSED(rng);

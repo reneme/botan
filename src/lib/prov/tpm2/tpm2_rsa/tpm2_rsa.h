@@ -75,6 +75,10 @@ class BOTAN_PUBLIC_API(3, 6) RSA_PrivateKey final : public virtual Botan::TPM2::
                                                              std::string_view params,
                                                              std::string_view provider) const override;
 
+      std::unique_ptr<PK_Ops::Decryption> create_decryption_op(Botan::RandomNumberGenerator& rng,
+                                                               std::string_view params,
+                                                               std::string_view provider) const override;
+
    protected:
       friend class TPM2::PrivateKey;
 

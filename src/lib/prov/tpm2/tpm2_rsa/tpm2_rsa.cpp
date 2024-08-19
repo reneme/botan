@@ -12,6 +12,7 @@
 #include <botan/pk_ops.h>
 #include <botan/rsa.h>
 
+#include <botan/internal/ct_utils.h>
 #include <botan/internal/emsa.h>
 #include <botan/internal/fmt.h>
 #include <botan/internal/scan_name.h>
@@ -101,12 +102,12 @@ std::unique_ptr<TPM2::PrivateKey> RSA_PrivateKey::create_transient(const std::sh
 
 namespace {
 
-struct AlgorithmSelection {
+struct SignatureAlgorithmSelection {
       TPMT_SIG_SCHEME signature_scheme;
       std::string hash_name;
 };
 
-AlgorithmSelection select_algorithms(std::string_view padding) {
+SignatureAlgorithmSelection select_signature_algorithms(std::string_view padding) {
    const SCAN_Name req(padding);
    if(req.arg_count() == 0) {
       throw Invalid_Argument("RSA signing padding scheme must at least specify a hash function");
@@ -169,7 +170,7 @@ class RSA_Signature_Operation : public PK_Ops::Signature {
    private:
       RSA_Signature_Operation(const Object& object,
                               const SessionBundle& sessions,
-                              const AlgorithmSelection& algorithms) :
+                              const SignatureAlgorithmSelection& algorithms) :
             m_key_handle(object),
             m_sessions(sessions),
             m_scheme(algorithms.signature_scheme),
@@ -179,7 +180,7 @@ class RSA_Signature_Operation : public PK_Ops::Signature {
 
    public:
       RSA_Signature_Operation(const Object& object, const SessionBundle& sessions, std::string_view padding) :
-            RSA_Signature_Operation(object, sessions, select_algorithms(padding)) {}
+            RSA_Signature_Operation(object, sessions, select_signature_algorithms(padding)) {}
 
       void update(std::span<const uint8_t> msg) override { m_hash->update(msg); }
 
@@ -255,7 +256,7 @@ class RSA_Verification_Operation : public PK_Ops::Verification {
    private:
       RSA_Verification_Operation(const Object& object,
                                  const SessionBundle& sessions,
-                                 const AlgorithmSelection& algorithms) :
+                                 const SignatureAlgorithmSelection& algorithms) :
             m_key_handle(object),
             m_sessions(sessions),
             m_scheme(algorithms.signature_scheme),
@@ -263,7 +264,7 @@ class RSA_Verification_Operation : public PK_Ops::Verification {
 
    public:
       RSA_Verification_Operation(const Object& object, const SessionBundle& sessions, std::string_view padding) :
-            RSA_Verification_Operation(object, sessions, select_algorithms(padding)) {}
+            RSA_Verification_Operation(object, sessions, select_signature_algorithms(padding)) {}
 
       void update(std::span<const uint8_t> msg) override { m_hash->update(msg); }
 
@@ -310,6 +311,66 @@ class RSA_Verification_Operation : public PK_Ops::Verification {
       std::unique_ptr<Botan::HashFunction> m_hash;
 };
 
+TPMT_RSA_DECRYPT select_encryption_algorithms(std::string_view padding) {
+   TPMT_RSA_DECRYPT result;
+
+   const SCAN_Name req(padding);
+   if(auto scheme = asymmetric_encryption_scheme_botan_to_tss2(req.algo_name())) {
+      result.scheme = scheme.value();
+   } else {
+      throw Not_Implemented("TPM-based RSA encryption with padding scheme " + req.algo_name());
+   }
+
+   if(result.scheme == TPM2_ALG_OAEP) {
+      if(req.arg_count() < 1) {
+         throw Invalid_Argument("requested OAEP without a hash function");
+      }
+
+      result.details.oaep.hashAlg = get_tpm2_hash_type(req.arg(0));
+   }
+
+   return result;
+}
+
+class RSA_Decryption_Operation : public PK_Ops::Decryption {
+   public:
+      RSA_Decryption_Operation(const Object& object, const SessionBundle& sessions, std::string_view padding) :
+            m_key_handle(object), m_sessions(sessions), m_scheme(select_encryption_algorithms(padding)) {}
+
+      secure_vector<uint8_t> decrypt(uint8_t& valid_mask, std::span<const uint8_t> input) override {
+         const auto ciphertext = copy_into<TPM2B_PUBLIC_KEY_RSA>(input);
+         const auto label = init_empty<TPM2B_DATA>();  // TODO: implement?
+         unique_esys_ptr<TPM2B_PUBLIC_KEY_RSA> plaintext;
+         auto rc = check_rc_expecting<TPM2_RC_FAILURE>("Esys_RSA_Decrypt",
+                                                       Esys_RSA_Decrypt(inner(m_key_handle.context()),
+                                                                        m_key_handle.transient_handle(),
+                                                                        m_sessions[0],
+                                                                        m_sessions[1],
+                                                                        m_sessions[2],
+                                                                        &ciphertext,
+                                                                        &m_scheme,
+                                                                        &label,
+                                                                        out_ptr(plaintext)));
+
+         valid_mask = CT::Mask<uint8_t>::is_equal(rc, TPM2_RC_SUCCESS).value();
+         if(rc == TPM2_RC_SUCCESS) {
+            BOTAN_ASSERT_NONNULL(plaintext);
+            return copy_into<secure_vector<uint8_t>>(*plaintext);
+         } else {
+            return {};
+         }
+      }
+
+      size_t plaintext_length(size_t /* ciphertext_length */) const override {
+         return m_key_handle._public_info(m_sessions, TPM2_ALG_RSA).pub->publicArea.parameters.rsaDetail.keyBits / 8;
+      }
+
+   private:
+      const Object& m_key_handle;
+      const SessionBundle& m_sessions;
+      TPMT_RSA_DECRYPT m_scheme;
+};
+
 }  // namespace
 
 std::unique_ptr<PK_Ops::Verification> RSA_PublicKey::create_verification_op(std::string_view params,
@@ -324,6 +385,13 @@ std::unique_ptr<PK_Ops::Signature> RSA_PrivateKey::create_signature_op(Botan::Ra
    BOTAN_UNUSED(rng);
    BOTAN_UNUSED(provider);
    return std::make_unique<RSA_Signature_Operation>(handles(), sessions(), params);
+}
+
+std::unique_ptr<PK_Ops::Decryption> RSA_PrivateKey::create_decryption_op(Botan::RandomNumberGenerator& rng,
+                                                                         std::string_view params,
+                                                                         std::string_view provider) const {
+   BOTAN_UNUSED(rng, provider);
+   return std::make_unique<RSA_Decryption_Operation>(handles(), sessions(), params);
 }
 
 }  // namespace Botan::TPM2

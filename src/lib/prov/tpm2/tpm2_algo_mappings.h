@@ -164,6 +164,19 @@ inline std::string get_botan_hash_name(TPM2_ALG_ID hash_id) {
    }
 }
 
+[[nodiscard]] inline std::optional<TPMI_ALG_ASYM_SCHEME> asymmetric_encryption_scheme_botan_to_tss2(
+   std::string_view name) noexcept {
+   if(name == "OAEP" || name == "EME-OAEP" || name == "EME1") {
+      return TPM2_ALG_OAEP;
+   } else if(name == "PKCS1v15" || name == "EME-PKCS1-v1_5") {
+      return TPM2_ALG_RSAES;
+   } else if(name == "Raw") {
+      return TPM2_ALG_NULL;
+   } else {
+      return std::nullopt;
+   }
+}
+
 }  // namespace Botan::TPM2
 
 #endif

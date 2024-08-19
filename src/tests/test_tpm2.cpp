@@ -328,6 +328,31 @@ std::vector<Test::Result> test_tpm2_rsa() {
                                                       [&] { signer.sign_message(message, null_rng); });
             }),
 
+      CHECK("Decrypt a message",
+            [&](Test::Result& result) {
+               auto key =
+                  load_persistent<Botan::TPM2::RSA_PrivateKey>(result, ctx, persistent_key_id, password, session);
+
+               const auto plaintext = Botan::hex_decode("feedface");
+
+               // encrypt a message using a software RSA key for the TPM's private key
+               auto pk = key->public_key();
+               auto rng = Test::new_rng("tpm2 rsa decrypt");
+               Botan::PK_Encryptor_EME enc(*pk, *rng, "OAEP(SHA-256)");
+               const auto ciphertext = enc.encrypt(plaintext, *rng);
+
+               // decrypt the message using the TPM's private key
+               Botan::Null_RNG null_rng;
+               Botan::PK_Decryptor_EME dec(*key, null_rng /* TPM takes care of this */, "OAEP(SHA-256)");
+               const auto decrypted = dec.decrypt(ciphertext);
+               result.test_eq("decrypted message", decrypted, plaintext);
+
+               // corrupt the ciphertext and try to decrypt it
+               auto mutated_ciphertext = Test::mutate_vec(ciphertext, *rng);
+               result.test_throws<Botan::Decoding_Error>("Fail with wrong ciphertext",
+                                                         [&] { dec.decrypt(mutated_ciphertext); });
+            }),
+
       CHECK("Cannot export private key blob from persistent key",
             [&](Test::Result& result) {
                auto key =

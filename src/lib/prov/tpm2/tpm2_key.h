@@ -19,12 +19,38 @@ struct TPM2B_PUBLIC;
 
 namespace Botan::TPM2 {
 
+/**
+ * This wraps a public key that is hosted in a TPM 2.0 device. This class allows
+ * performing public-key operations on the TPM. Namely verifying signatures and
+ * encrypting data.
+ *
+ * The class does not provied public constructors, but instead provides static
+ * methods to obtain a public key handle from a TPM.
+ */
 class BOTAN_PUBLIC_API(3, 6) PublicKey : public virtual Botan::Public_Key {
    public:
+      /**
+       * Load a public key that resides in the TPM's persistent storage.
+       *
+       * @param ctx The TPM context to use
+       * @param persistent_object_handle The handle of the persistent object to load
+       * @param sessions The session bundle to use for loading
+       */
       static std::unique_ptr<PublicKey> load_persistent(const std::shared_ptr<Context>& ctx,
                                                         uint32_t persistent_object_handle,
                                                         const SessionBundle& sessions = {});
 
+      /**
+       * Load a public key from the public blob obtained by a TPM key creation.
+       *
+       * Transient keys don't reside inside the TPM but must be loaded by the
+       * application as required. Once this object is destructed, the transient
+       * memory on the TPM is cleared.
+       *
+       * @param ctx The TPM context to use
+       * @param public_blob The public blob of the key to load
+       * @param sessions The session bundle to use for loading
+       */
       static std::unique_ptr<PublicKey> load_transient(const std::shared_ptr<Context>& ctx,
                                                        std::span<const uint8_t> public_blob,
                                                        const SessionBundle& sessions);
@@ -56,13 +82,59 @@ class BOTAN_PUBLIC_API(3, 6) PublicKey : public virtual Botan::Public_Key {
 BOTAN_DIAGNOSTIC_PUSH
 BOTAN_DIAGNOSTIC_IGNORE_INHERITED_VIA_DOMINANCE
 
+/**
+ * This wraps a private key that is hosted in a TPM 2.0 device. This class
+ * allows performing private-key operations on the TPM. Namely signing and
+ * decrypting data.
+ *
+ * Note that there are two types of keys: persistent and transient. Persistent
+ * keys are stored in the TPM's NVRAM and can be loaded at any time. Transient
+ * keys are loaded by the application from an encrypted private blob that is
+ * only readable by the TPM that created it. Once the key is loaded, the
+ * application can use it as if it were a persistent key. Once the key is
+ * destructed, the transient memory on the TPM is cleared.
+ *
+ * Applications may persist transient keys in the TPM's NVRAM by using the
+ * TPM2_Context::persist() method. This allows the key to be loaded at a later
+ * time without the need to provide the encrypted private blob. Similarly,
+ * persistent keys may be permanently destroyed using TPM2_Context::evict().
+ *
+ * To obtain the public and private blobs of a transient key, use the
+ * raw_public_key_bits() and raw_private_key_bits() methods, respectively.
+ *
+ * The class does not provide public constructors, but instead provides static
+ * methods to obtain a private key handle from a TPM.
+ */
 class BOTAN_PUBLIC_API(3, 6) PrivateKey : public virtual Private_Key {
    public:
+      /**
+       * Load a private key that resides in the TPM's persistent storage.
+       *
+       * @param ctx The TPM context to use
+       * @param persistent_object_handle The handle of the persistent object to load
+       * @param auth_value The auth value required to use the key
+       * @param sessions The session bundle to use for the key's operations
+       */
       static std::unique_ptr<PrivateKey> load_persistent(const std::shared_ptr<Context>& ctx,
                                                          uint32_t persistent_object_handle,
                                                          std::span<const uint8_t> auth_value,
                                                          const SessionBundle& sessions);
 
+      /**
+       * Load a private key from the public and private blobs obtained by a TPM
+       * key creation.
+       *
+       * Transient keys don't reside inside the TPM but must be loaded by the
+       * application as required. Once this object is destructed, the transient
+       * memory on the TPM is cleared.
+       *
+       * @param ctx The TPM context to use
+       * @param auth_value The auth value required to use the key
+       * @param parent The parent key the key was originally created under
+       * @param public_blob The public blob of the key to load
+       * @param private_blob The private blob of the key to load
+       * @param sessions The session bundle to use for loading
+       */
       static std::unique_ptr<PrivateKey> load_transient(const std::shared_ptr<Context>& ctx,
                                                         std::span<const uint8_t> auth_value,
                                                         const TPM2::PrivateKey& parent,

@@ -15,6 +15,7 @@
 
 struct TPM2B_SENSITIVE_CREATE;
 struct TPMT_PUBLIC;
+struct TPM2B_PUBLIC;
 
 namespace Botan::TPM2 {
 
@@ -44,6 +45,8 @@ class BOTAN_PUBLIC_API(3, 6) PublicKey : public virtual Botan::Public_Key {
 
    protected:
       PublicKey(Object object, SessionBundle sessions) : m_handle(std::move(object)), m_sessions(std::move(sessions)) {}
+
+      static std::unique_ptr<PublicKey> create(Object handles, const SessionBundle& sessions);
 
    private:
       Object m_handle;
@@ -88,8 +91,8 @@ class BOTAN_PUBLIC_API(3, 6) PrivateKey : public virtual Private_Key {
       static std::unique_ptr<PrivateKey> create_transient_from_template(const std::shared_ptr<Context>& ctx,
                                                                         const SessionBundle& sessions,
                                                                         const TPM2::PrivateKey& parent,
-                                                                        const TPMT_PUBLIC* key_template,
-                                                                        const TPM2B_SENSITIVE_CREATE* sensitive_data);
+                                                                        const TPMT_PUBLIC& key_template,
+                                                                        const TPM2B_SENSITIVE_CREATE& sensitive_data);
 
    public:
       /// @throws Not_Implemented keys hosted in a TPM2 cannot be exported
@@ -119,6 +122,11 @@ class BOTAN_PUBLIC_API(3, 6) PrivateKey : public virtual Private_Key {
             m_handle(std::move(handle)),
             m_sessions(std::move(sessions)),
             m_private_blob(private_blob.begin(), private_blob.end()) {}
+
+      static std::unique_ptr<PrivateKey> create(Object handles,
+                                                const SessionBundle& sessions,
+                                                const TPM2B_PUBLIC* public_info,
+                                                std::span<const uint8_t> private_blob);
 
    private:
       Object m_handle;

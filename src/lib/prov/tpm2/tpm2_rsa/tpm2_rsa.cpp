@@ -21,7 +21,6 @@
 #include <botan/internal/tpm2_util.h>
 
 #include <tss2/tss2_esys.h>
-#include <tss2/tss2_mu.h>
 
 namespace Botan::TPM2 {
 
@@ -48,7 +47,7 @@ RSA_PrivateKey::RSA_PrivateKey(Object handle,
       Botan::RSA_PublicKey(rsa_pubkey_from_tss2_public(public_blob)) {}
 
 std::unique_ptr<TPM2::PrivateKey> RSA_PrivateKey::create_transient(const std::shared_ptr<Context>& ctx,
-                                                                   SessionBundle sessions,
+                                                                   const SessionBundle& sessions,
                                                                    std::span<const uint8_t> auth_value,
                                                                    const TPM2::PrivateKey& parent,
                                                                    uint16_t keylength,
@@ -97,7 +96,7 @@ std::unique_ptr<TPM2::PrivateKey> RSA_PrivateKey::create_transient(const std::sh
       .unique = {.rsa = init_empty<TPM2B_PUBLIC_KEY_RSA>()},
    };
 
-   return create_transient_from_template(ctx, std::move(sessions), parent, &key_template, &sensitive_data);
+   return create_transient_from_template(ctx, sessions, parent, key_template, sensitive_data);
 }
 
 namespace {

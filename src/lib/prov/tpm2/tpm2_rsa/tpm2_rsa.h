@@ -11,8 +11,6 @@
 #include <botan/rsa.h>
 #include <botan/tpm2_key.h>
 
-struct TPM2B_PUBLIC;
-
 namespace Botan::TPM2 {
 
 BOTAN_PUBLIC_API(3, 6) Botan::RSA_PublicKey rsa_pubkey_from_tss2_public(const TPM2B_PUBLIC* public_blob);
@@ -53,7 +51,7 @@ class BOTAN_PUBLIC_API(3, 6) RSA_PrivateKey final : public virtual Botan::TPM2::
        * @param exponent The desired exponent (default: 0x10001)
        */
       static std::unique_ptr<TPM2::PrivateKey> create_transient(const std::shared_ptr<Context>& ctx,
-                                                                SessionBundle sessions,
+                                                                const SessionBundle& sessions,
                                                                 std::span<const uint8_t> auth_value,
                                                                 const TPM2::PrivateKey& parent,
                                                                 uint16_t keylength,

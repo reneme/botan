@@ -76,83 +76,29 @@ TPM2B_PUBLIC unmarshal_public_blob(std::span<const uint8_t> marshalled_blob) {
    return public_data;
 }
 
-}  // namespace
-
-std::unique_ptr<PrivateKey> PrivateKey::create_transient_from_template(const std::shared_ptr<Context>& ctx,
-                                                                       const SessionBundle& sessions,
-                                                                       const TPM2::PrivateKey& parent,
-                                                                       const TPMT_PUBLIC* key_template,
-                                                                       const TPM2B_SENSITIVE_CREATE* sensitive_data) {
-#if not defined(BOTAN_HAS_TPM2_RSA_ADAPTER)
-   if(key_template->type == TPM2_ALG_RSA) {
-      throw Not_Implemented("TPM2-based RSA keys are not supported in this build");
-   }
-#endif
-
-   if(key_template->type == TPM2_ALG_ECC) {
-      throw Not_Implemented("TPM2-based ECC keys are not yet supported");
-   }
-
-   const auto marshalled_template = [&] {
-      TPM2B_TEMPLATE result = {};
-      size_t offset = 0;
-      check_rc("Tss2_MU_TPMT_PUBLIC_Marshal",
-               Tss2_MU_TPMT_PUBLIC_Marshal(key_template, result.buffer, sizeof(TPMT_PUBLIC), &offset));
-      result.size = offset;
-      return result;
-   }();
-
-   Object handle(ctx);
-   unique_esys_ptr<TPM2B_PRIVATE> private_bytes;
-   unique_esys_ptr<TPM2B_PUBLIC> public_info;
-
-   check_rc("Esys_CreateLoaded",
-            Esys_CreateLoaded(inner(ctx),
-                              parent.handles().transient_handle(),
-                              sessions[0],
-                              sessions[1],
-                              sessions[2],
-                              sensitive_data,
-                              &marshalled_template,
-                              out_transient_handle(handle),
-                              out_ptr(private_bytes),
-                              out_ptr(public_info)));
-   BOTAN_ASSERT_NONNULL(private_bytes);
-   BOTAN_ASSERT_NOMSG(public_info->publicArea.type == key_template->type);
-   BOTAN_ASSERT_NOMSG(handle.has_transient_handle());
-
-#if defined(BOTAN_HAS_TPM2_RSA_ADAPTER)
-   if(key_template->type == TPM2_ALG_RSA) {
-      return std::unique_ptr<RSA_PrivateKey>(
-         new RSA_PrivateKey(std::move(handle), sessions, public_info.get(), as_span(*private_bytes)));
-   }
-#endif
-
-   BOTAN_ASSERT_UNREACHABLE();
+TPM2B_TEMPLATE marshal_template(const TPMT_PUBLIC& key_template) {
+   TPM2B_TEMPLATE result = {};
+   size_t offset = 0;
+   check_rc("Tss2_MU_TPMT_PUBLIC_Marshal",
+            Tss2_MU_TPMT_PUBLIC_Marshal(&key_template, result.buffer, sizeof(TPMT_PUBLIC), &offset));
+   result.size = offset;
+   return result;
 }
+
+}  // namespace
 
 std::unique_ptr<PublicKey> PublicKey::load_persistent(const std::shared_ptr<Context>& ctx,
                                                       uint32_t persistent_object_handle,
                                                       const SessionBundle& sessions) {
-   auto handles = load_persistent_object(ctx, persistent_object_handle, {}, sessions);
-
-   [[maybe_unused]] const auto* pubinfo = handles._public_info(sessions).pub.get();
-#if defined(BOTAN_HAS_TPM2_RSA_ADAPTER)
-   if(pubinfo->publicArea.type == TPM2_ALG_RSA) {
-      return std::unique_ptr<PublicKey>(new RSA_PublicKey(std::move(handles), sessions, pubinfo));
-   }
-#endif
-
-   throw Not_Implemented("Loaded a persistent public key of an unsupported type");
+   return create(load_persistent_object(ctx, persistent_object_handle, {}, sessions), sessions);
 }
 
 std::unique_ptr<PublicKey> PublicKey::load_transient(const std::shared_ptr<Context>& ctx,
                                                      std::span<const uint8_t> public_blob,
                                                      const SessionBundle& sessions) {
-   Object handle(ctx);
-
    const auto public_data = unmarshal_public_blob(public_blob);
 
+   Object handle(ctx);
    check_rc("Esys_LoadExternal",
             Esys_LoadExternal(inner(ctx),
                               sessions[0],
@@ -162,31 +108,37 @@ std::unique_ptr<PublicKey> PublicKey::load_transient(const std::shared_ptr<Conte
                               &public_data,
                               TPM2_RH_NULL,
                               out_transient_handle(handle)));
+   return create(std::move(handle), sessions);
+}
 
-   [[maybe_unused]] const auto* pubinfo = handle._public_info(sessions).pub.get();
+std::vector<uint8_t> PublicKey::raw_public_key_bits() const {
+   return marshal_public_blob(m_handle._public_info(m_sessions).pub.get());
+}
+
+std::unique_ptr<PublicKey> PublicKey::create(Object handles, const SessionBundle& sessions) {
+   const bool is_persistent = handles.has_persistent_handle();
+
+   [[maybe_unused]] const auto* pubinfo = handles._public_info(sessions).pub.get();
 #if defined(BOTAN_HAS_TPM2_RSA_ADAPTER)
    if(pubinfo->publicArea.type == TPM2_ALG_RSA) {
-      return std::unique_ptr<PublicKey>(new RSA_PublicKey(std::move(handle), sessions, pubinfo));
+      return std::unique_ptr<PublicKey>(new RSA_PublicKey(std::move(handles), sessions, pubinfo));
    }
 #endif
 
-   throw Not_Implemented("Loaded a transient public key of an unsupported type");
+   throw Not_Implemented(
+      Botan::fmt("Loaded a {} public key of an unsupported type", is_persistent ? "persistent" : "transient"));
 }
+
+// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
 std::unique_ptr<PrivateKey> PrivateKey::load_persistent(const std::shared_ptr<Context>& ctx,
                                                         uint32_t persistent_object_handle,
                                                         std::span<const uint8_t> auth_value,
                                                         const SessionBundle& sessions) {
-   auto handles = load_persistent_object(ctx, persistent_object_handle, auth_value, sessions);
-
-   [[maybe_unused]] const auto* pubinfo = handles._public_info(sessions).pub.get();
-#if defined(BOTAN_HAS_TPM2_RSA_ADAPTER)
-   if(pubinfo->publicArea.type == TPM2_ALG_RSA) {
-      return std::unique_ptr<RSA_PrivateKey>(new RSA_PrivateKey(std::move(handles), sessions, pubinfo));
-   }
-#endif
-
-   throw Not_Implemented("Loaded a persistent private key of an unsupported type");
+   return create(load_persistent_object(ctx, persistent_object_handle, auth_value, sessions),
+                 sessions,
+                 nullptr /* pull public info from handle */,
+                 {} /* persistent keys don't have an encrypted private blob */);
 }
 
 std::unique_ptr<PrivateKey> PrivateKey::load_transient(const std::shared_ptr<Context>& ctx,
@@ -215,14 +167,50 @@ std::unique_ptr<PrivateKey> PrivateKey::load_transient(const std::shared_ptr<Con
       check_rc("Esys_TR_SetAuth", Esys_TR_SetAuth(inner(ctx), handle.transient_handle(), &user_auth));
    }
 
-   [[maybe_unused]] const auto* pubinfo = handle._public_info(sessions).pub.get();
-#if defined(BOTAN_HAS_TPM2_RSA_ADAPTER)
-   if(pubinfo->publicArea.type == TPM2_ALG_RSA) {
-      return std::unique_ptr<RSA_PrivateKey>(new RSA_PrivateKey(std::move(handle), sessions, pubinfo, private_blob));
-   }
-#endif
+   return create(std::move(handle), sessions, nullptr /* pull public info from handle */, private_blob);
+}
 
-   throw Not_Implemented("Loaded a transient private key of an unsupported type");
+std::unique_ptr<PrivateKey> PrivateKey::create_transient_from_template(const std::shared_ptr<Context>& ctx,
+                                                                       const SessionBundle& sessions,
+                                                                       const TPM2::PrivateKey& parent,
+                                                                       const TPMT_PUBLIC& key_template,
+                                                                       const TPM2B_SENSITIVE_CREATE& sensitive_data) {
+   switch(key_template.type) {
+      case TPM2_ALG_RSA:
+#if not defined(BOTAN_HAS_TPM2_RSA_ADAPTER)
+         throw Not_Implemented("TPM2-based RSA keys are not supported in this build");
+#endif
+         break;
+      case TPM2_ALG_ECC:
+         // TODO: support ECC keys
+         throw Not_Implemented("TPM2-based ECC keys are not yet supported");
+         break;
+      default:
+         throw Invalid_Argument("Unsupported key type");
+   }
+
+   const auto marshalled_template = marshal_template(key_template);
+
+   Object handle(ctx);
+   unique_esys_ptr<TPM2B_PRIVATE> private_bytes;
+   unique_esys_ptr<TPM2B_PUBLIC> public_info;
+
+   check_rc("Esys_CreateLoaded",
+            Esys_CreateLoaded(inner(ctx),
+                              parent.handles().transient_handle(),
+                              sessions[0],
+                              sessions[1],
+                              sessions[2],
+                              &sensitive_data,
+                              &marshalled_template,
+                              out_transient_handle(handle),
+                              out_ptr(private_bytes),
+                              out_ptr(public_info)));
+   BOTAN_ASSERT_NONNULL(private_bytes);
+   BOTAN_ASSERT_NOMSG(public_info->publicArea.type == key_template.type);
+   BOTAN_ASSERT_NOMSG(handle.has_transient_handle());
+
+   return create(std::move(handle), sessions, public_info.get(), as_span(*private_bytes));
 }
 
 secure_vector<uint8_t> PrivateKey::raw_private_key_bits() const {
@@ -231,12 +219,29 @@ secure_vector<uint8_t> PrivateKey::raw_private_key_bits() const {
    return Botan::lock(m_private_blob);
 }
 
-std::vector<uint8_t> PublicKey::raw_public_key_bits() const {
+std::vector<uint8_t> PrivateKey::raw_public_key_bits() const {
    return marshal_public_blob(m_handle._public_info(m_sessions).pub.get());
 }
 
-std::vector<uint8_t> PrivateKey::raw_public_key_bits() const {
-   return marshal_public_blob(m_handle._public_info(m_sessions).pub.get());
+std::unique_ptr<PrivateKey> PrivateKey::create(Object handles,
+                                               [[maybe_unused]] const SessionBundle& sessions,
+                                               [[maybe_unused]] const TPM2B_PUBLIC* public_info,
+                                               [[maybe_unused]] std::span<const uint8_t> private_blob) {
+   const bool is_persistent = handles.has_persistent_handle();
+
+   if(!public_info) {
+      public_info = handles._public_info(sessions).pub.get();
+   }
+
+#if defined(BOTAN_HAS_TPM2_RSA_ADAPTER)
+   if(public_info->publicArea.type == TPM2_ALG_RSA) {
+      return std::unique_ptr<RSA_PrivateKey>(
+         new RSA_PrivateKey(std::move(handles), sessions, public_info, private_blob));
+   }
+#endif
+
+   throw Not_Implemented(
+      Botan::fmt("Loaded a {} private key of an unsupported type", is_persistent ? "persistent" : "transient"));
 }
 
 }  // namespace Botan::TPM2

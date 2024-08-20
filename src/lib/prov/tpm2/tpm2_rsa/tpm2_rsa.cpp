@@ -72,6 +72,8 @@ std::unique_ptr<TPM2::PrivateKey> RSA_PrivateKey::create_transient(const std::sh
    TPMT_PUBLIC key_template = {
       .type = TPM2_ALG_RSA,
       .nameAlg = TPM2_ALG_SHA256,
+      // TODO: expose this to the user
+      //       Perhaps use the TPM2::SessionAttributes handling as inspiration
       .objectAttributes = (TPMA_OBJECT_USERWITHAUTH | TPMA_OBJECT_RESTRICTED | TPMA_OBJECT_FIXEDTPM |
                            TPMA_OBJECT_FIXEDPARENT | TPMA_OBJECT_SENSITIVEDATAORIGIN | TPMA_OBJECT_SIGN_ENCRYPT),
       .authPolicy = init_empty<TPM2B_DIGEST>(),
@@ -79,12 +81,26 @@ std::unique_ptr<TPM2::PrivateKey> RSA_PrivateKey::create_transient(const std::sh
          {
             .rsaDetail =
                {
+                  // TODO: What is this even used for?
+                  //       Not sure we need to expose this to the user, but
+                  //       we should understand the implications and perhaps
+                  //       let the user decide on the strength of the key, at least.
+                  //
+                  //       I could imagine that it is helpful for certification to
+                  //       be able to clearly specify what is being done here.
                   .symmetric =
                      {
                         .algorithm = TPM2_ALG_NULL,
                         .keyBits = {.aes = 0},
                         .mode = {.aes = 0},
                      },
+
+                  // TODO: Currently, this is fixed but the user can specify other
+                  //       signature scheme parameters (PKCS#1 for instance), when
+                  //       creating the `PK_Signer` object. This is completely useless.
+                  //
+                  //       We will be able to benefit quite a bit from Jack's
+                  //       work on the Builder-based API here: https://github.com/randombit/botan/pull/4318
                   .scheme =
                      {
                         .scheme = TPM2_ALG_RSAPSS,
@@ -94,7 +110,7 @@ std::unique_ptr<TPM2::PrivateKey> RSA_PrivateKey::create_transient(const std::sh
                   .exponent = exponent.value_or(0 /* default value - 2^16 + 1*/),
                },
          },
-      // TODO: perhaps fill this somehow: see above...
+      // TODO: What does this even do?
       .unique = {.rsa = init_empty<TPM2B_PUBLIC_KEY_RSA>()},
    };
 
@@ -371,7 +387,14 @@ class RSA_Encryption_Operation final : public PK_Ops::Encryption {
 
       std::vector<uint8_t> encrypt(std::span<const uint8_t> msg, Botan::RandomNumberGenerator& /* rng */) override {
          const auto plaintext = copy_into<TPM2B_PUBLIC_KEY_RSA>(msg);
-         const auto label = init_empty<TPM2B_DATA>();  // TODO: implement?
+
+         // TODO: Figure out what this is for. Given that I didn't see any other
+         //       way to pass an EME-OAEP label, I'm guessing that this is what
+         //       it is for. But I'm not sure.
+         //
+         // Again, a follow-up of https://github.com/randombit/botan/pull/4318
+         // that targets async encryption will probably be quite helpful here.
+         const auto label = init_empty<TPM2B_DATA>();
 
          unique_esys_ptr<TPM2B_PUBLIC_KEY_RSA> ciphertext;
          check_rc("Esys_RSA_Encrypt",
@@ -388,6 +411,11 @@ class RSA_Encryption_Operation final : public PK_Ops::Encryption {
          return copy_into<std::vector<uint8_t>>(*ciphertext);
       }
 
+      // This duplicates quite a bit of domain knowledge about those RSA
+      // EMEs. And I'm quite certain that I screwed up somewhere.
+      //
+      // TODO: See if we can somehow share the logic with the software
+      //       RSA implementation and also PKCS#11 (which I believe is plain wrong).
       size_t max_input_bits() const override {
          const auto max_ptext_bytes =
             (m_key_handle._public_info(m_sessions, TPM2_ALG_RSA).pub->publicArea.parameters.rsaDetail.keyBits - 1) / 8;
@@ -442,8 +470,12 @@ class RSA_Decryption_Operation final : public PK_Ops::Decryption {
 
       secure_vector<uint8_t> decrypt(uint8_t& valid_mask, std::span<const uint8_t> input) override {
          const auto ciphertext = copy_into<TPM2B_PUBLIC_KEY_RSA>(input);
-         const auto label = init_empty<TPM2B_DATA>();  // TODO: implement?
+         const auto label = init_empty<TPM2B_DATA>();  // TODO: implement? see encrypt operation
          unique_esys_ptr<TPM2B_PUBLIC_KEY_RSA> plaintext;
+
+         // TODO: I'm not sure that TPM2_RC_FAILURE is the right error code for
+         //       all cases here. It passed the test (with a faulty ciphertext),
+         //       but I didn't find this to be clearly documented. :-(
          auto rc = check_rc_expecting<TPM2_RC_FAILURE>("Esys_RSA_Decrypt",
                                                        Esys_RSA_Decrypt(inner(m_key_handle.context()),
                                                                         m_key_handle.transient_handle(),

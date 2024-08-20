@@ -19,6 +19,16 @@ namespace Botan::TPM2 {
 std::shared_ptr<Session> Session::unauthenticated_session(const std::shared_ptr<Context>& ctx) {
    Object session(ctx);
 
+   // TODO: Perhaps we want to make this configurable.
+   //       I could imagine that there's a synergy with the key-generation
+   //       handling (see rsa.cpp), when building a wrapper for that.
+   //
+   //       Given that we want to achieve a certification for our implementation,
+   //       is is probably helpful to give the application documentable control
+   //       over these parameters.
+   //
+   //       Its very likely a good idea to have a convenient and sane default
+   //       and build the API in a way that other users don't have to worry.
    const TPMT_SYM_DEF auth_sym = {
       .algorithm = TPM2_ALG_AES,
       .keyBits = {.aes = 128},
@@ -51,6 +61,8 @@ std::shared_ptr<Session> Session::authenticated_session(const std::shared_ptr<Co
                                                         const TPM2::PrivateKey& tpm_key) {
    Object session(ctx);
 
+   // TODO: Probably should be configurable.
+   //       See unauthenticated_session for more details.
    const TPMT_SYM_DEF auth_sym = {
       .algorithm = TPM2_ALG_AES,
       .keyBits = {.aes = 256},

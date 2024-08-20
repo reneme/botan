@@ -402,6 +402,14 @@ TSS2_RC rsa_pk_encrypt(TPM2B_PUBLIC* pub_tpm_key,
                        size_t* out_size,
                        const char* label,
                        void* userdata) {
+   // TODO: This is currently a dumpster fire of code duplication and
+   //       YOLO manual padding.
+   //
+   //       I'm hoping that a follow-up of Jack's work will help clean
+   //       this up. See the extensive discussions in:
+   //
+   //       https://github.com/randombit/botan/pull/4318#issuecomment-2297682058
+
    #if defined(BOTAN_HAS_TPM2_RSA_ADAPTER)
    auto create_eme = [&](
                         const TPMT_RSA_SCHEME& scheme,
@@ -557,6 +565,12 @@ TSS2_RC get_ecdh_point(TPM2B_PUBLIC* key,
    BOTAN_UNUSED(key, max_out_size, Z, Q, out_buffer, out_size, userdata);
    // This is currently not required for the exposed functionality.
    // TODO: Implement this function if required.
+   //
+   // Note that "if required" does not mean it can wait until we actually
+   // implement support for ECC keys. As soon as one wants to work with a
+   // TPM that contains ECC keys (from another source) and they would want
+   // to use such a key as the basis of a session key, this function would
+   // be required.
    return TSS2_ESYS_RC_NOT_IMPLEMENTED;
 }
 

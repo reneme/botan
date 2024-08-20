@@ -195,6 +195,19 @@ std::unique_ptr<PrivateKey> PrivateKey::create_transient_from_template(const std
    unique_esys_ptr<TPM2B_PRIVATE> private_bytes;
    unique_esys_ptr<TPM2B_PUBLIC> public_info;
 
+   // TODO: We should read up on this again in the architecture document
+   //       I used it instead of `Esys_Create` + `Esys_Load` because it's
+   //       more efficient as we want to have the key loaded right away.
+   //
+   //       Though, it seemed that there's more to it than just a combined
+   //       `Esys_Create` + `Esys_Load` operation. The architecture document
+   //       was suggesting that these keys are somehow "derived" from some
+   //       sensitive data of the parent key.
+   //
+   //       We certainly want to understand what exactly is going on here,
+   //       and whether this requires certain assumptions on the parent key.
+   //
+   //       If in doubt, I'd suggest to revert to the `Esys_Create` + `Esys_Load`.
    check_rc("Esys_CreateLoaded",
             Esys_CreateLoaded(inner(ctx),
                               parent.handles().transient_handle(),
@@ -239,6 +252,8 @@ std::unique_ptr<PrivateKey> PrivateKey::create(Object handles,
          new RSA_PrivateKey(std::move(handles), sessions, public_info, private_blob));
    }
 #endif
+
+   // TODO: Support ECC keys
 
    throw Not_Implemented(
       Botan::fmt("Loaded a {} private key of an unsupported type", is_persistent ? "persistent" : "transient"));

@@ -15,6 +15,7 @@
 #include <botan/internal/ct_utils.h>
 #include <botan/internal/emsa.h>
 #include <botan/internal/fmt.h>
+#include <botan/internal/pss_params.h>
 #include <botan/internal/scan_name.h>
 #include <botan/internal/stl_util.h>
 #include <botan/internal/tpm2_algo_mappings.h>
@@ -105,6 +106,7 @@ namespace {
 struct SignatureAlgorithmSelection {
       TPMT_SIG_SCHEME signature_scheme;
       std::string hash_name;
+      std::string padding;
 };
 
 SignatureAlgorithmSelection select_signature_algorithms(std::string_view padding) {
@@ -122,11 +124,13 @@ SignatureAlgorithmSelection select_signature_algorithms(std::string_view padding
       throw Not_Implemented("RSA signing using PSS with MGF1");
    }
 
-   return {TPMT_SIG_SCHEME{
-              .scheme = scheme.value(),
-              .details = {.any = {.hashAlg = get_tpm2_hash_type(req.arg(0))}},
-           },
-           req.arg(0)};
+   return {.signature_scheme =
+              TPMT_SIG_SCHEME{
+                 .scheme = scheme.value(),
+                 .details = {.any = {.hashAlg = get_tpm2_hash_type(req.arg(0))}},
+              },
+           .hash_name = req.arg(0),
+           .padding = std::string(padding)};
 }
 
 /**
@@ -170,11 +174,12 @@ class RSA_Signature_Operation final : public PK_Ops::Signature {
    private:
       RSA_Signature_Operation(const Object& object,
                               const SessionBundle& sessions,
-                              const SignatureAlgorithmSelection& algorithms) :
+                              SignatureAlgorithmSelection algorithms) :
             m_key_handle(object),
             m_sessions(sessions),
             m_scheme(algorithms.signature_scheme),
-            m_hash(create_hash_function(m_key_handle, m_sessions, algorithms.hash_name)) {
+            m_hash(create_hash_function(m_key_handle, m_sessions, algorithms.hash_name)),
+            m_padding(std::move(algorithms.padding)) {
          BOTAN_ASSERT_NONNULL(m_hash);
       }
 
@@ -211,6 +216,32 @@ class RSA_Signature_Operation final : public PK_Ops::Signature {
 
       std::string hash_function() const override { return m_hash->name(); }
 
+      AlgorithmIdentifier algorithm_identifier() const override {
+         // TODO: This is essentially a copy of the ::algorithm_identifier()
+         //       in `rsa.h`. We should probably refactor this into a common
+         //       function.
+
+         // This EMSA object actually isn't required, we just need it to
+         // conveniently figure out the algorithm identifier.
+         //
+         // TODO: This is a hack, and we should clean this up.
+         const auto emsa = EMSA::create_or_throw(m_padding);
+         const std::string emsa_name = emsa->name();
+
+         try {
+            const std::string full_name = "RSA/" + emsa_name;
+            const OID oid = OID::from_string(full_name);
+            return AlgorithmIdentifier(oid, AlgorithmIdentifier::USE_EMPTY_PARAM);
+         } catch(Lookup_Error&) {}
+
+         if(emsa_name.starts_with("EMSA4(")) {
+            auto parameters = PSS_Params::from_emsa_name(emsa_name).serialize();
+            return AlgorithmIdentifier("RSA/EMSA4", parameters);
+         }
+
+         throw Not_Implemented("No algorithm identifier defined for RSA with " + emsa_name);
+      }
+
    private:
       std::vector<uint8_t> create_signature(const TPM2B_DIGEST* digest, const TPMT_TK_HASHCHECK* validation) {
          unique_esys_ptr<TPMT_SIGNATURE> signature;
@@ -246,6 +277,7 @@ class RSA_Signature_Operation final : public PK_Ops::Signature {
       const SessionBundle& m_sessions;
       TPMT_SIG_SCHEME m_scheme;
       std::unique_ptr<Botan::HashFunction> m_hash;
+      std::string m_padding;
 };
 
 /**

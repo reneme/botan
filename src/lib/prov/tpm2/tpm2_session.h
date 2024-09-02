@@ -17,6 +17,9 @@
 
 namespace Botan::TPM2 {
 
+/**
+ * See TPM 2.0 Part 2, Section 8.4
+ */
 struct SessionAttributes {
       bool continue_session;
       bool decrypt;

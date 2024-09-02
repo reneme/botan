@@ -99,10 +99,12 @@ SessionAttributes Session::attributes() const {
    TPMA_SESSION attrs;
    check_rc("Esys_TRSess_GetAttributes",
             Esys_TRSess_GetAttributes(inner(m_session.context()), m_session.transient_handle(), &attrs));
-   return {.continue_session = (attrs & TPMA_SESSION_CONTINUESESSION) != 0,
-           .decrypt = (attrs & TPMA_SESSION_DECRYPT) != 0,
-           .encrypt = (attrs & TPMA_SESSION_ENCRYPT) != 0,
-           .audit = (attrs & TPMA_SESSION_AUDIT) != 0};
+   return {
+      .continue_session = (attrs & TPMA_SESSION_CONTINUESESSION) != 0,
+      .decrypt = (attrs & TPMA_SESSION_DECRYPT) != 0,
+      .encrypt = (attrs & TPMA_SESSION_ENCRYPT) != 0,
+      .audit = (attrs & TPMA_SESSION_AUDIT) != 0,
+   };
 }
 
 void Session::set_attributes(SessionAttributes attributes) {

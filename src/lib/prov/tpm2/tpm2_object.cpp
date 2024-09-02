@@ -93,6 +93,25 @@ uint32_t Object::transient_handle() const noexcept {
    return m_handles->transient;
 }
 
+ObjectAttributes Object::attributes(const SessionBundle& sessions) const {
+   const auto attrs = _public_info(sessions).pub->publicArea.objectAttributes;
+
+   return {
+      .fixed_tpm = (attrs & TPMA_OBJECT_FIXEDTPM) != 0,
+      .st_clear = (attrs & TPMA_OBJECT_STCLEAR) != 0,
+      .fixed_parent = (attrs & TPMA_OBJECT_FIXEDPARENT) != 0,
+      .sensitive_data_origin = (attrs & TPMA_OBJECT_SENSITIVEDATAORIGIN) != 0,
+      .user_with_auth = (attrs & TPMA_OBJECT_USERWITHAUTH) != 0,
+      .admin_with_policy = (attrs & TPMA_OBJECT_ADMINWITHPOLICY) != 0,
+      .no_da = (attrs & TPMA_OBJECT_NODA) != 0,
+      .encrypted_duplication = (attrs & TPMA_OBJECT_ENCRYPTEDDUPLICATION) != 0,
+      .restricted = (attrs & TPMA_OBJECT_RESTRICTED) != 0,
+      .decrypt = (attrs & TPMA_OBJECT_DECRYPT) != 0,
+      .sign_encrypt = (attrs & TPMA_OBJECT_SIGN_ENCRYPT) != 0,
+      .x509sign = (attrs & TPMA_OBJECT_X509SIGN) != 0,
+   };
+}
+
 PublicInfo& Object::_public_info(const SessionBundle& sessions, std::optional<uint32_t> expected_type) const {
    if(!m_public_info) {
       m_public_info = std::make_unique<PublicInfo>();

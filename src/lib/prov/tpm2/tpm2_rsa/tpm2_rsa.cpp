@@ -164,10 +164,7 @@ SignatureAlgorithmSelection select_signature_algorithms(std::string_view padding
 std::unique_ptr<Botan::HashFunction> create_hash_function(const Object& key_handle,
                                                           const SessionBundle& sessions,
                                                           std::string_view hash_name) {
-   const bool is_restricted =
-      key_handle._public_info(sessions, TPM2_ALG_RSA).pub->publicArea.objectAttributes & TPMA_OBJECT_RESTRICTED;
-
-   if(is_restricted) {
+   if(key_handle.attributes(sessions).restricted) {
       // TODO: this could also be ENDORSEMENT or PLATFORM, and we're not 100% sure
       //       that OWNER is always the right choice here.
       const TPMI_RH_HIERARCHY hierarchy = ESYS_TR_RH_OWNER;

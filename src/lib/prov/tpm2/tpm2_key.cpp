@@ -234,8 +234,8 @@ bool PrivateKey::is_parent() const {
    // Architectural Document, Section 4.54
    //   any object with the decrypt and restricted attributes SET and the sign
    //   attribute CLEAR
-   const auto attrs = m_handle._public_info(m_sessions).pub->publicArea.objectAttributes;
-   return (attrs & TPMA_OBJECT_DECRYPT) && (attrs & TPMA_OBJECT_RESTRICTED) && !(attrs & TPMA_OBJECT_SIGN_ENCRYPT);
+   const auto attrs = m_handle.attributes(m_sessions);
+   return attrs.decrypt && attrs.restricted && !attrs.sign_encrypt;
 }
 
 std::unique_ptr<PrivateKey> PrivateKey::create(Object handles,

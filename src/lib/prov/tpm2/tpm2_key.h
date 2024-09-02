@@ -17,6 +17,8 @@ struct TPM2B_SENSITIVE_CREATE;
 struct TPMT_PUBLIC;
 struct TPM2B_PUBLIC;
 
+using ESYS_TR = uint32_t;
+
 namespace Botan::TPM2 {
 
 /**
@@ -149,11 +151,14 @@ class BOTAN_PUBLIC_API(3, 6) PrivateKey : public virtual Private_Key {
        * configuration.
        *
        * Please use this if you know what you are doing, only! Most users should
-       * use the more convenient create_transient() method.
+       * use the more convenient create_transient() methods of the derived classes.
        *
        * @param ctx The TPM context to use
        * @param sessions The session bundle to use in Esys_CreateLoaded().
-       * @param parent The parent key to create the new key under.
+       * @param parent The handle of the parent object to create the new key under
+       *               (this may reference a  "Primary Seed" to create a "Primary Key",
+       *                a "Storage Parent" to create an "Ordinary Key", or
+       *                a "Derivation Parent" to create a "Derived Key").
        * @param key_template The template data to use for the key creation. It
        *                     will be passed to Tss2_MU_TPMT_PUBLIC_Marshal() and
        *                     Esys_CreateLoaded().
@@ -162,7 +167,7 @@ class BOTAN_PUBLIC_API(3, 6) PrivateKey : public virtual Private_Key {
        */
       static std::unique_ptr<PrivateKey> create_transient_from_template(const std::shared_ptr<Context>& ctx,
                                                                         const SessionBundle& sessions,
-                                                                        const TPM2::PrivateKey& parent,
+                                                                        ESYS_TR parent,
                                                                         const TPMT_PUBLIC& key_template,
                                                                         const TPM2B_SENSITIVE_CREATE& sensitive_data);
 
@@ -188,6 +193,8 @@ class BOTAN_PUBLIC_API(3, 6) PrivateKey : public virtual Private_Key {
       const Object& handles() const { return m_handle; }
 
       const SessionBundle& sessions() const { return m_sessions; }
+
+      bool is_parent() const;
 
    protected:
       PrivateKey(Object handle, SessionBundle sessions, std::span<const uint8_t> private_blob = {}) :

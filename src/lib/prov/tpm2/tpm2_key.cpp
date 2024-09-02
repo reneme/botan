@@ -172,7 +172,7 @@ std::unique_ptr<PrivateKey> PrivateKey::load_transient(const std::shared_ptr<Con
 
 std::unique_ptr<PrivateKey> PrivateKey::create_transient_from_template(const std::shared_ptr<Context>& ctx,
                                                                        const SessionBundle& sessions,
-                                                                       const TPM2::PrivateKey& parent,
+                                                                       ESYS_TR parent,
                                                                        const TPMT_PUBLIC& key_template,
                                                                        const TPM2B_SENSITIVE_CREATE& sensitive_data) {
    switch(key_template.type) {
@@ -195,22 +195,16 @@ std::unique_ptr<PrivateKey> PrivateKey::create_transient_from_template(const std
    unique_esys_ptr<TPM2B_PRIVATE> private_bytes;
    unique_esys_ptr<TPM2B_PUBLIC> public_info;
 
-   // TODO: We should read up on this again in the architecture document
-   //       I used it instead of `Esys_Create` + `Esys_Load` because it's
-   //       more efficient as we want to have the key loaded right away.
+   // Esys_CreateLoaded can create different object types depending on the type
+   // of the parent passed in. Namely, this will create a Primary object if the
+   // parent is referencing a Primary Seed; an Ordinary Object if the parent is
+   // referencing a Storage Parent; and a Derived Object if the parent is
+   // referencing a Derivation Parent.
    //
-   //       Though, it seemed that there's more to it than just a combined
-   //       `Esys_Create` + `Esys_Load` operation. The architecture document
-   //       was suggesting that these keys are somehow "derived" from some
-   //       sensitive data of the parent key.
-   //
-   //       We certainly want to understand what exactly is going on here,
-   //       and whether this requires certain assumptions on the parent key.
-   //
-   //       If in doubt, I'd suggest to revert to the `Esys_Create` + `Esys_Load`.
+   // See the Architecture Document, Section 27.1.
    check_rc("Esys_CreateLoaded",
             Esys_CreateLoaded(inner(ctx),
-                              parent.handles().transient_handle(),
+                              parent,
                               sessions[0],
                               sessions[1],
                               sessions[2],
@@ -234,6 +228,14 @@ secure_vector<uint8_t> PrivateKey::raw_private_key_bits() const {
 
 std::vector<uint8_t> PrivateKey::raw_public_key_bits() const {
    return marshal_public_blob(m_handle._public_info(m_sessions).pub.get());
+}
+
+bool PrivateKey::is_parent() const {
+   // Architectural Document, Section 4.54
+   //   any object with the decrypt and restricted attributes SET and the sign
+   //   attribute CLEAR
+   const auto attrs = m_handle._public_info(m_sessions).pub->publicArea.objectAttributes;
+   return (attrs & TPMA_OBJECT_DECRYPT) && (attrs & TPMA_OBJECT_RESTRICTED) && !(attrs & TPMA_OBJECT_SIGN_ENCRYPT);
 }
 
 std::unique_ptr<PrivateKey> PrivateKey::create(Object handles,

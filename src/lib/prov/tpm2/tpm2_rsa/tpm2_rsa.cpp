@@ -54,17 +54,17 @@ std::unique_ptr<TPM2::PrivateKey> RSA_PrivateKey::create_transient(const std::sh
                                                                    const TPM2::PrivateKey& parent,
                                                                    uint16_t keylength,
                                                                    std::optional<uint32_t> exponent) {
-   // TODO: Figure out how to use this properly. The Architecture Document
-   //       states that the key derivation incorporates the data in both
-   //       sensitive.sensitive.data and in public_template.unique.rsa.
-   //
-   // See Section 28.2 here:
-   // https://trustedcomputinggroup.org/wp-content/uploads/TCG_TPM2_r1p59_Part1_Architecture_pub.pdf
+   BOTAN_ARG_CHECK(parent.is_parent(), "The passed key cannot be used as a parent key");
+
    TPM2B_SENSITIVE_CREATE sensitive_data = {
       .size = 0,
       .sensitive =
          {
             .userAuth = copy_into<TPM2B_AUTH>(auth_value),
+
+            // Architecture Document, Section 25.2.3
+            //   When an asymmetric key is created, the caller is not allowed to
+            //   provide the sensitive data of the key.
             .data = init_empty<TPM2B_SENSITIVE_DATA>(),
          },
    };
@@ -114,7 +114,8 @@ std::unique_ptr<TPM2::PrivateKey> RSA_PrivateKey::create_transient(const std::sh
       .unique = {.rsa = init_empty<TPM2B_PUBLIC_KEY_RSA>()},
    };
 
-   return create_transient_from_template(ctx, sessions, parent, key_template, sensitive_data);
+   return create_transient_from_template(
+      ctx, sessions, parent.handles().transient_handle(), key_template, sensitive_data);
 }
 
 namespace {

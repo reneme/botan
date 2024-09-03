@@ -48,16 +48,16 @@ RSA_PrivateKey::RSA_PrivateKey(Object handle,
       Botan::TPM2::PrivateKey(std::move(handle), std::move(session_bundle), private_blob),
       Botan::RSA_PublicKey(rsa_pubkey_from_tss2_public(public_blob)) {}
 
-std::unique_ptr<TPM2::PrivateKey> RSA_PrivateKey::create_transient(const std::shared_ptr<Context>& ctx,
-                                                                   const SessionBundle& sessions,
-                                                                   std::span<const uint8_t> auth_value,
-                                                                   const TPM2::PrivateKey& parent,
-                                                                   uint16_t keylength,
-                                                                   std::optional<uint32_t> exponent) {
+std::unique_ptr<TPM2::PrivateKey> RSA_PrivateKey::create_unrestricted_transient(const std::shared_ptr<Context>& ctx,
+                                                                                const SessionBundle& sessions,
+                                                                                std::span<const uint8_t> auth_value,
+                                                                                const TPM2::PrivateKey& parent,
+                                                                                uint16_t keylength,
+                                                                                std::optional<uint32_t> exponent) {
    BOTAN_ARG_CHECK(parent.is_parent(), "The passed key cannot be used as a parent key");
 
    TPM2B_SENSITIVE_CREATE sensitive_data = {
-      .size = 0,
+      .size = 0,  // ignored
       .sensitive =
          {
             .userAuth = copy_into<TPM2B_AUTH>(auth_value),
@@ -71,52 +71,54 @@ std::unique_ptr<TPM2::PrivateKey> RSA_PrivateKey::create_transient(const std::sh
 
    TPMT_PUBLIC key_template = {
       .type = TPM2_ALG_RSA,
+
+      // This is the algorithm for fingerprinting the newly created public key.
+      // For best compatibility we always use SHA-256.
       .nameAlg = TPM2_ALG_SHA256,
-      // TODO: expose this to the user
-      //       Perhaps use the TPM2::SessionAttributes handling as inspiration
+
+      // This sets up the key to be both a decryption and a signing key, forbids
+      // its duplication (fixed_tpm, fixed_parent) and ensures that the key's
+      // private portion can be used only by a user with an HMAC or password
+      // session.
       .objectAttributes = ObjectAttributes::render({
          .fixed_tpm = true,
          .fixed_parent = true,
          .sensitive_data_origin = true,
          .user_with_auth = true,
-         .restricted = true,
+         .decrypt = true,
          .sign_encrypt = true,
       }),
+
+      // We currently do not support policy-based authorization
       .authPolicy = init_empty<TPM2B_DIGEST>(),
       .parameters =
          {
             .rsaDetail =
                {
-                  // TODO: What is this even used for?
-                  //       Not sure we need to expose this to the user, but
-                  //       we should understand the implications and perhaps
-                  //       let the user decide on the strength of the key, at least.
-                  //
-                  //       I could imagine that it is helpful for certification to
-                  //       be able to clearly specify what is being done here.
+                  // Structures Document (Part 2), Section 12.2.3.5
+                  //   If the key is not a restricted decryption key, this field
+                  //   shall be set to TPM_ALG_NULL.
                   .symmetric =
                      {
                         .algorithm = TPM2_ALG_NULL,
-                        .keyBits = {.aes = 0},
-                        .mode = {.aes = 0},
+                        .keyBits = {.null = {}},
+                        .mode = {.null = {}},
                      },
 
-                  // TODO: Currently, this is fixed but the user can specify other
-                  //       signature scheme parameters (PKCS#1 for instance), when
-                  //       creating the `PK_Signer` object. This is completely useless.
-                  //
-                  //       We will be able to benefit quite a bit from Jack's
-                  //       work on the Builder-based API here: https://github.com/randombit/botan/pull/4318
+                  // Structures Document (Part 2), Section 12.2.3.5
+                  //   When both sign and decrypt are SET, restricted shall be
+                  //   CLEAR and scheme shall be TPM_ALG_NULL
                   .scheme =
                      {
-                        .scheme = TPM2_ALG_RSAPSS,
-                        .details = {.rsapss = {.hashAlg = TPM2_ALG_SHA256}},
+                        .scheme = TPM2_ALG_NULL,
+                        .details = {.null = {}},
                      },
                   .keyBits = keylength,
                   .exponent = exponent.value_or(0 /* default value - 2^16 + 1*/),
                },
          },
-      // TODO: What does this even do?
+
+      // For creating an asymmetric key this value is not used.
       .unique = {.rsa = init_empty<TPM2B_PUBLIC_KEY_RSA>()},
    };
 

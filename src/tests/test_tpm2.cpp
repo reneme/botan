@@ -372,6 +372,30 @@ std::vector<Test::Result> test_tpm2_rsa() {
                                                          [&] { dec.decrypt(mutated_ciphertext); });
             }),
 
+      CHECK("Create a transient key and encrypt/decrypt a message",
+            [&](Test::Result& result) {
+               auto srk = ctx->storage_root_key({}, {});
+               auto authed_session = Botan::TPM2::Session::authenticated_session(ctx, *srk);
+
+               const std::array<uint8_t, 6> secret = {'s', 'e', 'c', 'r', 'e', 't'};
+               auto sk =
+                  Botan::TPM2::RSA_PrivateKey::create_unrestricted_transient(ctx, authed_session, secret, *srk, 2048);
+               auto pk = sk->public_key();
+
+               const auto plaintext = Botan::hex_decode("feedc0debaadcafe");
+
+               // encrypt a message using the TPM's public key
+               auto rng = Test::new_rng(__func__);
+               Botan::PK_Encryptor_EME enc(*pk, *rng, "OAEP(SHA-256)");
+               const auto ciphertext = enc.encrypt(plaintext, *rng);
+
+               // decrypt the message using the TPM's private RSA key
+               Botan::Null_RNG null_rng;
+               Botan::PK_Decryptor_EME dec(*sk, null_rng, "OAEP(SHA-256)");
+               const auto decrypted = dec.decrypt(ciphertext);
+               result.test_eq("decrypted message", decrypted, plaintext);
+            }),
+
       CHECK("Cannot export private key blob from persistent key",
             [&](Test::Result& result) {
                auto key =
@@ -390,7 +414,9 @@ std::vector<Test::Result> test_tpm2_rsa() {
 
                const std::array<uint8_t, 6> secret = {'s', 'e', 'c', 'r', 'e', 't'};
 
-               auto sk = Botan::TPM2::RSA_PrivateKey::create_transient(ctx, authed_session, secret, *srk, 2048);
+               auto sk =
+                  Botan::TPM2::RSA_PrivateKey::create_unrestricted_transient(ctx, authed_session, secret, *srk, 2048);
+
                result.require("key was created", sk != nullptr);
                result.confirm("is transient", sk->handles().has_transient_handle());
                result.confirm("is not persistent", !sk->handles().has_persistent_handle());
@@ -462,7 +488,8 @@ std::vector<Test::Result> test_tpm2_rsa() {
                auto authed_session = Botan::TPM2::Session::authenticated_session(ctx, *srk);
 
                const std::array<uint8_t, 6> secret = {'s', 'e', 'c', 'r', 'e', 't'};
-               auto sk = Botan::TPM2::RSA_PrivateKey::create_transient(ctx, authed_session, secret, *srk, 2048);
+               auto sk =
+                  Botan::TPM2::RSA_PrivateKey::create_unrestricted_transient(ctx, authed_session, secret, *srk, 2048);
                result.require("key was created", sk != nullptr);
                result.confirm("is transient", sk->handles().has_transient_handle());
                result.confirm("is not persistent", !sk->handles().has_persistent_handle());

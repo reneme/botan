@@ -57,7 +57,9 @@ class BOTAN_PUBLIC_API(3, 6) RSA_PrivateKey final : public virtual Botan::TPM2::
    public:
       /**
        * Create a transient RSA key with the given @p keylength and @p exponent,
-       * under the given @p parent key, with the given @p auth_value.
+       * under the given @p parent key, with the given @p auth_value. This key
+       * may be used for both signatures and data decryption.  No restrictions
+       * on the utilized padding schemes are applied.
        *
        * @param ctx The TPM context to use
        * @param sessions The session bundle to use in the creation of the key
@@ -66,12 +68,12 @@ class BOTAN_PUBLIC_API(3, 6) RSA_PrivateKey final : public virtual Botan::TPM2::
        * @param keylength The desired key length
        * @param exponent The desired exponent (default: 0x10001)
        */
-      static std::unique_ptr<TPM2::PrivateKey> create_transient(const std::shared_ptr<Context>& ctx,
-                                                                const SessionBundle& sessions,
-                                                                std::span<const uint8_t> auth_value,
-                                                                const TPM2::PrivateKey& parent,
-                                                                uint16_t keylength,
-                                                                std::optional<uint32_t> exponent = {});
+      static std::unique_ptr<TPM2::PrivateKey> create_unrestricted_transient(const std::shared_ptr<Context>& ctx,
+                                                                             const SessionBundle& sessions,
+                                                                             std::span<const uint8_t> auth_value,
+                                                                             const TPM2::PrivateKey& parent,
+                                                                             uint16_t keylength,
+                                                                             std::optional<uint32_t> exponent = {});
 
    public:
       std::unique_ptr<Public_Key> public_key() const override {

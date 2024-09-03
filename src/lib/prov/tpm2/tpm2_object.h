@@ -27,17 +27,44 @@ struct ObjectAttributes {
       static ObjectAttributes read(TPMA_OBJECT attributes);
       static TPMA_OBJECT render(ObjectAttributes attributes);
 
+      /// The hierarchy of the object may or may not change (i.e. when keys are duplicated)
       bool fixed_tpm = false;
+
+      /// Saved contexts of this object may or may not be loaded after Startup(CLEAR)
       bool st_clear = false;
+
+      /// The parent of the object may or may not change
       bool fixed_parent = false;
+
+      /// Indicates that the TPM generated all of the sensitive data other than the authValue
       bool sensitive_data_origin = false;
+
+      /// USER role actions may or may not be performed without authorization (HMAC or password)
       bool user_with_auth = false;
+
+      /// ADMIN role actions may or may not require a policy session
       bool admin_with_policy = false;
+
+      /// If set, the object is not subject to dictionary attack protection
       bool no_da = false;
+
+      /// If not set, the object may be duplicated without an inner wrapper on the private portion
+      /// Otherwise, symmetricAlg must not be TPM_ALG_NULL and newParentHandle must not be TPM_RH_NULL
       bool encrypted_duplication = false;
+
+      /// Key usage is restricted to structures of known format
+      /// (e.g. it won't sign data whose hash was not calculated by the TPM)
       bool restricted = false;
+
+      /// The private portion of the key might be used for data decryption
       bool decrypt = false;
+
+      /// The private portion of the key might be used for data signing, or
+      /// data encryption (if the key is a symmetric key)
       bool sign_encrypt = false;
+
+      /// The private portion of the key might be used for X.509 certificate signing
+      /// (normal signing, via Esys_Sign(), of arbitrary data is not allowed)
       bool x509sign = false;
 };
 

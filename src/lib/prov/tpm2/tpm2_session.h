@@ -27,9 +27,22 @@ struct SessionAttributes {
       static SessionAttributes read(TPMA_SESSION attributes);
       static TPMA_SESSION render(SessionAttributes attributes);
 
+      /// The session may or may not remain active after the successful completion of any command.
       bool continue_session = false;
+
+      /// Indicates that a command should only be executed if the session is exclusive.
+      bool audit_exclusive = false;
+
+      /// Indicates that the audit digest should be initialized and exclusive status of the session SET
+      bool audit_reset = false;
+
+      /// Indicates that the first parameter of the command is to be decrypted by the TPM
       bool decrypt = false;
+
+      /// Indicates that the first parameter of a command's response is to be encrypted by the TPM
       bool encrypt = false;
+
+      /// Indicates that the session is fused for audit and that audit_exclusive and audit_reset have meaning
       bool audit = false;
 };
 

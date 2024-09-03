@@ -22,18 +22,18 @@ namespace {
 using ObjectAttributesWrapper =
    AttributeWrapper<TPMA_OBJECT,
                     ObjectAttributes,
-                    std::pair{&ObjectAttributes::fixed_tpm, TPMA_OBJECT_FIXEDTPM},
-                    std::pair{&ObjectAttributes::st_clear, TPMA_OBJECT_STCLEAR},
-                    std::pair{&ObjectAttributes::fixed_parent, TPMA_OBJECT_FIXEDPARENT},
-                    std::pair{&ObjectAttributes::sensitive_data_origin, TPMA_OBJECT_SENSITIVEDATAORIGIN},
-                    std::pair{&ObjectAttributes::user_with_auth, TPMA_OBJECT_USERWITHAUTH},
-                    std::pair{&ObjectAttributes::admin_with_policy, TPMA_OBJECT_ADMINWITHPOLICY},
-                    std::pair{&ObjectAttributes::no_da, TPMA_OBJECT_NODA},
-                    std::pair{&ObjectAttributes::encrypted_duplication, TPMA_OBJECT_ENCRYPTEDDUPLICATION},
-                    std::pair{&ObjectAttributes::restricted, TPMA_OBJECT_RESTRICTED},
-                    std::pair{&ObjectAttributes::decrypt, TPMA_OBJECT_DECRYPT},
-                    std::pair{&ObjectAttributes::sign_encrypt, TPMA_OBJECT_SIGN_ENCRYPT},
-                    std::pair{&ObjectAttributes::x509sign, TPMA_OBJECT_X509SIGN}>;
+                    {&ObjectAttributes::fixed_tpm, TPMA_OBJECT_FIXEDTPM},
+                    {&ObjectAttributes::st_clear, TPMA_OBJECT_STCLEAR},
+                    {&ObjectAttributes::fixed_parent, TPMA_OBJECT_FIXEDPARENT},
+                    {&ObjectAttributes::sensitive_data_origin, TPMA_OBJECT_SENSITIVEDATAORIGIN},
+                    {&ObjectAttributes::user_with_auth, TPMA_OBJECT_USERWITHAUTH},
+                    {&ObjectAttributes::admin_with_policy, TPMA_OBJECT_ADMINWITHPOLICY},
+                    {&ObjectAttributes::no_da, TPMA_OBJECT_NODA},
+                    {&ObjectAttributes::encrypted_duplication, TPMA_OBJECT_ENCRYPTEDDUPLICATION},
+                    {&ObjectAttributes::restricted, TPMA_OBJECT_RESTRICTED},
+                    {&ObjectAttributes::decrypt, TPMA_OBJECT_DECRYPT},
+                    {&ObjectAttributes::sign_encrypt, TPMA_OBJECT_SIGN_ENCRYPT},
+                    {&ObjectAttributes::x509sign, TPMA_OBJECT_X509SIGN}>;
 
 }  // namespace
 

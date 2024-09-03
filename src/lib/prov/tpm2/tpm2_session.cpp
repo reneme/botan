@@ -17,13 +17,14 @@ namespace Botan::TPM2 {
 
 namespace {
 
-using SessionAttributesWrapper =
-   AttributeWrapper<TPMA_OBJECT,
-                    SessionAttributes,
-                    std::pair{&SessionAttributes::continue_session, TPMA_SESSION_CONTINUESESSION},
-                    std::pair{&SessionAttributes::decrypt, TPMA_SESSION_DECRYPT},
-                    std::pair{&SessionAttributes::encrypt, TPMA_SESSION_ENCRYPT},
-                    std::pair{&SessionAttributes::audit, TPMA_SESSION_AUDIT}>;
+using SessionAttributesWrapper = AttributeWrapper<TPMA_OBJECT,
+                                                  SessionAttributes,
+                                                  {&SessionAttributes::continue_session, TPMA_SESSION_CONTINUESESSION},
+                                                  {&SessionAttributes::audit_exclusive, TPMA_SESSION_AUDITEXCLUSIVE},
+                                                  {&SessionAttributes::audit_reset, TPMA_SESSION_AUDITRESET},
+                                                  {&SessionAttributes::decrypt, TPMA_SESSION_DECRYPT},
+                                                  {&SessionAttributes::encrypt, TPMA_SESSION_ENCRYPT},
+                                                  {&SessionAttributes::audit, TPMA_SESSION_AUDIT}>;
 
 }  // namespace
 

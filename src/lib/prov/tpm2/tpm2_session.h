@@ -17,14 +17,20 @@
 
 namespace Botan::TPM2 {
 
+using TPMA_SESSION = uint8_t;
+
 /**
  * See TPM 2.0 Part 2, Section 8.4
  */
+
 struct SessionAttributes {
-      bool continue_session;
-      bool decrypt;
-      bool encrypt;
-      bool audit;
+      static SessionAttributes read(TPMA_SESSION attributes);
+      static TPMA_SESSION render(SessionAttributes attributes);
+
+      bool continue_session = false;
+      bool decrypt = false;
+      bool encrypt = false;
+      bool audit = false;
 };
 
 class Session;

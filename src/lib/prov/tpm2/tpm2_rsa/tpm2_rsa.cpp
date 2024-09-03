@@ -74,8 +74,14 @@ std::unique_ptr<TPM2::PrivateKey> RSA_PrivateKey::create_transient(const std::sh
       .nameAlg = TPM2_ALG_SHA256,
       // TODO: expose this to the user
       //       Perhaps use the TPM2::SessionAttributes handling as inspiration
-      .objectAttributes = (TPMA_OBJECT_USERWITHAUTH | TPMA_OBJECT_RESTRICTED | TPMA_OBJECT_FIXEDTPM |
-                           TPMA_OBJECT_FIXEDPARENT | TPMA_OBJECT_SENSITIVEDATAORIGIN | TPMA_OBJECT_SIGN_ENCRYPT),
+      .objectAttributes = ObjectAttributes::render({
+         .fixed_tpm = true,
+         .fixed_parent = true,
+         .sensitive_data_origin = true,
+         .user_with_auth = true,
+         .restricted = true,
+         .sign_encrypt = true,
+      }),
       .authPolicy = init_empty<TPM2B_DIGEST>(),
       .parameters =
          {

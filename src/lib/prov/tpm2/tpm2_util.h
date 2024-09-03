@@ -20,6 +20,7 @@
 #include <tss2/tss2_esys.h>
 #include <tss2/tss2_rc.h>
 
+#include <bit>
 #include <memory>
 #include <span>
 
@@ -201,6 +202,50 @@ constexpr auto out_transient_handle(Object& object) {
 constexpr auto out_persistent_handle(Object& object) {
    return ObjectSetter{object, true};
 }
+
+/**
+ * This is an internal helper structure to wrap TPMA_* attribute bit fields.
+ *
+ * @tparam UnderlyingT         the TPMA_* bit field type
+ * @tparam AttributeWrapperT   the C++ struct type that wraps the TPMA_* bit field
+ * @tparam mappings            a bunch of std::pair mappping boolean members of
+ *                             AttributeWrapperT to the bit masks of the TPMA_* type
+ */
+template <std::unsigned_integral UnderlyingT,
+          typename AttributeWrapperT,
+          std::pair<bool AttributeWrapperT::*, UnderlyingT>... mappings>
+class AttributeWrapper {
+   private:
+      template <std::invocable<bool AttributeWrapperT::*, const UnderlyingT> FnT>
+      static constexpr void for_all(FnT&& fn) {
+         (fn(mappings.first, mappings.second), ...);
+      }
+
+      static consteval bool all_single_bit_bitmasks() {
+         bool result = true;
+         for_all([&](auto, const auto flag) { result = result && (std::popcount(flag) == 1); });
+         return result;
+      }
+
+      static_assert(all_single_bit_bitmasks(), "mappings... must contain single-bit flags only");
+
+   public:
+      static constexpr UnderlyingT render(AttributeWrapperT attributes) {
+         UnderlyingT result = 0;
+         for_all([&](auto field, const auto flag) {
+            if(attributes.*field) {
+               result |= flag;
+            }
+         });
+         return result;
+      }
+
+      static constexpr AttributeWrapperT read(UnderlyingT attributes) {
+         AttributeWrapperT result;
+         for_all([&](auto field, const auto flag) { result.*field = (attributes & flag) != 0; });
+         return result;
+      }
+};
 
 }  // namespace Botan::TPM2
 

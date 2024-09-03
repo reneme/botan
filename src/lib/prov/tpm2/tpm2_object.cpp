@@ -17,6 +17,34 @@
 
 namespace Botan::TPM2 {
 
+namespace {
+
+using ObjectAttributesWrapper =
+   AttributeWrapper<TPMA_OBJECT,
+                    ObjectAttributes,
+                    std::pair{&ObjectAttributes::fixed_tpm, TPMA_OBJECT_FIXEDTPM},
+                    std::pair{&ObjectAttributes::st_clear, TPMA_OBJECT_STCLEAR},
+                    std::pair{&ObjectAttributes::fixed_parent, TPMA_OBJECT_FIXEDPARENT},
+                    std::pair{&ObjectAttributes::sensitive_data_origin, TPMA_OBJECT_SENSITIVEDATAORIGIN},
+                    std::pair{&ObjectAttributes::user_with_auth, TPMA_OBJECT_USERWITHAUTH},
+                    std::pair{&ObjectAttributes::admin_with_policy, TPMA_OBJECT_ADMINWITHPOLICY},
+                    std::pair{&ObjectAttributes::no_da, TPMA_OBJECT_NODA},
+                    std::pair{&ObjectAttributes::encrypted_duplication, TPMA_OBJECT_ENCRYPTEDDUPLICATION},
+                    std::pair{&ObjectAttributes::restricted, TPMA_OBJECT_RESTRICTED},
+                    std::pair{&ObjectAttributes::decrypt, TPMA_OBJECT_DECRYPT},
+                    std::pair{&ObjectAttributes::sign_encrypt, TPMA_OBJECT_SIGN_ENCRYPT},
+                    std::pair{&ObjectAttributes::x509sign, TPMA_OBJECT_X509SIGN}>;
+
+}  // namespace
+
+ObjectAttributes ObjectAttributes::read(TPMA_OBJECT attributes) {
+   return ObjectAttributesWrapper::read(attributes);
+}
+
+TPMA_OBJECT ObjectAttributes::render(ObjectAttributes attributes) {
+   return ObjectAttributesWrapper::render(attributes);
+}
+
 Object::Object(std::shared_ptr<Context> ctx) : m_ctx(std::move(ctx)), m_handles(std::make_unique<ObjectHandles>()) {}
 
 Object::~Object() {
@@ -95,21 +123,7 @@ uint32_t Object::transient_handle() const noexcept {
 
 ObjectAttributes Object::attributes(const SessionBundle& sessions) const {
    const auto attrs = _public_info(sessions).pub->publicArea.objectAttributes;
-
-   return {
-      .fixed_tpm = (attrs & TPMA_OBJECT_FIXEDTPM) != 0,
-      .st_clear = (attrs & TPMA_OBJECT_STCLEAR) != 0,
-      .fixed_parent = (attrs & TPMA_OBJECT_FIXEDPARENT) != 0,
-      .sensitive_data_origin = (attrs & TPMA_OBJECT_SENSITIVEDATAORIGIN) != 0,
-      .user_with_auth = (attrs & TPMA_OBJECT_USERWITHAUTH) != 0,
-      .admin_with_policy = (attrs & TPMA_OBJECT_ADMINWITHPOLICY) != 0,
-      .no_da = (attrs & TPMA_OBJECT_NODA) != 0,
-      .encrypted_duplication = (attrs & TPMA_OBJECT_ENCRYPTEDDUPLICATION) != 0,
-      .restricted = (attrs & TPMA_OBJECT_RESTRICTED) != 0,
-      .decrypt = (attrs & TPMA_OBJECT_DECRYPT) != 0,
-      .sign_encrypt = (attrs & TPMA_OBJECT_SIGN_ENCRYPT) != 0,
-      .x509sign = (attrs & TPMA_OBJECT_X509SIGN) != 0,
-   };
+   return ObjectAttributes::read(attrs);
 }
 
 PublicInfo& Object::_public_info(const SessionBundle& sessions, std::optional<uint32_t> expected_type) const {

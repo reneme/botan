@@ -15,6 +15,26 @@
 
 namespace Botan::TPM2 {
 
+namespace {
+
+using SessionAttributesWrapper =
+   AttributeWrapper<TPMA_OBJECT,
+                    SessionAttributes,
+                    std::pair{&SessionAttributes::continue_session, TPMA_SESSION_CONTINUESESSION},
+                    std::pair{&SessionAttributes::decrypt, TPMA_SESSION_DECRYPT},
+                    std::pair{&SessionAttributes::encrypt, TPMA_SESSION_ENCRYPT},
+                    std::pair{&SessionAttributes::audit, TPMA_SESSION_AUDIT}>;
+
+}  // namespace
+
+SessionAttributes SessionAttributes::read(TPMA_SESSION attributes) {
+   return SessionAttributesWrapper::read(attributes);
+}
+
+TPMA_SESSION SessionAttributes::render(SessionAttributes attributes) {
+   return SessionAttributesWrapper::render(attributes);
+}
+
 // static
 std::shared_ptr<Session> Session::unauthenticated_session(const std::shared_ptr<Context>& ctx) {
    Object session(ctx);
@@ -99,28 +119,13 @@ SessionAttributes Session::attributes() const {
    TPMA_SESSION attrs;
    check_rc("Esys_TRSess_GetAttributes",
             Esys_TRSess_GetAttributes(inner(m_session.context()), m_session.transient_handle(), &attrs));
-   return {
-      .continue_session = (attrs & TPMA_SESSION_CONTINUESESSION) != 0,
-      .decrypt = (attrs & TPMA_SESSION_DECRYPT) != 0,
-      .encrypt = (attrs & TPMA_SESSION_ENCRYPT) != 0,
-      .audit = (attrs & TPMA_SESSION_AUDIT) != 0,
-   };
+   return SessionAttributes::read(attrs);
 }
 
 void Session::set_attributes(SessionAttributes attributes) {
-   auto expand = [](bool flag) -> TPMA_SESSION {
-      static_assert(std::is_unsigned_v<TPMA_SESSION>);
-      return flag ? TPMA_SESSION(-1) : TPMA_SESSION(0);
-   };
-
-   TPMA_SESSION attrs = 0;
-   attrs |= TPMA_SESSION_CONTINUESESSION & expand(attributes.continue_session);
-   attrs |= TPMA_SESSION_DECRYPT & expand(attributes.decrypt);
-   attrs |= TPMA_SESSION_ENCRYPT & expand(attributes.encrypt);
-   attrs |= TPMA_SESSION_AUDIT & expand(attributes.audit);
-
    check_rc("Esys_TRSess_SetAttributes",
-            Esys_TRSess_SetAttributes(inner(m_session.context()), m_session.transient_handle(), attrs, 0xFF));
+            Esys_TRSess_SetAttributes(
+               inner(m_session.context()), m_session.transient_handle(), SessionAttributes::render(attributes), 0xFF));
 }
 
 secure_vector<uint8_t> Session::tpm_nonce() const {

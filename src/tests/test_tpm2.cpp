@@ -394,6 +394,15 @@ std::vector<Test::Result> test_tpm2_rsa() {
                Botan::PK_Decryptor_EME dec(*sk, null_rng, "OAEP(SHA-256)");
                const auto decrypted = dec.decrypt(ciphertext);
                result.test_eq("decrypted message", decrypted, plaintext);
+
+               // encrypt a message using the TPM's public key (using PKCS#1)
+               Botan::PK_Encryptor_EME enc_pkcs(*pk, *rng, "PKCS1v15");
+               const auto ciphertext_pkcs = enc_pkcs.encrypt(plaintext, *rng);
+
+               // decrypt the message using the TPM's private RSA key (using PKCS#1)
+               Botan::PK_Decryptor_EME dec_pkcs(*sk, null_rng, "PKCS1v15");
+               const auto decrypted_pkcs = dec_pkcs.decrypt(ciphertext_pkcs);
+               result.test_eq("decrypted message", decrypted_pkcs, plaintext);
             }),
 
       CHECK("Cannot export private key blob from persistent key",
@@ -466,6 +475,19 @@ std::vector<Test::Result> test_tpm2_rsa() {
                Botan::PK_Verifier verifier_loaded(*pk_loaded, "PSS(SHA-256)");
                result.confirm("TPM-verified signature is valid",
                               verifier_loaded.verify_message(message_loaded, signature_loaded));
+
+               // Perform a round-trip sign/verify test with the new key pair (PKCS#1)
+               std::vector<uint8_t> message_pkcs = {'b', 'o', 'n', 'j', 'o', 'u', 'r'};
+               Botan::PK_Signer signer_pkcs(*sk_loaded, null_rng /* TPM takes care of this */, "PKCS1v15(SHA-256)");
+               const auto signature_pkcs = signer_pkcs.sign_message(message_pkcs, null_rng);
+               result.require("Next signature is not empty", !signature_pkcs.empty());
+               result.confirm("Existing verifier cannot validate signature",
+                              !verifier.verify_message(message_pkcs, signature_pkcs));
+
+               // Create a verifier for PKCS#1
+               Botan::PK_Verifier verifier_pkcs(*pk_loaded, "PKCS1v15(SHA-256)");
+               result.confirm("TPM-verified signature is valid",
+                              verifier_pkcs.verify_message(message_pkcs, signature_pkcs));
             }),
 
       CHECK("Make a transient key persistent then remove it again",

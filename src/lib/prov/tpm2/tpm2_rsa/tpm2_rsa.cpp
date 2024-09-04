@@ -140,22 +140,16 @@ SignatureAlgorithmSelection select_signature_algorithms(std::string_view padding
       throw Invalid_Argument("RSA signing padding scheme must at least specify a hash function");
    }
 
-   const auto scheme = signature_scheme_botan_to_tss2(req.algo_name());
-   if(!scheme) {
-      throw Not_Implemented("RSA signing with padding scheme " + req.algo_name());
+   auto sig_scheme = rsa_signature_scheme_botan_to_tss2(padding);
+   if(!sig_scheme) {
+      throw Not_Implemented(Botan::fmt("RSA signing with padding scheme {}", padding));
    }
 
-   if(scheme.value() == TPM2_ALG_RSAPSS && req.arg_count() != 1) {
-      throw Not_Implemented("RSA signing using PSS with MGF1");
-   }
-
-   return {.signature_scheme =
-              TPMT_SIG_SCHEME{
-                 .scheme = scheme.value(),
-                 .details = {.any = {.hashAlg = get_tpm2_hash_type(req.arg(0))}},
-              },
-           .hash_name = req.arg(0),
-           .padding = std::string(padding)};
+   return {
+      .signature_scheme = sig_scheme.value(),
+      .hash_name = req.arg(0),
+      .padding = std::string(padding),
+   };
 }
 
 /**
@@ -366,24 +360,11 @@ class RSA_Verification_Operation final : public PK_Ops::Verification {
 };
 
 TPMT_RSA_DECRYPT select_encryption_algorithms(std::string_view padding) {
-   TPMT_RSA_DECRYPT result;
-
-   const SCAN_Name req(padding);
-   if(auto scheme = asymmetric_encryption_scheme_botan_to_tss2(req.algo_name())) {
-      result.scheme = scheme.value();
-   } else {
-      throw Not_Implemented("TPM-based RSA encryption with padding scheme " + req.algo_name());
+   auto scheme = rsa_encryption_scheme_botan_to_tss2(padding);
+   if(!scheme) {
+      throw Not_Implemented(Botan::fmt("RSA encryption with padding scheme {}", padding));
    }
-
-   if(result.scheme == TPM2_ALG_OAEP) {
-      if(req.arg_count() < 1) {
-         throw Invalid_Argument("requested OAEP without a hash function");
-      }
-
-      result.details.oaep.hashAlg = get_tpm2_hash_type(req.arg(0));
-   }
-
-   return result;
+   return scheme.value();
 }
 
 class RSA_Encryption_Operation final : public PK_Ops::Encryption {

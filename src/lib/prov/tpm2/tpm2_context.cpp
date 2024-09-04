@@ -14,6 +14,7 @@
 #include <botan/internal/fmt.h>
 #include <botan/internal/loadstor.h>
 #include <botan/internal/stl_util.h>
+#include <botan/internal/tpm2_algo_mappings.h>
 #include <botan/internal/tpm2_util.h>
 
 #include <tss2/tss2_esys.h>
@@ -123,18 +124,27 @@ uint32_t get_tpm_property(ESYS_CONTEXT* ctx, TPM2_PT property) {
 template <TPM2_CAP capability, typename ReturnT>
 [[nodiscard]] std::vector<ReturnT> get_tpm_property_list(ESYS_CONTEXT* ctx, TPM2_PT property, uint32_t count) {
    auto extract = [](const TPMU_CAPABILITIES& caps, uint32_t max_count) {
+      std::vector<ReturnT> result;
       if constexpr(capability == TPM2_CAP_HANDLES) {
          const auto to_read = std::min(caps.handles.count, max_count);
-         std::vector<ReturnT> result;
          result.reserve(to_read);
          for(size_t i = 0; i < to_read; ++i) {
             result.push_back(caps.handles.handle[i]);
          }
-         return result;
+      } else if constexpr(capability == TPM2_CAP_ALGS) {
+         const auto to_read = std::min(caps.algorithms.count, max_count);
+         result.reserve(to_read);
+         for(size_t i = 0; i < to_read; ++i) {
+            // TODO: This also contains an algProperties.algProperties bitfield
+            //       that defines some characteristics of the algorithm.
+            //       Currently, we don't need that information and ignore it.
+            result.push_back(caps.algorithms.algProperties[i].alg);
+         }
       } else {
          // TODO: support reading other capability types as needed
          static_assert(capability != TPM2_CAP_HANDLES, "Unsupported capability");
       }
+      return result;
    };
 
    TPMI_YES_NO more_data = TPM2_YES;
@@ -186,6 +196,68 @@ std::string Context::manufacturer() const {
    std::array<uint8_t, 4 + 1 /* ensure zero termination */> manufacturer_data{};
    store_be(std::span{manufacturer_data}.first<4>(), get_tpm_property(m_impl->m_ctx, TPM2_PT_MANUFACTURER));
    return std::string(cast_uint8_ptr_to_char(manufacturer_data.data()));
+}
+
+bool Context::supports_algorithm(std::string_view algo_name) const {
+   // Go through all the string mappings we have available and check if we
+   // can find the algorithm name in any of them. If we do, we can check if
+   // the TPM supports the required algorithms.
+   const auto required_alg_ids = [&]() -> std::vector<TPM2_ALG_ID> {
+      std::vector<TPM2_ALG_ID> result;
+      if(auto algo_id = asymmetric_algorithm_botan_to_tss2(algo_name)) {
+         result.push_back(algo_id.value());
+      }
+
+      if(auto hash_id = hash_algo_botan_to_tss2(algo_name)) {
+         result.push_back(hash_id.value());
+      }
+
+      if(auto block_id = block_cipher_botan_to_tss2(algo_name)) {
+         result.push_back(block_id->first);
+      }
+
+      if(auto cipher_mode_id = cipher_mode_botan_to_tss2(algo_name)) {
+         result.push_back(cipher_mode_id.value());
+      }
+
+      if(auto cipher_spec = cipher_botan_to_tss2(algo_name)) {
+         result.push_back(cipher_spec->algorithm);
+         result.push_back(cipher_spec->mode.sym);
+      }
+
+      if(auto sig_padding = rsa_signature_padding_botan_to_tss2(algo_name)) {
+         result.push_back(sig_padding.value());
+      }
+
+      if(auto sig = rsa_signature_scheme_botan_to_tss2(algo_name)) {
+         result.push_back(sig->scheme);
+         result.push_back(sig->details.any.hashAlg);
+      }
+
+      if(auto enc_scheme = rsa_encryption_scheme_botan_to_tss2(algo_name)) {
+         result.push_back(enc_scheme->scheme);
+         if(enc_scheme->scheme == TPM2_ALG_OAEP) {
+            result.push_back(enc_scheme->details.oaep.hashAlg);
+         }
+      }
+
+      if(auto enc_id = rsa_encryption_padding_botan_to_tss2(algo_name)) {
+         result.push_back(enc_id.value());
+      }
+
+      return result;
+   }();
+
+   if(required_alg_ids.empty()) {
+      // The algorithm name is not known to us, so we cannot check for support.
+      return false;
+   }
+
+   const auto algo_caps =
+      get_tpm_property_list<TPM2_CAP_ALGS, TPM2_ALG_ID>(m_impl->m_ctx, TPM2_ALG_FIRST, TPM2_MAX_CAP_ALGS);
+
+   return std::all_of(
+      required_alg_ids.begin(), required_alg_ids.end(), [&](TPM2_ALG_ID id) { return value_exists(algo_caps, id); });
 }
 
 size_t Context::max_random_bytes_per_request() const {

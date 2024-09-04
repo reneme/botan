@@ -81,6 +81,25 @@ std::vector<Test::Result> test_tpm2_properties() {
                result.test_gte("at least as long as SHA-256", prop, 32);
                result.test_lte("at most as long as SHA-512", prop, 64);
             }),
+
+      CHECK("Supports basic algorithms",
+            [&](Test::Result& result) {
+               result.confirm("RSA is supported", ctx->supports_algorithm("RSA"));
+               result.confirm("AES-128 is supported", ctx->supports_algorithm("AES-128"));
+               result.confirm("AES-256 is supported", ctx->supports_algorithm("AES-256"));
+               result.confirm("SHA-1 is supported", ctx->supports_algorithm("SHA-1"));
+               result.confirm("SHA-256 is supported", ctx->supports_algorithm("SHA-256"));
+               result.confirm("OFB(AES-128) is supported", ctx->supports_algorithm("OFB(AES-128)"));
+               result.confirm("OFB is supported", ctx->supports_algorithm("OFB"));
+            }),
+
+      CHECK("Unsupported algorithms aren't supported",
+            [&](Test::Result& result) {
+               result.confirm("Enigma is not supported", !ctx->supports_algorithm("Enigma"));
+               result.confirm("MD5 is not supported", !ctx->supports_algorithm("MD5"));
+               result.confirm("DES is not supported", !ctx->supports_algorithm("DES"));
+               result.confirm("OAEP(Keccak) is not supported", !ctx->supports_algorithm("OAEP(Keccak)"));
+            }),
    };
 }
 
@@ -240,6 +259,17 @@ std::vector<Test::Result> test_tpm2_rsa() {
    const auto password = Test::options().tpm2_persistent_auth_value();
 
    return {
+      CHECK("RSA and its helpers are supported",
+            [&](Test::Result& result) {
+               result.confirm("RSA is supported", ctx->supports_algorithm("RSA"));
+               result.confirm("PKCS1 is supported", ctx->supports_algorithm("PKCS1v15"));
+               result.confirm("PKCS1 with hash is supported", ctx->supports_algorithm("PKCS1v15(SHA-1)"));
+               result.confirm("OAEP is supported", ctx->supports_algorithm("OAEP"));
+               result.confirm("OAEP with hash is supported", ctx->supports_algorithm("OAEP(SHA-256)"));
+               result.confirm("PSS is supported", ctx->supports_algorithm("PSS"));
+               result.confirm("PSS with hash is supported", ctx->supports_algorithm("PSS(SHA-256)"));
+            }),
+
       CHECK("Load the private key multiple times",
             [&](Test::Result& result) {
                for(size_t i = 0; i < 20; ++i) {
@@ -646,6 +676,14 @@ std::vector<Test::Result> test_tpm2_hash() {
    };
 
    return {
+      CHECK("Hashes are supported",
+            [&](Test::Result& result) {
+               result.confirm("SHA-1 is supported", ctx->supports_algorithm("SHA-1"));
+               result.confirm("SHA-256 is supported", ctx->supports_algorithm("SHA-256"));
+               result.confirm("SHA-384 is supported", ctx->supports_algorithm("SHA-384"));
+               result.confirm("SHA-512 is supported", ctx->supports_algorithm("SHA-512"));
+            }),
+
       CHECK("SHA-1", [&](Test::Result& result) { test(result, "SHA-1"); }),
       CHECK("SHA-256", [&](Test::Result& result) { test(result, "SHA-256"); }),
       CHECK("SHA-384", [&](Test::Result& result) { test(result, "SHA-384"); }),

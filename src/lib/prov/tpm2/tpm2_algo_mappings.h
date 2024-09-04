@@ -22,11 +22,27 @@
 
 namespace Botan::TPM2 {
 
+[[nodiscard]] inline std::optional<TPM2_ALG_ID> asymmetric_algorithm_botan_to_tss2(
+   std::string_view algo_name) noexcept {
+   if(algo_name == "RSA") {
+      return TPM2_ALG_RSA;
+   } else if(algo_name == "ECC") {
+      return TPM2_ALG_ECC;
+   } else if(algo_name == "ECDSA") {
+      return TPM2_ALG_ECC;
+   } else if(algo_name == "ECDH") {
+      return TPM2_ALG_ECDH;
+   } else if(algo_name == "ECDAA") {
+      return TPM2_ALG_ECDAA;
+   } else {
+      return std::nullopt;
+   }
+}
+
 /**
  * @returns a TPMI_ALG_HASH value if the @p hash_name is known,
  *          otherwise std::nullopt
  */
-
 [[nodiscard]] inline std::optional<TPMI_ALG_HASH> hash_algo_botan_to_tss2(std::string_view hash_name) noexcept {
    if(hash_name == "SHA-1") {
       return TPM2_ALG_SHA1;
@@ -184,7 +200,7 @@ namespace Botan::TPM2 {
       return TPM2_ALG_ECB;
    } else if(mode_name == "OFB") {
       return TPM2_ALG_OFB;
-   } else if(mode_name == "CTR") {
+   } else if(mode_name == "CTR" || mode_name == "CTR-BE") {
       return TPM2_ALG_CTR;
    } else {
       return std::nullopt;
@@ -209,7 +225,7 @@ namespace Botan::TPM2 {
    return Botan::fmt("{}({})", mode_name.value(), cipher_name.value());
 }
 
-[[nodiscard]] inline std::optional<TPMT_SYM_DEF> cipher_botan_to_tss2(std::string_view algo_name) noexcept {
+[[nodiscard]] inline std::optional<TPMT_SYM_DEF> cipher_botan_to_tss2(std::string_view algo_name) {
    SCAN_Name spec(algo_name);
    if(spec.arg_count() == 0) {
       return std::nullopt;
@@ -237,17 +253,43 @@ namespace Botan::TPM2 {
    throw Lookup_Error("TPM 2.0 Symmetric Cipher Spec", algo_name);
 }
 
-[[nodiscard]] inline std::optional<TPMI_ALG_SIG_SCHEME> signature_scheme_botan_to_tss2(std::string_view name) noexcept {
-   if(name == "EMSA_PKCS1" || name == "PKCS1v15" || name == "EMSA-PKCS1-v1_5" || name == "EMSA3") {
+[[nodiscard]] inline std::optional<TPMI_ALG_SIG_SCHEME> rsa_signature_padding_botan_to_tss2(
+   std::string_view padding_name) noexcept {
+   if(padding_name == "EMSA_PKCS1" || padding_name == "PKCS1v15" || padding_name == "EMSA-PKCS1-v1_5" ||
+      padding_name == "EMSA3") {
       return TPM2_ALG_RSASSA;
-   } else if(name == "PSS" || name == "PSSR" || name == "EMSA-PSS" || name == "PSS-MGF1" || name == "EMSA4") {
+   } else if(padding_name == "PSS" || padding_name == "PSSR" || padding_name == "EMSA-PSS" ||
+             padding_name == "PSS-MGF1" || padding_name == "EMSA4") {
       return TPM2_ALG_RSAPSS;
    } else {
       return std::nullopt;
    }
 }
 
-[[nodiscard]] inline std::optional<TPMI_ALG_ASYM_SCHEME> asymmetric_encryption_scheme_botan_to_tss2(
+[[nodiscard]] inline std::optional<TPMT_SIG_SCHEME> rsa_signature_scheme_botan_to_tss2(std::string_view name) {
+   const SCAN_Name req(name);
+   if(req.arg_count() == 0) {
+      return std::nullopt;
+   }
+
+   const auto scheme = rsa_signature_padding_botan_to_tss2(req.algo_name());
+   const auto hash = hash_algo_botan_to_tss2(req.arg(0));
+   if(!scheme || !hash) {
+      return std::nullopt;
+   }
+
+   if(scheme.value() == TPM2_ALG_RSAPSS && req.arg_count() != 1) {
+      // RSA signing using PSS with MGF1
+      return std::nullopt;
+   }
+
+   return TPMT_SIG_SCHEME{
+      .scheme = scheme.value(),
+      .details = {.any = {.hashAlg = hash.value()}},
+   };
+}
+
+[[nodiscard]] inline std::optional<TPMI_ALG_ASYM_SCHEME> rsa_encryption_padding_botan_to_tss2(
    std::string_view name) noexcept {
    if(name == "OAEP" || name == "EME-OAEP" || name == "EME1") {
       return TPM2_ALG_OAEP;
@@ -255,6 +297,37 @@ namespace Botan::TPM2 {
       return TPM2_ALG_RSAES;
    } else if(name == "Raw") {
       return TPM2_ALG_NULL;
+   } else {
+      return std::nullopt;
+   }
+}
+
+[[nodiscard]] inline std::optional<TPMT_RSA_DECRYPT> rsa_encryption_scheme_botan_to_tss2(std::string_view padding) {
+   const SCAN_Name req(padding);
+   const auto scheme = rsa_encryption_padding_botan_to_tss2(req.algo_name());
+   if(!scheme) {
+      return std::nullopt;
+   }
+
+   if(scheme.value() == TPM2_ALG_OAEP) {
+      if(req.arg_count() < 1) {
+         return std::nullopt;
+      }
+
+      const auto hash = hash_algo_botan_to_tss2(req.arg(0));
+      if(!hash) {
+         return std::nullopt;
+      }
+
+      return TPMT_RSA_DECRYPT{
+         .scheme = scheme.value(),
+         .details = {.oaep = {.hashAlg = hash.value()}},
+      };
+   } else if(scheme.value() == TPM2_ALG_RSAES) {
+      return TPMT_RSA_DECRYPT{
+         .scheme = scheme.value(),
+         .details = {.rsaes = {}},
+      };
    } else {
       return std::nullopt;
    }

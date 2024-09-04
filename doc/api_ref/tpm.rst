@@ -79,6 +79,12 @@ persisting and evicting keys into the TPM's NVRAM.
         this RNG *does not* depend on the TPM for its entropy as this would create a
         chicken-and-egg problem.
 
+    .. cpp:function:: bool supports_algorithm(std::string_view algo_name)
+
+        Returns whether the TPM supports the given algorithm. The ``algo_name`` is
+        the name of the algorithm as used in Botan. Eg. "RSA", "SHA-256", "AES-128",
+        "OAEP(SHA-256)", etc.
+
 For further information about the functionality of the TPM context, please refer
 to the doxygen comments in ``tpm2_context.h``.
 

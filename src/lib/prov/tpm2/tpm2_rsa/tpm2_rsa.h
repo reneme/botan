@@ -58,8 +58,16 @@ class BOTAN_PUBLIC_API(3, 6) RSA_PrivateKey final : public virtual Botan::TPM2::
       /**
        * Create a transient RSA key with the given @p keylength and @p exponent,
        * under the given @p parent key, with the given @p auth_value. This key
-       * may be used for both signatures and data decryption.  No restrictions
+       * may be used for both signatures and data decryption. No restrictions
        * on the utilized padding schemes are applied.
+       *
+       * TODO: provide the user with some means to specify such restrictions:
+       *         - allowed key use: sign, decrypt, sign+decrypt, x509sign
+       *         - allowed padding schemes: PKCS1v1.5, OAEP, PSS
+       *         - data restrictions ("restricted" field in TPMT_PUBLIC)
+       *         - session authentication requirements (policy, user authentication, ...)
+       *         - fixed to TPM, or fixed to parent?
+       *         - ...
        *
        * @param ctx The TPM context to use
        * @param sessions The session bundle to use in the creation of the key

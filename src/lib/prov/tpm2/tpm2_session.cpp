@@ -63,7 +63,6 @@ std::shared_ptr<Session> Session::unauthenticated_session(const std::shared_ptr<
                                                   .continue_session = true,
                                                   .decrypt = true,
                                                   .encrypt = true,
-                                                  .audit = false,
                                                }));
 }
 
@@ -93,7 +92,6 @@ std::shared_ptr<Session> Session::authenticated_session(const std::shared_ptr<Co
                                                   .continue_session = true,
                                                   .decrypt = true,
                                                   .encrypt = true,
-                                                  .audit = false,
                                                }));
 }
 

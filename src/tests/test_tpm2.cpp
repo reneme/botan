@@ -116,6 +116,42 @@ std::vector<Test::Result> test_tpm2_context() {
    };
 }
 
+std::vector<Test::Result> test_tpm2_sessions() {
+   auto ctx = get_tpm2_context(__func__);
+   if(!ctx) {
+      return {bail_out()};
+   }
+
+   auto ok = [](Test::Result& result, std::string_view name, const std::shared_ptr<Botan::TPM2::Session>& session) {
+      result.require(Botan::fmt("Session '{}' is non-null", name), session != nullptr);
+      result.confirm(Botan::fmt("Session '{}' has a valid handle", name), session->handle() != ESYS_TR_NONE);
+      result.confirm(Botan::fmt("Session '{}' has a non-empty nonce", name), !session->tpm_nonce().empty());
+   };
+
+   return {
+      CHECK("Unauthenticated sessions",
+            [&](Test::Result& result) {
+               using Session = Botan::TPM2::Session;
+
+               ok(result, "default", Session::unauthenticated_session(ctx));
+               ok(result, "CFB(AES-128)", Session::unauthenticated_session(ctx, "CFB(AES-128)"));
+               ok(result, "CFB(AES-128),SHA-384", Session::unauthenticated_session(ctx, "CFB(AES-128)", "SHA-384"));
+               ok(result, "CFB(AES-128),SHA-1", Session::unauthenticated_session(ctx, "CFB(AES-128)", "SHA-1"));
+            }),
+
+      CHECK("Authenticated sessions",
+            [&](Test::Result& result) {
+               using Session = Botan::TPM2::Session;
+
+               auto srk = ctx->storage_root_key({}, {});
+               ok(result, "default", Session::authenticated_session(ctx, *srk));
+               ok(result, "CFB(AES-128)", Session::authenticated_session(ctx, *srk, "CFB(AES-128)"));
+               ok(result, "CFB(AES-128),SHA-384", Session::authenticated_session(ctx, *srk, "CFB(AES-128)", "SHA-384"));
+               ok(result, "CFB(AES-128),SHA-1", Session::authenticated_session(ctx, *srk, "CFB(AES-128)", "SHA-1"));
+            }),
+   };
+}
+
 std::vector<Test::Result> test_tpm2_rng() {
    auto ctx = get_tpm2_context(__func__);
    if(!ctx) {
@@ -667,6 +703,7 @@ std::vector<Test::Result> test_tpm2_hash() {
 
 BOTAN_REGISTER_TEST_FN("tpm2", "tpm2_props", test_tpm2_properties);
 BOTAN_REGISTER_TEST_FN("tpm2", "tpm2_ctx", test_tpm2_context);
+BOTAN_REGISTER_TEST_FN("tpm2", "tpm2_sessions", test_tpm2_sessions);
 BOTAN_REGISTER_TEST_FN("tpm2", "tpm2_rng", test_tpm2_rng);
    #if defined(BOTAN_HAS_TPM2_RSA_ADAPTER)
 BOTAN_REGISTER_TEST_FN("tpm2", "tpm2_rsa", test_tpm2_rsa);

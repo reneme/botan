@@ -84,7 +84,22 @@ struct ObjectAttributes {
  */
 class BOTAN_PUBLIC_API(3, 6) Object {
    public:
-      Object(std::shared_ptr<Context> ctx);
+      explicit Object(std::shared_ptr<Context> ctx);
+
+      /**
+       * Create an object wrapper from a user-provided transient handle.
+       *
+       * Use this to wrap an externally created transient object handle
+       * into a Botan::TPM2::Object instance. This is useful when the object
+       * is created by the application and not by the Botan::TPM2 library.
+       *
+       * Note that this will take ownership of the ESYS_TR handle and will
+       * release it when the object is destroyed.
+       *
+       * @param ctx    the TPM context to use
+       * @param handle the transient handle to wrap
+       */
+      Object(std::shared_ptr<Context> ctx, ESYS_TR handle);
 
       virtual ~Object();
       Object(const Object&) = delete;

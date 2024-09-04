@@ -124,6 +124,20 @@ class BOTAN_PUBLIC_API(3, 6) Session {
                                                             std::string_view hash_algo = "SHA-256");
 
    public:
+      /**
+       * Create a session object from a user-provided transient handle.
+       *
+       * Use this to wrap an externally created session handle into a
+       * Botan::TPM2::Session instance to use it with the Botan::TPM2 library.
+       *
+       * Note that this will take ownership of the ESYS_TR handle and will
+       * release it when the object is destroyed.
+       *
+       * @param ctx            the TPM context to use
+       * @param session_handle the transient handle to wrap
+       */
+      Session(std::shared_ptr<Context> ctx, ESYS_TR session_handle) : m_session(std::move(ctx), session_handle) {}
+
       [[nodiscard]] detail::SessionHandle handle() { return *this; }
 
       SessionAttributes attributes() const;

@@ -72,6 +72,16 @@ struct ObjectAttributes {
       bool x509sign = false;
 };
 
+/**
+ * Wraps and manages the lifetime of TPM2 object handles both for transient and
+ * persistent objects. When this object is destroyed, the handles are released
+ * accordingly.
+ *
+ * Note that some TSS2 library functions may internally release handles passed
+ * to them. In such cases, the Object instance can be disengaged, ensuring that
+ * the handles are not released twice. This is an internal functionality and
+ * should not be used directly.
+ */
 class BOTAN_PUBLIC_API(3, 6) Object {
    public:
       Object(std::shared_ptr<Context> ctx);

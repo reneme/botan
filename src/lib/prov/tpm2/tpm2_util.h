@@ -98,10 +98,13 @@ concept tpm2_buffer = requires(T t) {
    { t.size } -> std::convertible_to<size_t>;
 };
 
+/// Construct a std::span as a view into a TPM2 buffer
 constexpr auto as_span(tpm2_buffer auto& data) {
    return std::span{data.buffer, data.size};
 }
 
+/// Copy the @p data into the TPM2 buffer @p dest, assuming that the
+/// provided @p data is not larger than the capacity of the buffer.
 template <tpm2_buffer T>
 constexpr void copy_into(T& dest, std::span<const uint8_t> data) {
    BOTAN_ASSERT_NOMSG(data.size() <= sizeof(dest.buffer));
@@ -109,6 +112,8 @@ constexpr void copy_into(T& dest, std::span<const uint8_t> data) {
    copy_mem(as_span(dest), data);
 }
 
+/// Create a TPM2 buffer from the provided @p data, assuming that the
+/// provided @p data is not larger than the capacity of the buffer type.
 template <tpm2_buffer T>
 constexpr T copy_into(std::span<const uint8_t> data) {
    T result;
@@ -116,6 +121,8 @@ constexpr T copy_into(std::span<const uint8_t> data) {
    return result;
 }
 
+/// Copy the content of the TPM2 buffer @p data into a new resizable byte buffer
+/// of the user's choosing.
 template <concepts::resizable_byte_buffer OutT>
 constexpr OutT copy_into(const tpm2_buffer auto& data) {
    OutT result;
@@ -124,6 +131,9 @@ constexpr OutT copy_into(const tpm2_buffer auto& data) {
    return result;
 }
 
+/// Create a TPM2 buffer setting it's size field to the given @p length,
+/// assuming that the provided @p length is not larger than the capacity of the
+/// buffer type. No data is copied into the new buffer.
 template <tpm2_buffer T>
 constexpr T init_with_size(size_t length) {
    T result;
@@ -132,6 +142,7 @@ constexpr T init_with_size(size_t length) {
    return result;
 }
 
+/// Create an empty TPM2 buffer of the given type.
 template <tpm2_buffer T>
 constexpr T init_empty() {
    return init_with_size<T>(0);
@@ -148,6 +159,7 @@ struct esys_liberator {
       void operator()(void* handle) { Esys_Free(handle); }
 };
 
+/// A unique pointer type for ESYS handles that automatically frees the handle.
 template <typename T>
 using unique_esys_ptr = std::unique_ptr<T, esys_liberator>;
 
@@ -162,6 +174,13 @@ struct ObjectHandles {
       ESYS_TR transient = ESYS_TR_NONE;
 };
 
+/**
+ * Helper type setting a TPM2_HANDLE or ESYS_TR on a given instance of Object
+ * from a TSS2 library function's out parameter.
+ *
+ * This is not used directly, but through the out_transient_handle() and
+ * out_persistent_handle() respectively.
+ */
 class ObjectSetter {
    public:
       constexpr ObjectSetter(Object& object, bool persistent = false) :
@@ -195,10 +214,14 @@ class ObjectSetter {
       uint32_t m_handle;  /// TPM2_HANDLE or ESYS_TR, both are typedefs to uint32_t
 };
 
+/// Helper to set the transient handle of an object from a TSS2 library
+/// function's out parameter.
 constexpr auto out_transient_handle(Object& object) {
    return ObjectSetter{object, false};
 }
 
+/// Helper to set the persistent handle of an object from a TSS2 library
+/// function's out parameter.
 constexpr auto out_persistent_handle(Object& object) {
    return ObjectSetter{object, true};
 }

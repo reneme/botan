@@ -20,6 +20,12 @@
 
 namespace Botan::TPM2 {
 
+/**
+ * Exposes the hashing capability of a TPM 2.0 device as a Botan::HashFunction.
+ * Typically this is used to obtain a TPMT_TK_HASHCHECK ticket after the hash
+ * operation has been completed. Otherwise, the HashFunction behaves like any
+ * other Botan::HashFunction.
+ */
 class BOTAN_TEST_API HashFunction final : public Botan::HashFunction {
    public:
       HashFunction(std::shared_ptr<Context> ctx,
@@ -31,11 +37,19 @@ class BOTAN_TEST_API HashFunction final : public Botan::HashFunction {
       size_t output_length() const override;
       void clear() override;
 
+      /// @throws Not_Implemented as copying state is not supported within the TPM
       std::unique_ptr<Botan::HashFunction> copy_state() const override;
       std::unique_ptr<Botan::HashFunction> new_object() const override;
 
+      /// @return The hash algorithm identifier as TSS2's TPMI_ALG_HASH
       TPMI_ALG_HASH type() const { return m_hash_type; }
 
+      /**
+       * Finalize the hash operation and return the digest and the ticket
+       * as TSS2 structures.
+       *
+       * @return A pair of TPM2B_DIGEST and TPMT_TK_HASHCHECK
+       */
       std::pair<unique_esys_ptr<TPM2B_DIGEST>, unique_esys_ptr<TPMT_TK_HASHCHECK>> final_with_ticket();
 
    protected:

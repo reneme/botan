@@ -51,6 +51,14 @@ class PrivateKey;
 
 namespace detail {
 
+/**
+ * This wraps a Session object and ensures that the session's attributes are
+ * restored to their original state after they have been modified by a (failing)
+ * TSS2 library function.
+ *
+ * This is a workaround for the fact that TSS2 library calls may modify the
+ * session's attributes and not reset them when the call fails.
+ */
 class BOTAN_UNSTABLE_API SessionHandle final {
    public:
       SessionHandle() = default;
@@ -143,6 +151,11 @@ inline detail::SessionHandle::~SessionHandle() {
 inline detail::SessionHandle::SessionHandle(Session& session) :
       m_session(session), m_original_attributes(session.attributes()) {}
 
+/**
+ * This bundles up to three sessions into a single object to be used in a
+ * single TSS2 library function call to simplify passing the sessions around
+ * internally.
+ */
 class SessionBundle {
    public:
       SessionBundle(std::shared_ptr<Session> s1 = nullptr,

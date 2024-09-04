@@ -127,7 +127,11 @@ template <std::invocable<> F>
                                                              : TSS2_ESYS_RC_NO_DECRYPT_PARAM;
       }
 
-      const auto cipher_name = Botan::TPM2::cipher_mode_tss2_to_botan(tpm_sym_alg, key_bits, tpm_mode);
+      const auto cipher_name = Botan::TPM2::cipher_tss2_to_botan({
+         .algorithm = tpm_sym_alg,
+         .keyBits = {.sym = key_bits},
+         .mode = {.sym = tpm_mode},
+      });
       if(!cipher_name) {
          return TSS2_ESYS_RC_NOT_SUPPORTED;
       }

@@ -11,6 +11,7 @@
 #include <botan/tpm2_key.h>
 
 #include <botan/internal/stl_util.h>
+#include <botan/internal/tpm2_algo_mappings.h>
 #include <botan/internal/tpm2_util.h>
 
 namespace Botan::TPM2 {
@@ -37,24 +38,12 @@ TPMA_SESSION SessionAttributes::render(SessionAttributes attributes) {
 }
 
 // static
-std::shared_ptr<Session> Session::unauthenticated_session(const std::shared_ptr<Context>& ctx) {
+std::shared_ptr<Session> Session::unauthenticated_session(const std::shared_ptr<Context>& ctx,
+                                                          std::string_view sym_algo,
+                                                          std::string_view hash_algo) {
    Object session(ctx);
-
-   // TODO: Perhaps we want to make this configurable.
-   //       I could imagine that there's a synergy with the key-generation
-   //       handling (see rsa.cpp), when building a wrapper for that.
-   //
-   //       Given that we want to achieve a certification for our implementation,
-   //       is is probably helpful to give the application documentable control
-   //       over these parameters.
-   //
-   //       Its very likely a good idea to have a convenient and sane default
-   //       and build the API in a way that other users don't have to worry.
-   const TPMT_SYM_DEF auth_sym = {
-      .algorithm = TPM2_ALG_AES,
-      .keyBits = {.aes = 128},
-      .mode = {.aes = TPM2_ALG_CFB},
-   };
+   const auto auth_sym = get_tpm2_sym_cipher_spec(sym_algo);
+   const auto auth_hash_algo = get_tpm2_hash_type(hash_algo);
 
    check_rc("Esys_StartSession",
             Esys_StartAuthSession(inner(ctx),
@@ -66,7 +55,7 @@ std::shared_ptr<Session> Session::unauthenticated_session(const std::shared_ptr<
                                   nullptr /*NonceCaller generated automatically*/,
                                   TPM2_SE_HMAC,
                                   &auth_sym,
-                                  TPM2_ALG_SHA256,
+                                  auth_hash_algo,
                                   out_transient_handle(session)));
 
    return std::shared_ptr<Session>(new Session(std::move(session),
@@ -79,16 +68,12 @@ std::shared_ptr<Session> Session::unauthenticated_session(const std::shared_ptr<
 }
 
 std::shared_ptr<Session> Session::authenticated_session(const std::shared_ptr<Context>& ctx,
-                                                        const TPM2::PrivateKey& tpm_key) {
+                                                        const TPM2::PrivateKey& tpm_key,
+                                                        std::string_view sym_algo,
+                                                        std::string_view hash_algo) {
    Object session(ctx);
-
-   // TODO: Probably should be configurable.
-   //       See unauthenticated_session for more details.
-   const TPMT_SYM_DEF auth_sym = {
-      .algorithm = TPM2_ALG_AES,
-      .keyBits = {.aes = 256},
-      .mode = {.aes = TPM2_ALG_CFB},
-   };
+   const auto auth_sym = get_tpm2_sym_cipher_spec(sym_algo);
+   const auto auth_hash_algo = get_tpm2_hash_type(hash_algo);
 
    check_rc("Esys_StartSession",
             Esys_StartAuthSession(inner(ctx),
@@ -100,7 +85,7 @@ std::shared_ptr<Session> Session::authenticated_session(const std::shared_ptr<Co
                                   nullptr /*NonceCaller generated automatically*/,
                                   TPM2_SE_HMAC,
                                   &auth_sym,
-                                  TPM2_ALG_SHA256,
+                                  auth_hash_algo,
                                   out_transient_handle(session)));
 
    return std::shared_ptr<Session>(new Session(std::move(session),

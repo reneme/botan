@@ -61,7 +61,7 @@ class BOTAN_UNSTABLE_API SessionHandle final {
       SessionHandle& operator=(SessionHandle&&) = delete;
 
       ~SessionHandle();
-      [[nodiscard]] operator uint32_t() && noexcept;
+      [[nodiscard]] operator ESYS_TR() && noexcept;
 
    private:
       friend class Botan::TPM2::Session;
@@ -128,7 +128,7 @@ class BOTAN_PUBLIC_API(3, 6) Session {
 
       Session(Object session, SessionAttributes attributes);
 
-      uint32_t transient_handle() const noexcept { return m_session.transient_handle(); }
+      ESYS_TR transient_handle() const noexcept { return m_session.transient_handle(); }
 
    private:
       Object m_session;

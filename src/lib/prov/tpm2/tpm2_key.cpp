@@ -26,7 +26,7 @@ namespace Botan::TPM2 {
 namespace {
 
 Object load_persistent_object(const std::shared_ptr<Context>& ctx,
-                              uint32_t persistent_object_handle,
+                              TPM2_HANDLE persistent_object_handle,
                               std::span<const uint8_t> auth_value,
                               const SessionBundle& sessions) {
    BOTAN_ARG_CHECK(
@@ -88,7 +88,7 @@ TPM2B_TEMPLATE marshal_template(const TPMT_PUBLIC& key_template) {
 }  // namespace
 
 std::unique_ptr<PublicKey> PublicKey::load_persistent(const std::shared_ptr<Context>& ctx,
-                                                      uint32_t persistent_object_handle,
+                                                      TPM2_HANDLE persistent_object_handle,
                                                       const SessionBundle& sessions) {
    return create(load_persistent_object(ctx, persistent_object_handle, {}, sessions), sessions);
 }
@@ -132,7 +132,7 @@ std::unique_ptr<PublicKey> PublicKey::create(Object handles, const SessionBundle
 // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
 std::unique_ptr<PrivateKey> PrivateKey::load_persistent(const std::shared_ptr<Context>& ctx,
-                                                        uint32_t persistent_object_handle,
+                                                        TPM2_HANDLE persistent_object_handle,
                                                         std::span<const uint8_t> auth_value,
                                                         const SessionBundle& sessions) {
    return create(load_persistent_object(ctx, persistent_object_handle, auth_value, sessions),

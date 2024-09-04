@@ -110,14 +110,12 @@ bool Object::has_transient_handle() const {
    return m_handles->transient != ESYS_TR_NONE;
 }
 
-uint32_t Object::persistent_handle() const {
+TPM2_HANDLE Object::persistent_handle() const {
    BOTAN_STATE_CHECK(has_persistent_handle());
-   static_assert(std::same_as<decltype(m_handles->persistent)::value_type, uint32_t>);
    return *m_handles->persistent;
 }
 
-uint32_t Object::transient_handle() const noexcept {
-   static_assert(std::same_as<decltype(m_handles->transient), uint32_t>);
+ESYS_TR Object::transient_handle() const noexcept {
    return m_handles->transient;
 }
 
@@ -126,7 +124,7 @@ ObjectAttributes Object::attributes(const SessionBundle& sessions) const {
    return ObjectAttributes::read(attrs);
 }
 
-PublicInfo& Object::_public_info(const SessionBundle& sessions, std::optional<uint32_t> expected_type) const {
+PublicInfo& Object::_public_info(const SessionBundle& sessions, std::optional<TPMI_ALG_PUBLIC> expected_type) const {
    if(!m_public_info) {
       m_public_info = std::make_unique<PublicInfo>();
 

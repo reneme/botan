@@ -120,12 +120,12 @@ uint32_t get_tpm_property(ESYS_CONTEXT* ctx, TPM2_PT property) {
    return capability_data->data.tpmProperties.tpmProperty[0].value;
 }
 
-template <TPM2_CAP capability>
-[[nodiscard]] auto get_tpm_property_list(ESYS_CONTEXT* ctx, TPM2_PT property, uint32_t count) {
+template <TPM2_CAP capability, typename ReturnT>
+[[nodiscard]] std::vector<ReturnT> get_tpm_property_list(ESYS_CONTEXT* ctx, TPM2_PT property, uint32_t count) {
    auto extract = [](const TPMU_CAPABILITIES& caps, uint32_t max_count) {
       if constexpr(capability == TPM2_CAP_HANDLES) {
          const auto to_read = std::min(caps.handles.count, max_count);
-         std::vector<uint32_t> result;
+         std::vector<ReturnT> result;
          result.reserve(to_read);
          for(size_t i = 0; i < to_read; ++i) {
             result.push_back(caps.handles.handle[i]);
@@ -137,11 +137,8 @@ template <TPM2_CAP capability>
       }
    };
 
-   using return_vector_t = decltype(extract(std::declval<const TPMU_CAPABILITIES&>(), 0));
-   static_assert(concepts::reservable_container<return_vector_t>);
-
    TPMI_YES_NO more_data = TPM2_YES;
-   return_vector_t properties;
+   std::vector<ReturnT> properties;
    while(more_data == TPM2_YES && count > 0) {
       unique_esys_ptr<TPMS_CAPABILITY_DATA> capability_data;
       check_rc("Esys_GetCapability",
@@ -200,11 +197,11 @@ std::unique_ptr<TPM2::PrivateKey> Context::storage_root_key(std::span<const uint
    return TPM2::PrivateKey::load_persistent(shared_from_this(), storage_root_key_handle, auth_value, sessions);
 }
 
-std::vector<uint32_t> Context::transient_handles() const {
-   return get_tpm_property_list<TPM2_CAP_HANDLES>(m_impl->m_ctx, TPM2_TRANSIENT_FIRST, TPM2_MAX_CAP_HANDLES);
+std::vector<ESYS_TR> Context::transient_handles() const {
+   return get_tpm_property_list<TPM2_CAP_HANDLES, ESYS_TR>(m_impl->m_ctx, TPM2_TRANSIENT_FIRST, TPM2_MAX_CAP_HANDLES);
 }
 
-std::optional<uint32_t> Context::find_free_persistent_handle() const {
+std::optional<TPM2_HANDLE> Context::find_free_persistent_handle() const {
    const auto occupied_handles = persistent_handles();
 
    // This is modeled after the implementation in tpm2-tools, which also takes
@@ -219,7 +216,7 @@ std::optional<uint32_t> Context::find_free_persistent_handle() const {
    }
 
    // find the lowest handle that is not occupied
-   for(uint32_t i = TPM2_PERSISTENT_FIRST; i < TPM2_PERSISTENT_LAST; ++i) {
+   for(TPM2_HANDLE i = TPM2_PERSISTENT_FIRST; i < TPM2_PERSISTENT_LAST; ++i) {
       if(!value_exists(occupied_handles, i)) {
          return i;
       }
@@ -228,20 +225,21 @@ std::optional<uint32_t> Context::find_free_persistent_handle() const {
    BOTAN_ASSERT_UNREACHABLE();
 }
 
-std::vector<uint32_t> Context::persistent_handles() const {
-   return get_tpm_property_list<TPM2_CAP_HANDLES>(m_impl->m_ctx, TPM2_PERSISTENT_FIRST, TPM2_MAX_CAP_HANDLES);
+std::vector<TPM2_HANDLE> Context::persistent_handles() const {
+   return get_tpm_property_list<TPM2_CAP_HANDLES, TPM2_HANDLE>(
+      m_impl->m_ctx, TPM2_PERSISTENT_FIRST, TPM2_MAX_CAP_HANDLES);
 }
 
-bool Context::in_persistent_handles(uint32_t persistent_handle) const {
+bool Context::in_persistent_handles(TPM2_HANDLE persistent_handle) const {
    auto persistent_handles = this->persistent_handles();
    return std::find(persistent_handles.begin(), persistent_handles.end(), persistent_handle) !=
           persistent_handles.end();
 }
 
-uint32_t Context::persist(TPM2::PrivateKey& key,
-                          const SessionBundle& sessions,
-                          std::span<const uint8_t> auth_value,
-                          std::optional<uint32_t> persistent_handle) {
+TPM2_HANDLE Context::persist(TPM2::PrivateKey& key,
+                             const SessionBundle& sessions,
+                             std::span<const uint8_t> auth_value,
+                             std::optional<TPM2_HANDLE> persistent_handle) {
    auto& handles = key.handles();
 
    BOTAN_ARG_CHECK(!persistent_handle || !value_exists(persistent_handles(), persistent_handle.value()),

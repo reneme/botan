@@ -15,7 +15,7 @@
 
 namespace Botan::TPM2 {
 
-uint32_t get_raw_rc(uint32_t rc) {
+TSS2_RC get_raw_rc(TSS2_RC rc) {
 #if defined(BOTAN_TSS2_SUPPORTS_ERROR_DECODING)
    TSS2_RC_INFO info;
    const TSS2_RC decoding_rc = Tss2_RC_DecodeInfo(rc, &info);
@@ -37,7 +37,7 @@ uint32_t get_raw_rc(uint32_t rc) {
 
 namespace {
 
-std::string raw_rc_to_string(TPM2_RC rc) noexcept {
+std::string raw_rc_to_string(TSS2_RC rc) noexcept {
    switch(rc) {
       case TPM2_RC_SUCCESS:
          return "TPM2_RC_SUCCESS";
@@ -241,13 +241,13 @@ std::string raw_rc_to_string(TPM2_RC rc) noexcept {
          return "TPM2_RC_NV_UNAVAILABLE";
 
       default:
-         return Botan::fmt("Unknown TPM2_RC: {}", rc);
+         return Botan::fmt("Unknown TSS2_RC: {}", rc);
    }
 }
 
 }  // namespace
 
-Error::Error(std::string_view location, uint32_t rc) :
+Error::Error(std::string_view location, TSS2_RC rc) :
       Exception(fmt("TPM2 Exception in {}: Code {} - {} ({})",
                     location,
                     raw_rc_to_string(get_raw_rc(rc)),

@@ -11,14 +11,18 @@
 
 #include <botan/tpm2_context.h>
 
+/// Forward declaration of TSS2 type for convenience
+using TPMA_OBJECT = uint32_t;
+
+/// Forward declaration of TSS2 type for convenience
+using TPMI_ALG_PUBLIC = uint16_t;
+
 namespace Botan::TPM2 {
 
 struct PublicInfo;
 struct ObjectHandles;
 class ObjectSetter;
 class SessionBundle;
-
-using TPMA_OBJECT = uint32_t;
 
 /**
  * See TPM 2.0 Part 2, Section 8.3.2
@@ -83,14 +87,14 @@ class BOTAN_PUBLIC_API(3, 6) Object {
       bool has_persistent_handle() const;
       bool has_transient_handle() const;
 
-      uint32_t persistent_handle() const;
-      uint32_t transient_handle() const noexcept;
+      TPM2_HANDLE persistent_handle() const;
+      ESYS_TR transient_handle() const noexcept;
 
       ObjectAttributes attributes(const SessionBundle& sessions) const;
 
       void _reset() noexcept;
       void _disengage() noexcept;
-      PublicInfo& _public_info(const SessionBundle& sessions, std::optional<uint32_t> expected_type = {}) const;
+      PublicInfo& _public_info(const SessionBundle& sessions, std::optional<TPMI_ALG_PUBLIC> expected_type = {}) const;
 
    private:
       friend class ObjectSetter;

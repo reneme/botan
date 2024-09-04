@@ -192,7 +192,7 @@ class ObjectSetter {
    private:
       Object& m_object;
       bool m_persistent;
-      uint32_t m_handle;
+      uint32_t m_handle;  /// TPM2_HANDLE or ESYS_TR, both are typedefs to uint32_t
 };
 
 constexpr auto out_transient_handle(Object& object) {

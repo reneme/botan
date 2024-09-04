@@ -11,17 +11,20 @@
 
 #include <botan/exceptn.h>
 
+/// Forward declaration of TSS2 type for convenience
+using TSS2_RC = uint32_t;
+
 namespace Botan::TPM2 {
 
-uint32_t get_raw_rc(uint32_t rc);
+TSS2_RC get_raw_rc(TSS2_RC rc);
 
 class BOTAN_PUBLIC_API(3, 6) Error final : public Exception {
    public:
-      Error(std::string_view location, uint32_t rc);
+      Error(std::string_view location, TSS2_RC rc);
 
       ErrorType error_type() const noexcept override { return ErrorType::TPMError; }
 
-      uint32_t code() const { return m_rc; }
+      TSS2_RC code() const { return m_rc; }
 
       int error_code() const noexcept override {
          // RC is uint32 but the maximum value is within int32 range as per tss2_common.h
@@ -31,7 +34,7 @@ class BOTAN_PUBLIC_API(3, 6) Error final : public Exception {
       std::string error_message() const;
 
    private:
-      uint32_t m_rc;
+      TSS2_RC m_rc;
 };
 
 }  // namespace Botan::TPM2

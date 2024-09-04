@@ -17,8 +17,6 @@ struct TPM2B_SENSITIVE_CREATE;
 struct TPMT_PUBLIC;
 struct TPM2B_PUBLIC;
 
-using ESYS_TR = uint32_t;
-
 namespace Botan::TPM2 {
 
 /**
@@ -39,7 +37,7 @@ class BOTAN_PUBLIC_API(3, 6) PublicKey : public virtual Botan::Public_Key {
        * @param sessions The session bundle to use for loading
        */
       static std::unique_ptr<PublicKey> load_persistent(const std::shared_ptr<Context>& ctx,
-                                                        uint32_t persistent_object_handle,
+                                                        TPM2_HANDLE persistent_object_handle,
                                                         const SessionBundle& sessions = {});
 
       /**
@@ -118,7 +116,7 @@ class BOTAN_PUBLIC_API(3, 6) PrivateKey : public virtual Private_Key {
        * @param sessions The session bundle to use for the key's operations
        */
       static std::unique_ptr<PrivateKey> load_persistent(const std::shared_ptr<Context>& ctx,
-                                                         uint32_t persistent_object_handle,
+                                                         TPM2_HANDLE persistent_object_handle,
                                                          std::span<const uint8_t> auth_value,
                                                          const SessionBundle& sessions);
 

@@ -230,12 +230,6 @@ std::vector<TPM2_HANDLE> Context::persistent_handles() const {
       m_impl->m_ctx, TPM2_PERSISTENT_FIRST, TPM2_MAX_CAP_HANDLES);
 }
 
-bool Context::in_persistent_handles(TPM2_HANDLE persistent_handle) const {
-   auto persistent_handles = this->persistent_handles();
-   return std::find(persistent_handles.begin(), persistent_handles.end(), persistent_handle) !=
-          persistent_handles.end();
-}
-
 TPM2_HANDLE Context::persist(TPM2::PrivateKey& key,
                              const SessionBundle& sessions,
                              std::span<const uint8_t> auth_value,

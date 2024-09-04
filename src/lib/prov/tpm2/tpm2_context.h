@@ -100,10 +100,6 @@ class BOTAN_PUBLIC_API(3, 6) Context final : public std::enable_shared_from_this
 
       std::vector<TPM2_HANDLE> persistent_handles() const;
 
-      /// @return true if @p persistent_handle is in the list of persistent handles
-      /// TODO: remove - use range-operations (or value_exists()) instead
-      bool in_persistent_handles(TPM2_HANDLE persistent_handle) const;
-
       /// Makes @p key persistent at location @p persistent_handle or any free
       /// location if @p persistent_handle is not set.
       /// @returns the handle of the persistent object

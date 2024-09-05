@@ -32,23 +32,23 @@ Object load_persistent_object(const std::shared_ptr<Context>& ctx,
    BOTAN_ARG_CHECK(
       TPM2_PERSISTENT_FIRST <= persistent_object_handle && persistent_object_handle <= TPM2_PERSISTENT_LAST,
       "persistent_object_handle out of range");
+   BOTAN_ASSERT_NONNULL(ctx);
    const bool is_persistent = value_exists(ctx->persistent_handles(), persistent_object_handle);
    BOTAN_STATE_CHECK(is_persistent);
 
    Object object(ctx);
 
-   check_rc(
-      "Esys_TR_FromTPMPublic",
-      Esys_TR_FromTPMPublic(
-         inner(ctx), persistent_object_handle, sessions[0], sessions[1], sessions[2], out_transient_handle(object)));
+   check_rc("Esys_TR_FromTPMPublic",
+            Esys_TR_FromTPMPublic(
+               *ctx, persistent_object_handle, sessions[0], sessions[1], sessions[2], out_transient_handle(object)));
 
    if(!auth_value.empty()) {
       const auto user_auth = copy_into<TPM2B_AUTH>(auth_value);
-      check_rc("Esys_TR_SetAuth", Esys_TR_SetAuth(inner(ctx), object.transient_handle(), &user_auth));
+      check_rc("Esys_TR_SetAuth", Esys_TR_SetAuth(*ctx, object.transient_handle(), &user_auth));
    }
 
    check_rc("Esys_TR_GetTpmHandle",
-            Esys_TR_GetTpmHandle(inner(ctx), object.transient_handle(), out_persistent_handle(object)));
+            Esys_TR_GetTpmHandle(*ctx, object.transient_handle(), out_persistent_handle(object)));
 
    const auto key_type = object._public_info(sessions).pub->publicArea.type;
    BOTAN_ARG_CHECK(key_type == TPM2_ALG_RSA || key_type == TPM2_ALG_ECC,
@@ -98,9 +98,11 @@ std::unique_ptr<PublicKey> PublicKey::load_transient(const std::shared_ptr<Conte
                                                      const SessionBundle& sessions) {
    const auto public_data = unmarshal_public_blob(public_blob);
 
+   BOTAN_ASSERT_NONNULL(ctx);
+
    Object handle(ctx);
    check_rc("Esys_LoadExternal",
-            Esys_LoadExternal(inner(ctx),
+            Esys_LoadExternal(*ctx,
                               sessions[0],
                               sessions[1],
                               sessions[2],
@@ -116,8 +118,6 @@ std::vector<uint8_t> PublicKey::raw_public_key_bits() const {
 }
 
 std::unique_ptr<PublicKey> PublicKey::create(Object handles, const SessionBundle& sessions) {
-   const bool is_persistent = handles.has_persistent_handle();
-
    [[maybe_unused]] const auto* pubinfo = handles._public_info(sessions).pub.get();
 #if defined(BOTAN_HAS_TPM2_RSA_ADAPTER)
    if(pubinfo->publicArea.type == TPM2_ALG_RSA) {
@@ -125,8 +125,8 @@ std::unique_ptr<PublicKey> PublicKey::create(Object handles, const SessionBundle
    }
 #endif
 
-   throw Not_Implemented(
-      Botan::fmt("Loaded a {} public key of an unsupported type", is_persistent ? "persistent" : "transient"));
+   throw Not_Implemented(Botan::fmt("Loaded a {} public key of an unsupported type",
+                                    handles.has_persistent_handle() ? "persistent" : "transient"));
 }
 
 // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -147,13 +147,14 @@ std::unique_ptr<PrivateKey> PrivateKey::load_transient(const std::shared_ptr<Con
                                                        std::span<const uint8_t> public_blob,
                                                        std::span<const uint8_t> private_blob,
                                                        const SessionBundle& sessions) {
+   BOTAN_ASSERT_NONNULL(ctx);
    Object handle(ctx);
 
    const auto public_data = unmarshal_public_blob(public_blob);
    const auto private_data = copy_into<TPM2B_PRIVATE>(private_blob);
 
    check_rc("Esys_Load",
-            Esys_Load(inner(ctx),
+            Esys_Load(*ctx,
                       parent.handles().transient_handle(),
                       sessions[0],
                       sessions[1],
@@ -164,7 +165,7 @@ std::unique_ptr<PrivateKey> PrivateKey::load_transient(const std::shared_ptr<Con
 
    if(!auth_value.empty()) {
       const auto user_auth = copy_into<TPM2B_AUTH>(auth_value);
-      check_rc("Esys_TR_SetAuth", Esys_TR_SetAuth(inner(ctx), handle.transient_handle(), &user_auth));
+      check_rc("Esys_TR_SetAuth", Esys_TR_SetAuth(*ctx, handle.transient_handle(), &user_auth));
    }
 
    return create(std::move(handle), sessions, nullptr /* pull public info from handle */, private_blob);
@@ -175,6 +176,8 @@ std::unique_ptr<PrivateKey> PrivateKey::create_transient_from_template(const std
                                                                        ESYS_TR parent,
                                                                        const TPMT_PUBLIC& key_template,
                                                                        const TPM2B_SENSITIVE_CREATE& sensitive_data) {
+   BOTAN_ASSERT_NONNULL(ctx);
+
    switch(key_template.type) {
       case TPM2_ALG_RSA:
 #if not defined(BOTAN_HAS_TPM2_RSA_ADAPTER)
@@ -203,7 +206,7 @@ std::unique_ptr<PrivateKey> PrivateKey::create_transient_from_template(const std
    //
    // See the Architecture Document, Section 27.1.
    check_rc("Esys_CreateLoaded",
-            Esys_CreateLoaded(inner(ctx),
+            Esys_CreateLoaded(*ctx,
                               parent,
                               sessions[0],
                               sessions[1],
@@ -242,8 +245,6 @@ std::unique_ptr<PrivateKey> PrivateKey::create(Object handles,
                                                [[maybe_unused]] const SessionBundle& sessions,
                                                [[maybe_unused]] const TPM2B_PUBLIC* public_info,
                                                [[maybe_unused]] std::span<const uint8_t> private_blob) {
-   const bool is_persistent = handles.has_persistent_handle();
-
    if(!public_info) {
       public_info = handles._public_info(sessions).pub.get();
    }
@@ -257,8 +258,8 @@ std::unique_ptr<PrivateKey> PrivateKey::create(Object handles,
 
    // TODO: Support ECC keys
 
-   throw Not_Implemented(
-      Botan::fmt("Loaded a {} private key of an unsupported type", is_persistent ? "persistent" : "transient"));
+   throw Not_Implemented(Botan::fmt("Loaded a {} private key of an unsupported type",
+                                    handles.has_persistent_handle() ? "persistent" : "transient"));
 }
 
 }  // namespace Botan::TPM2

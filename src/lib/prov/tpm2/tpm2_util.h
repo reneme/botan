@@ -148,13 +148,6 @@ constexpr T init_empty() {
    return init_with_size<T>(0);
 }
 
-inline ESYS_CONTEXT* inner(const std::shared_ptr<Context>& ctx) {
-   BOTAN_ASSERT_NOMSG(ctx != nullptr);
-   auto inner = ctx->inner_context_object();
-   BOTAN_ASSERT_NOMSG(inner != nullptr);
-   return static_cast<ESYS_CONTEXT*>(inner);
-}
-
 struct esys_liberator {
       void operator()(void* handle) { Esys_Free(handle); }
 };

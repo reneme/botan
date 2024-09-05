@@ -45,8 +45,10 @@ std::shared_ptr<Session> Session::unauthenticated_session(const std::shared_ptr<
    const auto auth_sym = get_tpm2_sym_cipher_spec(sym_algo);
    const auto auth_hash_algo = get_tpm2_hash_type(hash_algo);
 
+   BOTAN_ASSERT_NONNULL(ctx);
+
    check_rc("Esys_StartSession",
-            Esys_StartAuthSession(inner(ctx),
+            Esys_StartAuthSession(*ctx,
                                   ESYS_TR_NONE,
                                   ESYS_TR_NONE,
                                   ESYS_TR_NONE,
@@ -74,8 +76,10 @@ std::shared_ptr<Session> Session::authenticated_session(const std::shared_ptr<Co
    const auto auth_sym = get_tpm2_sym_cipher_spec(sym_algo);
    const auto auth_hash_algo = get_tpm2_hash_type(hash_algo);
 
+   BOTAN_ASSERT_NONNULL(ctx);
+
    check_rc("Esys_StartSession",
-            Esys_StartAuthSession(inner(ctx),
+            Esys_StartAuthSession(*ctx,
                                   tpm_key.handles().transient_handle(),
                                   tpm_key.handles().transient_handle(),
                                   ESYS_TR_NONE,
@@ -102,20 +106,20 @@ Session::Session(Object session, SessionAttributes attributes) : m_session(std::
 SessionAttributes Session::attributes() const {
    TPMA_SESSION attrs;
    check_rc("Esys_TRSess_GetAttributes",
-            Esys_TRSess_GetAttributes(inner(m_session.context()), m_session.transient_handle(), &attrs));
+            Esys_TRSess_GetAttributes(*m_session.context(), m_session.transient_handle(), &attrs));
    return SessionAttributes::read(attrs);
 }
 
 void Session::set_attributes(SessionAttributes attributes) {
    check_rc("Esys_TRSess_SetAttributes",
             Esys_TRSess_SetAttributes(
-               inner(m_session.context()), m_session.transient_handle(), SessionAttributes::render(attributes), 0xFF));
+               *m_session.context(), m_session.transient_handle(), SessionAttributes::render(attributes), 0xFF));
 }
 
 secure_vector<uint8_t> Session::tpm_nonce() const {
    unique_esys_ptr<TPM2B_NONCE> nonce;
    check_rc("Esys_TRSess_GetNonceTPM",
-            Esys_TRSess_GetNonceTPM(inner(m_session.context()), m_session.transient_handle(), out_ptr(nonce)));
+            Esys_TRSess_GetNonceTPM(*m_session.context(), m_session.transient_handle(), out_ptr(nonce)));
    return copy_into<secure_vector<uint8_t>>(*nonce);
 }
 

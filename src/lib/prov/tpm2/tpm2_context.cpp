@@ -65,12 +65,16 @@ std::shared_ptr<Context> Context::create(std::optional<std::string> tcti, std::o
 
 Context::Context(const char* tcti_nameconf) : m_impl(std::make_unique<Impl>()) {
    check_rc("TCTI Initialization", Tss2_TctiLdr_Initialize(tcti_nameconf, &m_impl->m_tcti_ctx));
+   BOTAN_ASSERT_NONNULL(m_impl->m_tcti_ctx);
    check_rc("TPM2 Initialization", Esys_Initialize(&m_impl->m_ctx, m_impl->m_tcti_ctx, nullptr /* ABI version */));
+   BOTAN_ASSERT_NONNULL(m_impl->m_ctx);
 }
 
 Context::Context(const char* tcti_name, const char* tcti_conf) : m_impl(std::make_unique<Impl>()) {
    check_rc("TCTI Initialization", Tss2_TctiLdr_Initialize_Ex(tcti_name, tcti_conf, &m_impl->m_tcti_ctx));
+   BOTAN_ASSERT_NONNULL(m_impl->m_tcti_ctx);
    check_rc("TPM2 Initialization", Esys_Initialize(&m_impl->m_ctx, m_impl->m_tcti_ctx, nullptr /* ABI version */));
+   BOTAN_ASSERT_NONNULL(m_impl->m_ctx);
 }
 
 void Context::use_botan_crypto_backend(const std::shared_ptr<Botan::RandomNumberGenerator>& rng) {
@@ -91,7 +95,7 @@ CryptoCallbackState& Context::crypto_callback_state() {
 }
 #endif
 
-void* Context::inner_context_object() {
+ESYS_CONTEXT* Context::esys_context() noexcept {
    return m_impl->m_ctx;
 }
 

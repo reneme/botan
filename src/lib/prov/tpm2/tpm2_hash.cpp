@@ -73,7 +73,7 @@ void HashFunction::lazy_setup() {
 
    const auto auth = init_empty<TPM2B_AUTH>();
    const auto rc = check_rc_expecting<TPM2_RC_HASH>("Esys_HashSequenceStart",
-                                                    Esys_HashSequenceStart(inner(m_handle.context()),
+                                                    Esys_HashSequenceStart(*m_handle.context(),
                                                                            m_sessions[0],
                                                                            m_sessions[1],
                                                                            m_sessions[2],
@@ -93,13 +93,10 @@ void HashFunction::add_data(std::span<const uint8_t> input) {
    while(slicer.remaining() > 0) {
       const size_t chunk = std::min(slicer.remaining(), size_t(TPM2_MAX_DIGEST_BUFFER));
       const auto data = copy_into<TPM2B_MAX_BUFFER>(slicer.take(chunk));
-      check_rc("Esys_SequenceUpdate",
-               Esys_SequenceUpdate(inner(m_handle.context()),
-                                   m_handle.transient_handle(),
-                                   m_sessions[0],
-                                   m_sessions[1],
-                                   m_sessions[2],
-                                   &data));
+      check_rc(
+         "Esys_SequenceUpdate",
+         Esys_SequenceUpdate(
+            *m_handle.context(), m_handle.transient_handle(), m_sessions[0], m_sessions[1], m_sessions[2], &data));
    }
    BOTAN_ASSERT_NOMSG(slicer.empty());
 }
@@ -111,7 +108,7 @@ std::pair<unique_esys_ptr<TPM2B_DIGEST>, unique_esys_ptr<TPMT_TK_HASHCHECK>> Has
 
    const auto nodata = init_empty<TPM2B_MAX_BUFFER>();
    check_rc("Esys_SequenceComplete",
-            Esys_SequenceComplete(inner(m_handle.context()),
+            Esys_SequenceComplete(*m_handle.context(),
                                   m_handle.transient_handle(),
                                   m_sessions[0],
                                   m_sessions[1],

@@ -21,10 +21,7 @@ namespace Botan::TPM2 {
  */
 class BOTAN_PUBLIC_API(3, 6) RandomNumberGenerator final : public Hardware_RNG {
    public:
-      RandomNumberGenerator(std::shared_ptr<Context> ctx, SessionBundle sessions = {}) :
-            m_ctx(std::move(ctx)),
-            m_sessions(std::move(sessions)),
-            m_max_tpm2_rng_bytes(m_ctx->max_random_bytes_per_request()) {}
+      RandomNumberGenerator(std::shared_ptr<Context> ctx, SessionBundle sessions = {});
 
       bool accepts_input() const override { return true; }
 

@@ -22,6 +22,8 @@ using TPM2_HANDLE = uint32_t;
 /// Forward declaration of TSS2 type for convenience
 using ESYS_TR = uint32_t;
 
+struct ESYS_CONTEXT;
+
 namespace Botan::TPM2 {
 
 struct CryptoCallbackState;
@@ -81,7 +83,9 @@ class BOTAN_PUBLIC_API(3, 6) Context final : public std::enable_shared_from_this
       static bool supports_botan_crypto_backend() noexcept;
 
       /// @return an ESYS_CONTEXT* for use in other TPM2 functions.
-      void* inner_context_object();
+      ESYS_CONTEXT* esys_context() noexcept;
+
+      operator ESYS_CONTEXT*() noexcept { return esys_context(); }
 
       /// @return the Vendor of the TPM2
       std::string vendor() const;

@@ -45,12 +45,12 @@ TPMA_OBJECT ObjectAttributes::render(ObjectAttributes attributes) {
    return ObjectAttributesWrapper::render(attributes);
 }
 
-Object::Object(std::shared_ptr<Context> ctx) : m_ctx(std::move(ctx)), m_handles(std::make_unique<ObjectHandles>()) {}
+Object::Object(std::shared_ptr<Context> ctx) : m_ctx(std::move(ctx)), m_handles(std::make_unique<ObjectHandles>()) {
+   BOTAN_ASSERT_NONNULL(m_ctx);
+}
 
-Object::~Object() {
-   if(m_handles) {
-      flush();
-   }
+Object::Object(std::shared_ptr<Context> ctx, ESYS_TR handle) : Object(std::move(ctx)) {
+   m_handles->transient = handle;
 }
 
 Object::Object(Object&& other) noexcept :
@@ -58,6 +58,12 @@ Object::Object(Object&& other) noexcept :
       m_handles(std::move(other.m_handles)),
       m_public_info(std::move(other.m_public_info)) {
    other.scrub();
+}
+
+Object::~Object() {
+   if(m_handles) {
+      flush();
+   }
 }
 
 Object& Object::operator=(Object&& other) noexcept {
@@ -76,14 +82,15 @@ void Object::flush() const noexcept {
    // Only purely transient objects have to be flushed
    if(has_transient_handle()) {
       if(has_persistent_handle()) {
-         Esys_TR_Close(inner(m_ctx), &m_handles->transient);
+         Esys_TR_Close(*m_ctx, &m_handles->transient);
       } else {
-         Esys_FlushContext(inner(m_ctx), m_handles->transient);
+         Esys_FlushContext(*m_ctx, m_handles->transient);
       }
    }
 }
 
 /// Destroy the object's internal state, making the destructor a no-op.
+/// No more operations except the destructor must be performed on that object.
 void Object::scrub() {
    m_ctx.reset();
    m_handles.reset();
@@ -129,7 +136,7 @@ PublicInfo& Object::_public_info(const SessionBundle& sessions, std::optional<TP
       m_public_info = std::make_unique<PublicInfo>();
 
       check_rc("Esys_ReadPublic",
-               Esys_ReadPublic(inner(m_ctx),
+               Esys_ReadPublic(*m_ctx,
                                m_handles->transient,
                                sessions[0],
                                sessions[1],

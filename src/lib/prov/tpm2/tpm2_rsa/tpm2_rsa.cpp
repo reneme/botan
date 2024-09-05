@@ -262,7 +262,7 @@ class RSA_Signature_Operation final : public PK_Ops::Signature {
       std::vector<uint8_t> create_signature(const TPM2B_DIGEST* digest, const TPMT_TK_HASHCHECK* validation) {
          unique_esys_ptr<TPMT_SIGNATURE> signature;
          check_rc("Esys_Sign",
-                  Esys_Sign(inner(m_key_handle.context()),
+                  Esys_Sign(*m_key_handle.context(),
                             m_key_handle.transient_handle(),
                             m_sessions[0],
                             m_sessions[1],
@@ -338,7 +338,7 @@ class RSA_Verification_Operation final : public PK_Ops::Verification {
 
          // If the signature is not valid, this returns TPM2_RC_SIGNATURE.
          const auto rc = check_rc_expecting<TPM2_RC_SIGNATURE>("Esys_VerifySignature",
-                                                               Esys_VerifySignature(inner(m_key_handle.context()),
+                                                               Esys_VerifySignature(*m_key_handle.context(),
                                                                                     m_key_handle.transient_handle(),
                                                                                     m_sessions[0],
                                                                                     m_sessions[1],
@@ -385,7 +385,7 @@ class RSA_Encryption_Operation final : public PK_Ops::Encryption {
 
          unique_esys_ptr<TPM2B_PUBLIC_KEY_RSA> ciphertext;
          check_rc("Esys_RSA_Encrypt",
-                  Esys_RSA_Encrypt(inner(m_key_handle.context()),
+                  Esys_RSA_Encrypt(*m_key_handle.context(),
                                    m_key_handle.transient_handle(),
                                    m_sessions[0],
                                    m_sessions[1],
@@ -464,7 +464,7 @@ class RSA_Decryption_Operation final : public PK_Ops::Decryption {
          //       all cases here. It passed the test (with a faulty ciphertext),
          //       but I didn't find this to be clearly documented. :-(
          auto rc = check_rc_expecting<TPM2_RC_FAILURE>("Esys_RSA_Decrypt",
-                                                       Esys_RSA_Decrypt(inner(m_key_handle.context()),
+                                                       Esys_RSA_Decrypt(*m_key_handle.context(),
                                                                         m_key_handle.transient_handle(),
                                                                         m_sessions[0],
                                                                         m_sessions[1],

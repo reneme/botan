@@ -764,6 +764,8 @@ namespace Botan::TPM2 {
  */
 void enable_crypto_callbacks(const std::shared_ptr<Context>& ctx) {
 #if defined(BOTAN_TSS2_SUPPORTS_CRYPTO_CALLBACKS)
+   BOTAN_ASSERT_NONNULL(ctx);
+
    // clang-format off
    ESYS_CRYPTO_CALLBACKS callbacks{
       .rsa_pk_encrypt = &rsa_pk_encrypt,
@@ -788,7 +790,7 @@ void enable_crypto_callbacks(const std::shared_ptr<Context>& ctx) {
    };
    // clang-format on
 
-   check_rc("Esys_SetCryptoCallbacks", Esys_SetCryptoCallbacks(inner(ctx), &callbacks));
+   check_rc("Esys_SetCryptoCallbacks", Esys_SetCryptoCallbacks(*ctx, &callbacks));
 #else
    BOTAN_UNUSED(ctx);
    throw Not_Implemented(

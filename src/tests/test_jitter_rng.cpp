@@ -19,6 +19,8 @@
 
 namespace Botan_Tests {
 
+namespace {
+
 std::vector<Test::Result> test_jitter_rng() {
    return {
       CHECK("Jitter_RNG basic usage",
@@ -52,6 +54,8 @@ std::vector<Test::Result> test_jitter_rng() {
             }),
    };
 }
+
+}  // namespace
 
 BOTAN_REGISTER_TEST_FN("rng", "jitter_rng", test_jitter_rng);
 

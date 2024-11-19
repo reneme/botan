@@ -32,22 +32,22 @@ class SPAKE2_KAT_Tests final : public Text_Based_Test {
 
          const Botan::EC_Scalar w(group, vars.get_req_bin("W"));
 
-         Botan::SPAKE2_Parameters params(group, w, a_id, b_id, {}, hash_fn, false);
+         Botan::SPAKE2::Parameters params(group, w, a_id, b_id, {}, hash_fn, false);
 
          Fixed_Output_RNG x_rng(rng());
          x_rng.add_entropy(vars.get_req_bin("X"));
-         Botan::SPAKE2_Context a_ctx(Botan::SPAKE2_PeerId::PeerA, params, x_rng);
-         auto [a_msg, a_state] = a_ctx.generate_message();
+         auto [a_msg, a_state] = Botan::SPAKE2::generate_message(params, Botan::SPAKE2::PeerId::PeerA, x_rng);
 
          Fixed_Output_RNG y_rng(rng());
          y_rng.add_entropy(vars.get_req_bin("Y"));
-         Botan::SPAKE2_Context b_ctx(Botan::SPAKE2_PeerId::PeerB, params, y_rng);
-         auto [b_msg, b_state] = b_ctx.generate_message();
+         auto [b_msg, b_state] = Botan::SPAKE2::generate_message(params, Botan::SPAKE2::PeerId::PeerB, y_rng);
 
-         const auto a_ss = a_ctx.process_message(std::move(a_state), b_msg);
+         const auto a_ss =
+            Botan::SPAKE2::process_message(params, Botan::SPAKE2::PeerId::PeerA, x_rng, std::move(a_state), b_msg);
          result.test_eq("Shared secret A matches", a_ss, exp_ss);
 
-         const auto b_ss = b_ctx.process_message(std::move(b_state), a_msg);
+         const auto b_ss =
+            Botan::SPAKE2::process_message(params, Botan::SPAKE2::PeerId::PeerB, y_rng, std::move(b_state), a_msg);
          result.test_eq("Shared secret B matches", b_ss, exp_ss);
 
          return result;
@@ -79,23 +79,22 @@ class SPAKE2_RT_Tests final : public Text_Based_Test {
          }();
 
          // Avoid doing Argon2 twice for each test
-         const auto w = Botan::SPAKE2_Parameters::hash_shared_secret(group, secret, a_id, b_id, {});
+         const auto w = Botan::SPAKE2::Parameters::hash_shared_secret(group, secret, a_id, b_id, {});
 
          for(bool per_user_params : {true, false}) {
             if(per_user_params && !h2c_supported) {
                continue;
             }
 
-            Botan::SPAKE2_Parameters params(group, w, a_id, b_id, {}, hash_fn, per_user_params);
+            Botan::SPAKE2::Parameters params(group, w, a_id, b_id, {}, hash_fn, per_user_params);
 
-            Botan::SPAKE2_Context a_ctx(Botan::SPAKE2_PeerId::PeerA, params, rng());
-            auto [a_msg, a_state] = a_ctx.generate_message();
+            auto [a_msg, a_state] = Botan::SPAKE2::generate_message(params, Botan::SPAKE2::PeerId::PeerA, rng());
+            auto [b_msg, b_state] = Botan::SPAKE2::generate_message(params, Botan::SPAKE2::PeerId::PeerB, rng());
 
-            Botan::SPAKE2_Context b_ctx(Botan::SPAKE2_PeerId::PeerB, params, rng());
-            auto [b_msg, b_state] = b_ctx.generate_message();
-
-            const auto a_ss = a_ctx.process_message(std::move(a_state), b_msg);
-            const auto b_ss = b_ctx.process_message(std::move(b_state), a_msg);
+            const auto a_ss =
+               Botan::SPAKE2::process_message(params, Botan::SPAKE2::PeerId::PeerA, rng(), std::move(a_state), b_msg);
+            const auto b_ss =
+               Botan::SPAKE2::process_message(params, Botan::SPAKE2::PeerId::PeerB, rng(), std::move(b_state), a_msg);
 
             result.test_eq("Peers produced the same shared secret", a_ss, b_ss);
          }

@@ -18,10 +18,23 @@ namespace Botan {
 
 class RandomNumberGenerator;
 
+/*
+* SPAKE2 (RFC 9382) Protocol Context
+*
+* This implementation of SPAKE2 requires asymmetric exchange, ie that
+* each party knows if it is A or B.
+*
+* The key confirmation step is omitted; it is assumed that further
+* uses of the shared secret will confirm the key. The shared secret is
+* equivalent to Hash(TT) in RFC 9382 so it is possible to implement
+* RFC 9382 conformant key confirmation if necessary.
+*/
+namespace SPAKE2 {
+
 /**
 * Identifies which peer we are in the protocol
 */
-enum class SPAKE2_PeerId {
+enum class PeerId {
    PeerA,
    PeerB,
 };
@@ -37,7 +50,7 @@ enum class SPAKE2_PeerId {
 * equivalent to Hash(TT) in RFC 9382 so it is possible to implement
 * RFC 9382 conformant key confirmation if necessary.
 */
-class BOTAN_PUBLIC_API(3, 7) SPAKE2_Parameters final {
+class BOTAN_PUBLIC_API(3, 7) Parameters final {
    public:
       /**
       * RFC 9382 compatible SPAKE2 configuration
@@ -64,13 +77,13 @@ class BOTAN_PUBLIC_API(3, 7) SPAKE2_Parameters final {
       * @param hash the hash function to use (SHA-512 highly recommended)
       * @param per_user_params if true then per-user N/M are used
       */
-      SPAKE2_Parameters(const EC_Group& group,
-                        std::string_view shared_secret,
-                        std::span<const uint8_t> a_identity = {},
-                        std::span<const uint8_t> b_identity = {},
-                        std::span<const uint8_t> context = {},
-                        std::string_view hash = "SHA-512",
-                        bool per_user_params = true);
+      Parameters(const EC_Group& group,
+                 std::string_view shared_secret,
+                 std::span<const uint8_t> a_identity = {},
+                 std::span<const uint8_t> b_identity = {},
+                 std::span<const uint8_t> context = {},
+                 std::string_view hash = "SHA-512",
+                 bool per_user_params = true);
 
       /**
       * RFC 9382 compatible SPAKE2 configuration
@@ -98,13 +111,13 @@ class BOTAN_PUBLIC_API(3, 7) SPAKE2_Parameters final {
       * @param hash the hash function to use (SHA-512 highly recommended)
       * @param per_user_params if true then per-user N/M are used
       */
-      SPAKE2_Parameters(const EC_Group& group,
-                        const EC_Scalar& shared_secret,
-                        std::span<const uint8_t> a_identity = {},
-                        std::span<const uint8_t> b_identity = {},
-                        std::span<const uint8_t> context = {},
-                        std::string_view hash = "SHA-512",
-                        bool per_user_params = true);
+      Parameters(const EC_Group& group,
+                 const EC_Scalar& shared_secret,
+                 std::span<const uint8_t> a_identity = {},
+                 std::span<const uint8_t> b_identity = {},
+                 std::span<const uint8_t> context = {},
+                 std::string_view hash = "SHA-512",
+                 bool per_user_params = true);
 
       /**
       * Return the default mapping from a shared secret (plus identifiers) to
@@ -145,54 +158,39 @@ class BOTAN_PUBLIC_API(3, 7) SPAKE2_Parameters final {
       std::vector<uint8_t> m_b_identity;
 };
 
-/*
-* SPAKE2 (RFC 9382) Protocol Context
-*
-* This implementation of SPAKE2 requires asymmetric exchange, ie that
-* each party knows if it is A or B.
-*
-* The key confirmation step is omitted; it is assumed that further
-* uses of the shared secret will confirm the key. The shared secret is
-* equivalent to Hash(TT) in RFC 9382 so it is possible to implement
-* RFC 9382 conformant key confirmation if necessary.
-*/
-class BOTAN_PUBLIC_API(3, 7) SPAKE2_Context final {
-   public:
-      SPAKE2_Context(SPAKE2_PeerId whoami, const SPAKE2_Parameters& params, RandomNumberGenerator& rng) :
-            m_rng(rng), m_whoami(whoami), m_params(params) {}
+struct Internal;
 
-      struct Internal;
+struct BOTAN_PUBLIC_API(3, 7) State {
+      State(std::unique_ptr<Internal> i);
 
-      struct State {
-            State(std::unique_ptr<Internal> i);
+      ~State();
+      State(const State&) = delete;
+      State& operator=(const State&) = delete;
+      State(State&&) noexcept;
+      State& operator=(State&&) noexcept;
 
-            ~State();
-            State(const State&) = delete;
-            State& operator=(const State&) = delete;
-            State(State&&) noexcept;
-            State& operator=(State&&) noexcept;
-
-            std::unique_ptr<Internal> internal;  // NOLINT(misc-non-private-member-*)
-      };
-
-      /**
-      * Generate a message for the peer. This can be called only once.
-      */
-      std::pair<std::vector<uint8_t>, State> generate_message();
-
-      /**
-      * Consume the message from the peer and return the shared secret.
-      *
-      * The context should not be used anymore after this point
-      */
-      secure_vector<uint8_t> process_message(State state, std::span<const uint8_t> peer_message);
-
-   private:
-      RandomNumberGenerator& m_rng;
-      SPAKE2_PeerId m_whoami;
-      SPAKE2_Parameters m_params;
+      std::unique_ptr<Internal> internal;  // NOLINT(misc-non-private-member-*)
 };
 
+/**
+* Generate a message for the peer.
+*/
+BOTAN_PUBLIC_API(3, 7)
+std::pair<std::vector<uint8_t>, State> generate_message(const Parameters& params,
+                                                        PeerId whoami,
+                                                        RandomNumberGenerator& rng);
+
+/**
+* Consume the message from the peer and return the shared secret.
+*/
+BOTAN_PUBLIC_API(3, 7)
+secure_vector<uint8_t> process_message(const Parameters& params,
+                                       PeerId whoami,
+                                       RandomNumberGenerator& rng,
+                                       State state,
+                                       std::span<const uint8_t> peer_message);
+
+}  // namespace SPAKE2
 }  // namespace Botan
 
 #endif

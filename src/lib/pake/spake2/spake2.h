@@ -128,22 +128,6 @@ class BOTAN_PUBLIC_API(3, 7) SPAKE2_Parameters final {
 
       const EC_AffinePoint& spake2_n() const { return m_params.second; }
 
-      const EC_AffinePoint& spake2_our_pt(SPAKE2_PeerId whoami) const {
-         if(whoami == SPAKE2_PeerId::PeerA) {
-            return m_params.first;  // M
-         } else {
-            return m_params.second;  // N
-         }
-      }
-
-      const EC_AffinePoint& spake2_their_pt(SPAKE2_PeerId whoami) const {
-         if(whoami == SPAKE2_PeerId::PeerA) {
-            return m_params.second;  // N
-         } else {
-            return m_params.first;  // M
-         }
-      }
-
       const EC_Scalar& spake2_w() const { return m_w; }
 
       const std::string& hash_function() const { return m_hash_fn; }
@@ -177,23 +161,36 @@ class BOTAN_PUBLIC_API(3, 7) SPAKE2_Context final {
       SPAKE2_Context(SPAKE2_PeerId whoami, const SPAKE2_Parameters& params, RandomNumberGenerator& rng) :
             m_rng(rng), m_whoami(whoami), m_params(params) {}
 
+      struct Internal;
+
+      struct State {
+            State(std::unique_ptr<Internal> i);
+
+            ~State();
+            State(const State&) = delete;
+            State& operator=(const State&) = delete;
+            State(State&&) noexcept;
+            State& operator=(State&&) noexcept;
+
+            std::unique_ptr<Internal> internal;  // NOLINT(misc-non-private-member-*)
+      };
+
       /**
       * Generate a message for the peer. This can be called only once.
       */
-      std::vector<uint8_t> generate_message();
+      std::pair<std::vector<uint8_t>, State> generate_message();
 
       /**
       * Consume the message from the peer and return the shared secret.
       *
       * The context should not be used anymore after this point
       */
-      secure_vector<uint8_t> process_message(std::span<const uint8_t> peer_message);
+      secure_vector<uint8_t> process_message(State state, std::span<const uint8_t> peer_message);
 
    private:
       RandomNumberGenerator& m_rng;
       SPAKE2_PeerId m_whoami;
       SPAKE2_Parameters m_params;
-      std::optional<std::pair<std::vector<uint8_t>, EC_Scalar>> m_our_message;
 };
 
 }  // namespace Botan

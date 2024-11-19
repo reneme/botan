@@ -37,17 +37,17 @@ class SPAKE2_KAT_Tests final : public Text_Based_Test {
          Fixed_Output_RNG x_rng(rng());
          x_rng.add_entropy(vars.get_req_bin("X"));
          Botan::SPAKE2_Context a_ctx(Botan::SPAKE2_PeerId::PeerA, params, x_rng);
-         const auto a_msg = a_ctx.generate_message();
+         auto [a_msg, a_state] = a_ctx.generate_message();
 
          Fixed_Output_RNG y_rng(rng());
          y_rng.add_entropy(vars.get_req_bin("Y"));
          Botan::SPAKE2_Context b_ctx(Botan::SPAKE2_PeerId::PeerB, params, y_rng);
-         const auto b_msg = b_ctx.generate_message();
+         auto [b_msg, b_state] = b_ctx.generate_message();
 
-         const auto a_ss = a_ctx.process_message(b_msg);
+         const auto a_ss = a_ctx.process_message(std::move(a_state), b_msg);
          result.test_eq("Shared secret A matches", a_ss, exp_ss);
 
-         const auto b_ss = b_ctx.process_message(a_msg);
+         const auto b_ss = b_ctx.process_message(std::move(b_state), a_msg);
          result.test_eq("Shared secret B matches", b_ss, exp_ss);
 
          return result;
@@ -89,13 +89,13 @@ class SPAKE2_RT_Tests final : public Text_Based_Test {
             Botan::SPAKE2_Parameters params(group, w, a_id, b_id, {}, hash_fn, per_user_params);
 
             Botan::SPAKE2_Context a_ctx(Botan::SPAKE2_PeerId::PeerA, params, rng());
-            const auto a_msg = a_ctx.generate_message();
+            auto [a_msg, a_state] = a_ctx.generate_message();
 
             Botan::SPAKE2_Context b_ctx(Botan::SPAKE2_PeerId::PeerB, params, rng());
-            const auto b_msg = b_ctx.generate_message();
+            auto [b_msg, b_state] = b_ctx.generate_message();
 
-            const auto a_ss = a_ctx.process_message(b_msg);
-            const auto b_ss = b_ctx.process_message(a_msg);
+            const auto a_ss = a_ctx.process_message(std::move(a_state), b_msg);
+            const auto b_ss = b_ctx.process_message(std::move(b_state), a_msg);
 
             result.test_eq("Peers produced the same shared secret", a_ss, b_ss);
          }

@@ -16,4 +16,5 @@ argon2
 hkdf
 hmac
 sha2_64
+ec_group
 </requires>

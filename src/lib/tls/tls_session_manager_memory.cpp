@@ -39,7 +39,15 @@ void Session_Manager_In_Memory::store(const Session& session, const Session_Hand
 
    // Generate a random session ID if the peer did not provide one. Note that
    // this ID is just for internal use and won't be returned on ::find().
-   const auto [itr, inserted] = m_sessions.emplace(handle.id().value_or(m_rng->random_vec<Session_ID>(32)),
+   auto get_id_or_random = [&]() -> Session_ID {
+      if(auto the_id = handle.id()) {
+         return the_id.value();
+      } else {
+         return m_rng->random_vec<Session_ID>(32);
+      }
+   };
+
+   const auto [itr, inserted] = m_sessions.emplace(get_id_or_random(),
                                                    Session_with_Handle{
                                                       .session = session,
                                                       .handle = handle,

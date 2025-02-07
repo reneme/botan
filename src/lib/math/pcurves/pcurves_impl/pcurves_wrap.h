@@ -253,7 +253,12 @@ class PrimeOrderCurveImpl final : public PrimeOrderCurve {
                                    std::span<const uint8_t> input,
                                    std::span<const uint8_t> domain_sep) const override {
          if constexpr(C::ValidForSswuHash) {
+#if defined(BOTAN_HAS_XMD)
             return stash(hash_to_curve_sswu<C, false>(hash, input, domain_sep));
+#else
+            BOTAN_UNUSED(hash, input, domain_sep);
+            throw Not_Implemented("Hash to curve not available due to missing XMD");
+#endif
          } else {
             throw Not_Implemented("Hash to curve is not implemented for this curve");
          }
@@ -263,7 +268,12 @@ class PrimeOrderCurveImpl final : public PrimeOrderCurve {
                                        std::span<const uint8_t> input,
                                        std::span<const uint8_t> domain_sep) const override {
          if constexpr(C::ValidForSswuHash) {
+#if defined(BOTAN_HAS_XMD)
             return stash(hash_to_curve_sswu<C, true>(hash, input, domain_sep));
+#else
+            BOTAN_UNUSED(hash, input, domain_sep);
+            throw Not_Implemented("Hash to curve not available due to missing XMD");
+#endif
          } else {
             throw Not_Implemented("Hash to curve is not implemented for this curve");
          }

@@ -12,6 +12,7 @@ lang_binary_linker_flags "-bbigtoc"
 
 shared_flags "-fPIC"
 lang_flags "-std=c++20"
+lang_flags "-std=c++17"
 
 visibility_build_flags "-fvisibility=hidden"
 visibility_attribute '__attribute__((visibility("default")))'

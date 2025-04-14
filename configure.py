@@ -456,6 +456,8 @@ def process_command_line(args):
 
     build_group.add_option('--enable-sanitizers', metavar='SAN', default='',
                            help='enable specific sanitizers')
+    build_group.add_option('--cpp17-compatibility-mode', action='store_true', default=False,
+                           help='restricted C++17 compatibility mode')
 
     add_with_without_pair(build_group, 'stack-protector', None, 'disable stack smashing protections')
 
@@ -1252,6 +1254,7 @@ class CompilerInfo(InfoObject):
                 'stack_protector_flags': '',
                 'shared_flags': '',
                 'lang_flags': '',
+                'legacy_lang_flags': '',
                 'lang_binary_linker_flags': '',
                 'warning_flags': '',
                 'maintainer_warning_flags': '',
@@ -1286,6 +1289,7 @@ class CompilerInfo(InfoObject):
         self.debug_info_flags = lex.debug_info_flags
         self.isa_flags = lex.isa_flags
         self.lang_flags = lex.lang_flags
+        self.legacy_lang_flags = lex.legacy_lang_flags
         self.lang_binary_linker_flags = lex.lang_binary_linker_flags
         self.lib_flags = lex.lib_flags
         self.linker_name = lex.linker_name
@@ -1507,8 +1511,8 @@ class CompilerInfo(InfoObject):
 
         return (' '.join(gen_flags())).strip()
 
-    def cc_lang_flags(self):
-        return self.lang_flags
+    def cc_lang_flags(self, options):
+        return self.lang_flags if not options.cpp17_compatibility_mode else self.legacy_lang_flags
 
     def cc_lang_binary_linker_flags(self):
         return self.lang_binary_linker_flags
@@ -2281,7 +2285,7 @@ def create_template_vars(source_paths, build_paths, options, modules, disabled_m
         'dash_o': cc.output_to_object,
         'dash_c': cc.compile_flags,
 
-        'cc_lang_flags': cc.cc_lang_flags(),
+        'cc_lang_flags': cc.cc_lang_flags(options),
         'cc_lang_binary_linker_flags': cc.cc_lang_binary_linker_flags(),
         'os_feature_macros': osinfo.macros(cc),
         'cc_sysroot': sysroot_option(),

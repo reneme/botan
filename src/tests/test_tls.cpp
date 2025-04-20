@@ -250,7 +250,8 @@ class TLS_Null_Tests final : public Text_Based_Test {
                            const std::vector<uint8_t>& message,
                            const std::vector<uint8_t>& expected_tls_fragment) {
          auto mac = Botan::MessageAuthenticationCode::create_or_throw("HMAC(" + hash + ")");
-         Botan::TLS::TLS_NULL_HMAC_AEAD_Encryption tls_null_encrypt(std::move(mac), mac->output_length());
+         const auto mac_outlen = mac->output_length();
+         Botan::TLS::TLS_NULL_HMAC_AEAD_Encryption tls_null_encrypt(std::move(mac), mac_outlen);
 
          tls_null_encrypt.set_key(key);
          tls_null_encrypt.set_associated_data(associated_data);
@@ -269,7 +270,8 @@ class TLS_Null_Tests final : public Text_Based_Test {
                            const std::vector<uint8_t>& tls_fragment,
                            const std::string& header) {
          auto mac = Botan::MessageAuthenticationCode::create_or_throw("HMAC(" + hash + ")");
-         Botan::TLS::TLS_NULL_HMAC_AEAD_Decryption tls_null_decrypt(std::move(mac), mac->output_length());
+         const auto mac_outlen = mac->output_length();
+         Botan::TLS::TLS_NULL_HMAC_AEAD_Decryption tls_null_decrypt(std::move(mac), mac_outlen);
 
          tls_null_decrypt.set_key(key);
          tls_null_decrypt.set_associated_data(associated_data);

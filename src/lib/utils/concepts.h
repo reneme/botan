@@ -9,6 +9,12 @@
 #ifndef BOTAN_CONCEPTS_H_
 #define BOTAN_CONCEPTS_H_
 
+#include <botan/build.h>
+
+#if !defined(BOTAN_CPP17_COMPATIBILITY_MODE)
+
+#define BOTAN_CONCEPT(concept) concept
+
 #include <botan/exceptn.h>
 
 #include <concepts>
@@ -227,5 +233,11 @@ concept strong_type_with_capability = T::template has_capability<Capability>();
 }  // namespace concepts
 
 }  // namespace Botan
+
+#else  // BOTAN_CPP17_COMPATIBILITY_MODE
+
+#define BOTAN_CONCEPT(concept) typename
+
+#endif
 
 #endif

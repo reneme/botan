@@ -22,7 +22,7 @@
 namespace Botan {
 
 template <typename T>
-#if !defined(_ITERATOR_DEBUG_LEVEL) || _ITERATOR_DEBUG_LEVEL == 0
+#if (!defined(_ITERATOR_DEBUG_LEVEL) || _ITERATOR_DEBUG_LEVEL == 0) && !defined(BOTAN_CPP17_COMPATIBILITY_MODE)
 /*
   * Assert exists to prevent someone from doing something that will
   * probably crash anyway (like secure_vector<non_POD_t> where ~non_POD_t

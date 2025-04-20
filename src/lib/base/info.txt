@@ -15,3 +15,11 @@ hex
 rng
 utils
 </requires>
+
+<header:external>
+span.hpp
+</header:external>
+
+<header:public>
+span.h
+</header:public>

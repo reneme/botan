@@ -2345,6 +2345,7 @@ def create_template_vars(source_paths, build_paths, options, modules, disabled_m
         'fuzzer_mode': options.unsafe_fuzzer_mode,
         'building_fuzzers': options.build_fuzzers,
         'fuzzer_type': options.build_fuzzers.upper() if options.build_fuzzers else '',
+        'cpp17_compatibility_mode': options.cpp17_compatibility_mode,
 
         'with_valgrind': options.with_valgrind,
         'with_debug_asserts': options.with_debug_asserts,

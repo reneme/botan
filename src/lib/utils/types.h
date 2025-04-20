@@ -29,7 +29,12 @@
    #define BOTAN_CPLUSPLUS __cplusplus
 #endif
 
-#if BOTAN_CPLUSPLUS < 202002L
+
+#if defined(BOTAN_CPP17_COMPATIBILITY_MODE) && BOTAN_CPLUSPLUS < 201703L
+   #error "Botan 3.x requires at least C++17 in compatibility mode"
+#endif
+
+#if !defined(BOTAN_CPP17_COMPATIBILITY_MODE) && BOTAN_CPLUSPLUS < 202002L
    #error "Botan 3.x requires at least C++20"
 #endif
 

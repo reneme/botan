@@ -11,10 +11,10 @@
 #include <botan/assert.h>
 #include <botan/concepts.h>
 #include <botan/types.h>
+#include <botan/span.h>
 #include <array>
 #include <cstring>
 #include <ranges>
-#include <span>
 #include <type_traits>
 #include <vector>
 

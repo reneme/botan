@@ -12,11 +12,11 @@
 #include <botan/concepts.h>
 #include <botan/exceptn.h>
 #include <botan/secmem.h>
+#include <botan/span.h>
 
 #include <array>
 #include <chrono>
 #include <concepts>
-#include <span>
 #include <string>
 #include <type_traits>
 

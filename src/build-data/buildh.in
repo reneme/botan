@@ -104,6 +104,14 @@
 #define BOTAN_ENABLE_EXPERIMENTAL_FEATURES
 %{endif}
 
+%{if cpp17_compatibility_mode}
+/**
+ * Enable C++17 compatibility mode. Only select parts of the library can be
+ * build in this mode.
+ */
+#define BOTAN_CPP17_COMPATIBILITY_MODE
+%{endif}
+
 #ifndef BOTAN_DLL
   #define BOTAN_DLL %{visibility_attribute}
 #endif

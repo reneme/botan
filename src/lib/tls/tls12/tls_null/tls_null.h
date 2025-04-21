@@ -52,10 +52,6 @@ class BOTAN_TEST_API TLS_NULL_HMAC_AEAD_Mode : public AEAD_Mode {
          return *m_mac;
       }
 
-      std::vector<uint8_t>& assoc_data() { return m_ad; }
-
-      secure_vector<uint8_t>& msg() { return m_msg; }
-
    private:
       void start_msg(const uint8_t nonce[], size_t nonce_len) final;
       size_t process_msg(uint8_t buf[], size_t sz) final;
@@ -66,10 +62,8 @@ class BOTAN_TEST_API TLS_NULL_HMAC_AEAD_Mode : public AEAD_Mode {
       size_t m_mac_keylen;
       size_t m_tag_size;
 
+      secure_vector<uint8_t> m_key;
       std::unique_ptr<MessageAuthenticationCode> m_mac;
-
-      std::vector<uint8_t> m_ad;
-      secure_vector<uint8_t> m_msg;
 };
 
 /**

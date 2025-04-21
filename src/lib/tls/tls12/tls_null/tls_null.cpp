@@ -22,13 +22,13 @@ TLS_NULL_HMAC_AEAD_Mode::TLS_NULL_HMAC_AEAD_Mode(std::unique_ptr<MessageAuthenti
       m_mac_name(mac->name()), m_mac_keylen(mac_keylen), m_tag_size(mac->output_length()), m_mac(std::move(mac)){};
 
 void TLS_NULL_HMAC_AEAD_Mode::clear() {
+   m_key.clear();
    mac().clear();
-   reset();
 }
 
 void TLS_NULL_HMAC_AEAD_Mode::reset() {
-   m_ad.clear();
-   m_msg.clear();
+   BOTAN_STATE_CHECK(!m_key.empty());
+   mac().set_key(m_key);
 }
 
 std::string TLS_NULL_HMAC_AEAD_Mode::name() const {
@@ -59,7 +59,8 @@ void TLS_NULL_HMAC_AEAD_Mode::key_schedule(std::span<const uint8_t> key) {
    if(key.size() != m_mac_keylen) {
       throw Invalid_Key_Length(name(), key.size());
    }
-   mac().set_key(key);
+   m_key.assign(key.begin(), key.end());
+   reset();
 }
 
 void TLS_NULL_HMAC_AEAD_Mode::start_msg(const uint8_t nonce[], size_t nonce_len) {
@@ -68,12 +69,11 @@ void TLS_NULL_HMAC_AEAD_Mode::start_msg(const uint8_t nonce[], size_t nonce_len)
    if(!valid_nonce_length(nonce_len)) {
       throw Invalid_IV_Length(name(), nonce_len);
    }
-   m_msg.clear();
 }
 
 size_t TLS_NULL_HMAC_AEAD_Mode::process_msg(uint8_t buf[], size_t sz) {
-   m_msg.insert(m_msg.end(), buf, buf + sz);
-   return 0;
+   mac().update(buf, sz);
+   return sz;
 }
 
 void TLS_NULL_HMAC_AEAD_Mode::set_associated_data_n(size_t idx, std::span<const uint8_t> ad) {
@@ -81,7 +81,7 @@ void TLS_NULL_HMAC_AEAD_Mode::set_associated_data_n(size_t idx, std::span<const 
    if(ad.size() != 13) {
       throw Invalid_Argument("Invalid TLS AEAD associated data length");
    }
-   m_ad.assign(ad.begin(), ad.end());
+   mac().update(ad);
 }
 
 void TLS_NULL_HMAC_AEAD_Encryption::set_associated_data_n(size_t idx, std::span<const uint8_t> ad) {
@@ -93,14 +93,9 @@ size_t TLS_NULL_HMAC_AEAD_Encryption::output_length(size_t input_length) const {
 }
 
 void TLS_NULL_HMAC_AEAD_Encryption::finish_msg(secure_vector<uint8_t>& buffer, size_t offset) {
-   update(buffer, offset);
-   buffer.resize(offset);  // truncate, leaving just header
-   buffer.insert(buffer.end(), msg().begin(), msg().end());
-
-   mac().update(assoc_data());
-   mac().update(msg().data(), msg().size());
+   process(std::span{buffer}.subspan(offset));
    buffer.resize(buffer.size() + tag_size());
-   mac().final(&buffer[buffer.size() - tag_size()]);
+   mac().final(std::span{buffer}.last(tag_size()));
 }
 
 size_t TLS_NULL_HMAC_AEAD_Decryption::output_length(size_t input_length) const {
@@ -108,31 +103,18 @@ size_t TLS_NULL_HMAC_AEAD_Decryption::output_length(size_t input_length) const {
 }
 
 void TLS_NULL_HMAC_AEAD_Decryption::finish_msg(secure_vector<uint8_t>& buffer, size_t offset) {
-   update(buffer, offset);
-   buffer.resize(offset);
+   BOTAN_ARG_CHECK(buffer.size() >= tag_size() + offset,
+                   "TLS_NULL_HMAC_AEAD_Decryption needs at least tag_size() bytes in final buffer");
+   const auto data_and_tag = std::span{buffer}.subspan(offset);
+   const auto data = data_and_tag.first(data_and_tag.size() - tag_size());
+   const auto tag = data_and_tag.subspan(data.size());
 
-   const size_t record_len = msg().size();
-   uint8_t* record_contents = msg().data();
-
-   if(record_len < tag_size()) {
+   process(data);
+   if(!mac().verify_mac(tag)) {
       throw TLS_Exception(Alert::BadRecordMac, "Message authentication failure");
    }
 
-   const size_t enc_size = record_len - tag_size();
-
-   mac().update(assoc_data());
-   mac().update(record_contents, enc_size);
-
-   std::vector<uint8_t> mac_buf(tag_size());
-   mac().final(mac_buf.data());
-
-   const bool mac_ok = constant_time_compare(&record_contents[enc_size], mac_buf.data(), tag_size());
-
-   if(!mac_ok) {
-      throw TLS_Exception(Alert::BadRecordMac, "Message authentication failure");
-   }
-
-   buffer.insert(buffer.end(), record_contents, record_contents + enc_size);
+   buffer.resize(buffer.size() - tag_size());
 }
 }  // namespace TLS
 

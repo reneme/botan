@@ -57,8 +57,9 @@ BOTAN_PUBLIC_API(2, 0) void secure_scrub_memory(void* ptr, size_t n);
 *
 * @param data  the data region to be scrubbed
 */
-void secure_scrub_memory(ranges::contiguous_output_range auto&& data) {
-   secure_scrub_memory(std::ranges::data(data), ranges::size_bytes(data));
+template<BOTAN_CONTIGUOUS_RANGE T>
+void secure_scrub_memory(T&& data) {
+   secure_scrub_memory(data.begin(), std::span{data}.size_bytes());
 }
 
 /**
@@ -127,11 +128,13 @@ inline constexpr void clear_mem(T* ptr, size_t n) {
 *
 * @param mem a contiguous range of Ts to zero
 */
-template <ranges::contiguous_output_range R>
-inline constexpr void clear_mem(R&& mem)  // NOLINT(*-missing-std-forward)
+template <BOTAN_CONTIGUOUS_OUTPUT_RANGE R>
+inline constexpr void clear_mem(R&& mem)// NOLINT(*-missing-std-forward)
+#if !defined(BOTAN_CPP17_COMPATIBILITY_MODE)
    requires std::is_trivially_copyable_v<std::ranges::range_value_t<R>>
+#endif
 {
-   clear_bytes(std::ranges::data(mem), ranges::size_bytes(mem));
+   clear_bytes(mem.data(), std::span{mem}.size_bytes());
 }
 
 /**
@@ -141,7 +144,9 @@ inline constexpr void clear_mem(R&& mem)  // NOLINT(*-missing-std-forward)
 * @param n the number of elements of in/out
 */
 template <typename T>
+#if !defined(BOTAN_CPP17_COMPATIBILITY_MODE)
    requires std::is_trivial_v<std::decay_t<T>>
+#endif
 inline constexpr void copy_mem(T* out, const T* in, size_t n) {
    BOTAN_ASSERT_IMPLICATION(n > 0, in != nullptr && out != nullptr, "If n > 0 then args are not null");
 
@@ -155,15 +160,17 @@ inline constexpr void copy_mem(T* out, const T* in, size_t n) {
 * @param out the destination array
 * @param in the source array
 */
-template <ranges::contiguous_output_range OutR, ranges::contiguous_range InR>
+template <BOTAN_CONTIGUOUS_OUTPUT_RANGE OutR, BOTAN_CONTIGUOUS_RANGE InR>
+#if !defined(BOTAN_CPP17_COMPATIBILITY_MODE)
    requires std::is_same_v<std::ranges::range_value_t<OutR>, std::ranges::range_value_t<InR>> &&
             std::is_trivially_copyable_v<std::ranges::range_value_t<InR>>
+#endif
 inline constexpr void copy_mem(OutR&& out /* NOLINT(*-std-forward) */, const InR& in) {
    ranges::assert_equal_byte_lengths(out, in);
    if(std::is_constant_evaluated()) {
-      std::copy(std::ranges::begin(in), std::ranges::end(in), std::ranges::begin(out));
-   } else if(ranges::size_bytes(out) > 0) {
-      std::memmove(std::ranges::data(out), std::ranges::data(in), ranges::size_bytes(out));
+      std::copy(in.begin(), in.end(), out.begin());
+   } else if(std::span{out}.size_bytes() > 0) {
+      std::memmove(out.data(), in.data(), std::span{out}.size_bytes());
    }
 }
 
@@ -171,21 +178,25 @@ inline constexpr void copy_mem(OutR&& out /* NOLINT(*-std-forward) */, const InR
  * Copy a range of a trivially copyable type into another range of trivially
  * copyable type of matching byte length.
  */
-template <ranges::contiguous_output_range ToR, ranges::contiguous_range FromR>
+template <BOTAN_CONTIGUOUS_OUTPUT_RANGE ToR, BOTAN_CONTIGUOUS_RANGE FromR>
+#if !defined(BOTAN_CPP17_COMPATIBILITY_MODE)
    requires std::is_trivially_copyable_v<std::ranges::range_value_t<FromR>> &&
             std::is_trivially_copyable_v<std::ranges::range_value_t<ToR>>
+#endif
 inline constexpr void typecast_copy(ToR&& out /* NOLINT(*-std-forward) */, const FromR& in) {
    ranges::assert_equal_byte_lengths(out, in);
-   std::memcpy(std::ranges::data(out), std::ranges::data(in), ranges::size_bytes(out));
+   std::memcpy(out.data(), in.data(), std::span{out}.size_bytes());
 }
 
 /**
  * Copy a range of trivially copyable type into an instance of trivially
  * copyable type with matching length.
  */
-template <typename ToT, ranges::contiguous_range FromR>
+template <typename ToT, BOTAN_CONTIGUOUS_RANGE FromR>
+#if !defined(BOTAN_CPP17_COMPATIBILITY_MODE)
    requires std::is_trivially_copyable_v<std::ranges::range_value_t<FromR>> && std::is_trivially_copyable_v<ToT> &&
             (!std::ranges::range<ToT>)
+#endif
 inline constexpr void typecast_copy(ToT& out, const FromR& in) {
    typecast_copy(std::span<ToT, 1>(&out, 1), in);
 }
@@ -194,9 +205,11 @@ inline constexpr void typecast_copy(ToT& out, const FromR& in) {
  * Copy an instance of trivially copyable type into a range of trivially
  * copyable type with matching length.
  */
-template <ranges::contiguous_output_range ToR, typename FromT>
+template <BOTAN_CONTIGUOUS_OUTPUT_RANGE ToR, typename FromT>
+#if !defined(BOTAN_CPP17_COMPATIBILITY_MODE)
    requires std::is_trivially_copyable_v<FromT> &&
             (!std::ranges::range<FromT>) && std::is_trivially_copyable_v<std::ranges::range_value_t<ToR>>
+#endif
 inline constexpr void typecast_copy(ToR&& out /* NOLINT(*-std-forward) */, const FromT& in) {
    typecast_copy(out, std::span<const FromT, 1>(&in, 1));
 }
@@ -205,9 +218,11 @@ inline constexpr void typecast_copy(ToR&& out /* NOLINT(*-std-forward) */, const
  * Create a trivial type by bit-casting a range of trivially copyable type with
  * matching length into it.
  */
-template <typename ToT, ranges::contiguous_range FromR>
+template <typename ToT, BOTAN_CONTIGUOUS_RANGE FromR>
+#if !defined(BOTAN_CPP17_COMPATIBILITY_MODE)
    requires std::is_default_constructible_v<ToT> && std::is_trivially_copyable_v<ToT> &&
             std::is_trivially_copyable_v<std::ranges::range_value_t<FromR>>
+#endif
 inline constexpr ToT typecast_copy(const FromR& src) {
    ToT dst;
    typecast_copy(dst, src);
@@ -217,7 +232,9 @@ inline constexpr ToT typecast_copy(const FromR& src) {
 // TODO: deprecate and replace
 template <typename T>
 inline constexpr void typecast_copy(uint8_t out[], T in[], size_t N)
+#if !defined(BOTAN_CPP17_COMPATIBILITY_MODE)
    requires std::is_trivially_copyable_v<T>
+#endif
 {
    // asserts that *in and *out point to the correct amount of memory
    typecast_copy(std::span<uint8_t>(out, sizeof(T) * N), std::span<const T>(in, N));
@@ -226,7 +243,9 @@ inline constexpr void typecast_copy(uint8_t out[], T in[], size_t N)
 // TODO: deprecate and replace
 template <typename T>
 inline constexpr void typecast_copy(T out[], const uint8_t in[], size_t N)
+#if !defined(BOTAN_CPP17_COMPATIBILITY_MODE)
    requires std::is_trivial_v<T>
+#endif
 {
    // asserts that *in and *out point to the correct amount of memory
    typecast_copy(std::span<T>(out, N), std::span<const uint8_t>(in, N * sizeof(T)));
@@ -241,7 +260,9 @@ inline constexpr void typecast_copy(uint8_t out[], const T& in) {
 
 // TODO: deprecate and replace
 template <typename T>
+#if !defined(BOTAN_CPP17_COMPATIBILITY_MODE)
    requires std::is_trivial_v<std::decay_t<T>>
+#endif
 inline constexpr void typecast_copy(T& out, const uint8_t in[]) {
    // asserts that *in points to the correct amount of memory
    typecast_copy(out, std::span<const uint8_t, sizeof(T)>(in, sizeof(T)));
@@ -249,7 +270,9 @@ inline constexpr void typecast_copy(T& out, const uint8_t in[]) {
 
 // TODO: deprecate and replace
 template <typename To>
+#if !defined(BOTAN_CPP17_COMPATIBILITY_MODE)
    requires std::is_trivial_v<To>
+#endif
 inline constexpr To typecast_copy(const uint8_t src[]) noexcept {
    // asserts that *src points to the correct amount of memory
    return typecast_copy<To>(std::span<const uint8_t, sizeof(To)>(src, sizeof(To)));
@@ -337,8 +360,8 @@ size_t buffer_insert(std::vector<T, Alloc>& buf, size_t buf_offset, const std::v
 * @param out the input/output range
 * @param in the read-only input range
 */
-inline constexpr void xor_buf(ranges::contiguous_output_range<uint8_t> auto&& out,
-                              ranges::contiguous_range<uint8_t> auto&& in) {
+template<BOTAN_CONTIGUOUS_OUTPUT_BYTE_RANGE OutT, BOTAN_CONTIGUOUS_BYTE_RANGE InT>
+inline constexpr void xor_buf(OutT&& out, InT&& in) {
    ranges::assert_equal_byte_lengths(out, in);
 
    std::span<uint8_t> o(out);
@@ -367,9 +390,8 @@ inline constexpr void xor_buf(ranges::contiguous_output_range<uint8_t> auto&& ou
 * @param in1 the first input range
 * @param in2 the second input range
 */
-inline constexpr void xor_buf(ranges::contiguous_output_range<uint8_t> auto&& out,
-                              ranges::contiguous_range<uint8_t> auto&& in1,
-                              ranges::contiguous_range<uint8_t> auto&& in2) {
+template<BOTAN_CONTIGUOUS_OUTPUT_BYTE_RANGE OutT, BOTAN_CONTIGUOUS_BYTE_RANGE In1T, BOTAN_CONTIGUOUS_BYTE_RANGE In2T>
+inline constexpr void xor_buf(OutT&& out, In1T&& in1, In2T&& in2) {
    ranges::assert_equal_byte_lengths(out, in1, in2);
 
    std::span o{out};

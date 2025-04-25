@@ -10,17 +10,14 @@
 #define BOTAN_CONCEPTS_H_
 
 #include <botan/build.h>
+#include <botan/span.h>
+#include <botan/exceptn.h>
 
 #if !defined(BOTAN_CPP17_COMPATIBILITY_MODE)
-
-#define BOTAN_CONCEPT(concept) concept
-
-#include <botan/exceptn.h>
 
 #include <concepts>
 #include <iosfwd>
 #include <ranges>
-#include <span>
 #include <type_traits>
 
 namespace Botan {
@@ -234,9 +231,49 @@ concept strong_type_with_capability = T::template has_capability<Capability>();
 
 }  // namespace Botan
 
+#define BOTAN_RESIZABLE_BYTE_BUFFER Botan::concepts::resizable_byte_buffer
+#define BOTAN_CONTIGUOUS_OUTPUT_RANGE Botan::ranges::contiguous_output_range
+#define BOTAN_CONTIGUOUS_RANGE Botan::ranges::contiguous_range
+#define BOTAN_CONTIGUOUS_OUTPUT_BYTE_RANGE Botan::ranges::contiguous_output_range<uint8_t>
+#define BOTAN_CONTIGUOUS_BYTE_RANGE Botan::ranges::contiguous_range<uint8_t>
+
 #else  // BOTAN_CPP17_COMPATIBILITY_MODE
 
-#define BOTAN_CONCEPT(concept) typename
+#define BOTAN_RESIZABLE_BYTE_BUFFER typename
+#define BOTAN_CONTIGUOUS_OUTPUT_RANGE typename
+#define BOTAN_CONTIGUOUS_RANGE typename
+#define BOTAN_CONTIGUOUS_OUTPUT_BYTE_RANGE typename
+#define BOTAN_CONTIGUOUS_BYTE_RANGE typename
+
+namespace Botan::ranges {
+
+template <typename R0, typename... Rs>
+inline constexpr void assert_equal_byte_lengths(R0&& r0, Rs&&... rs)
+{
+   static_assert(sizeof...(Rs) > 0);
+
+   // TODO: for statically-sized ranges this could be checked at compile time,
+   //       just like in C++20 mode.
+
+   const auto expected_size = std::span{r0}.size_bytes();
+   const bool correct_size =
+      ((std::span{rs}.size_bytes() == expected_size) && ...);
+
+   if(!correct_size) {
+      throw Invalid_Argument("Memory regions did not have equal lengths");
+   }
+}
+
+}
+
+namespace std {
+
+constexpr bool is_constant_evaluated() {
+   // TODO: can this actually be implemented in C++17?
+   return false;
+}
+
+}
 
 #endif
 

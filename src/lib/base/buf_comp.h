@@ -10,7 +10,7 @@
 
 #include <botan/concepts.h>
 #include <botan/secmem.h>
-#include <span>
+#include <botan/span.h>
 #include <string_view>
 
 namespace Botan {
@@ -73,7 +73,7 @@ class BOTAN_PUBLIC_API(2, 0) Buffered_Computation /* NOLINT(*special-member-func
       * final result as a container of your choice.
       * @return a contiguous container holding the result
       */
-      template <concepts::resizable_byte_buffer T = secure_vector<uint8_t>>
+      template <BOTAN_RESIZABLE_BYTE_BUFFER T = secure_vector<uint8_t>>
       T final() {
          T output(output_length());
          final_result(output);
@@ -84,7 +84,7 @@ class BOTAN_PUBLIC_API(2, 0) Buffered_Computation /* NOLINT(*special-member-func
 
       void final(std::span<uint8_t> out);
 
-      template <concepts::resizable_byte_buffer T>
+      template <BOTAN_RESIZABLE_BYTE_BUFFER T>
       void final(T& out) {
          out.resize(output_length());
          final_result(out);
@@ -97,7 +97,7 @@ class BOTAN_PUBLIC_API(2, 0) Buffered_Computation /* NOLINT(*special-member-func
       * @param length the length of the byte array
       * @result the result of the call to final()
       */
-      template <concepts::resizable_byte_buffer T = secure_vector<uint8_t>>
+      template <BOTAN_RESIZABLE_BYTE_BUFFER T = secure_vector<uint8_t>>
       T process(const uint8_t in[], size_t length) {
          update(in, length);
          return final<T>();
@@ -109,7 +109,7 @@ class BOTAN_PUBLIC_API(2, 0) Buffered_Computation /* NOLINT(*special-member-func
       * @param in the input to process as a string
       * @result the result of the call to final()
       */
-      template <concepts::resizable_byte_buffer T = secure_vector<uint8_t>>
+      template <BOTAN_RESIZABLE_BYTE_BUFFER T = secure_vector<uint8_t>>
       T process(std::string_view in) {
          update(in);
          return final<T>();
@@ -121,7 +121,7 @@ class BOTAN_PUBLIC_API(2, 0) Buffered_Computation /* NOLINT(*special-member-func
       * @param in the input to process as a contiguous container
       * @result the result of the call to final()
       */
-      template <concepts::resizable_byte_buffer T = secure_vector<uint8_t>>
+      template <BOTAN_RESIZABLE_BYTE_BUFFER T = secure_vector<uint8_t>>
       T process(std::span<const uint8_t> in) {
          update(in);
          return final<T>();

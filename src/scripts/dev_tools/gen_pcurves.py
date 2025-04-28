@@ -14,6 +14,7 @@ from datetime import datetime
 import os
 import sys
 import errno
+from textwrap import dedent,indent
 from gen_ec_groups import curve_info
 from addchain import addchain_code
 
@@ -28,6 +29,15 @@ def find_params(name, curves):
 
     raise Exception("Could not find curve named '%s' (do you need to update ec_groups.txt?)" % (name))
 
+class OmitFirstLine:
+    def __init__(self):
+        self.first_line = True
+
+    def __call__(self, l):
+        r = not self.first_line
+        self.first_line = False
+        return r
+
 def main(args = None):
     if args is None:
         args = sys.argv
@@ -36,15 +46,15 @@ def main(args = None):
         print("Usage: %s <curve_name>" % (args[0]))
         return 1
 
-    curves = [c for c in curve_info(open('./src/build-data/ec_groups.txt'))]
+    with open('./src/build-data/ec_groups.txt', encoding='utf8') as ec_groups:
+        curves = list(curve_info(ec_groups))
 
     curve = args[1]
-    curve_uc = curve.upper()
     curve_params = find_params(curve, curves)
 
     mod_dir = './src/lib/math/pcurves/pcurves_%s' % (curve)
-
     info_path = os.path.join(mod_dir, 'info.txt')
+    impl_path = os.path.join(mod_dir, f'pcurves_{curve}.cpp')
 
     try:
         os.makedirs(mod_dir)
@@ -52,83 +62,78 @@ def main(args = None):
         if ex.errno != errno.EEXIST:
             raise
 
-    info_file = open(info_path, 'w')
+    with open(info_path, 'w', encoding='utf8') as info_file:
+        info_file.write(dedent(f"""\
+            <defines>
+            PCURVES_{curve.upper()} -> {datestamp()}
+            </defines>
 
-    info_file.write("""<defines>
-PCURVES_%s -> %d
-</defines>
+            <module_info>
+            name -> "PCurve {curve}"
+            </module_info>
 
-<module_info>
-name -> "PCurve %s"
-brief -> "%s"
-</module_info>
+            <requires>
+            pcurves_impl
+            </requires>
+            """))
 
-<requires>
-pcurves_impl
-</requires>
-""" % (curve_uc, datestamp(), curve, curve))
-    info_file.close()
+    with open(impl_path, 'w', encoding='utf8') as src_file:
+        # TODO if P is a Crandall number generate an appropriate Rep type
 
-    src_file = open(os.path.join(mod_dir, 'pcurves_%s.cpp' % (curve)), 'w')
+        addchain_fe2 = addchain_code(curve_params['P'] - 2, 0)
+        addchain_scalar = addchain_code(curve_params['N'], 0)
 
-    # TODO if P is a Crandall number generate an appropriate Rep type
+        src_file.write(dedent(f"""\
+            /*
+            * Botan is released under the Simplified BSD License (see license.txt)
+            */
 
-    indent = 9
-    addchain_fe2 = addchain_code(curve_params['P'] - 2, indent)
-    addchain_scalar = addchain_code(curve_params['N'], indent)
+            #include <botan/internal/pcurves_instance.h>
 
-    src_file.write("""/*
-* Botan is released under the Simplified BSD License (see license.txt)
-*/
+            #include <botan/internal/pcurves_wrap.h>
 
-#include <botan/internal/pcurves_instance.h>
+            namespace Botan::PCurve {{
 
-#include <botan/internal/pcurves_wrap.h>
+            namespace {{
 
-namespace Botan::PCurve {
+            namespace {curve} {{
 
-namespace {
+            // clang-format off
+            class Params final : public EllipticCurveParameters<
+               "{curve_params['P']:X}",
+               "{curve_params['A']:X}",
+               "{curve_params['B']:X}",
+               "{curve_params['N']:X}",
+               "{curve_params['X']:X}",
+               "{curve_params['Y']:X}"> {{
+            }};
+            // clang-format on
 
-namespace %s {
+            class Curve final : public EllipticCurve<Params> {{
+               // Return the square of the inverse of x
+               static constexpr FieldElement fe_invert2(const FieldElement& x) {{
+                  // Generated using https://github.com/mmcloughlin/addchain
+                  {indent(addchain_fe2, 18 * ' ', OmitFirstLine())}
+               }}
 
-// clang-format off
-class Params final : public EllipticCurveParameters<
-   "%X",
-   "%X",
-   "%X",
-   "%X",
-   "%X",
-   "%X"> {
-};
-// clang-format on
+               // Return the inverse of an integer modulo the order
+               static constexpr Scalar scalar_invert(const Scalar& x) {{
+                  // Generated using https://github.com/mmcloughlin/addchain
+                  {indent(addchain_scalar, 18 * ' ', OmitFirstLine())}
+               }}
+            }};
 
-class Curve final : public EllipticCurve<Params> {
-      // Return the square of the inverse of x
-      static constexpr FieldElement fe_invert2(const FieldElement& x) {
-         // Generated using https://github.com/mmcloughlin/addchain
-%s
-      }
+            }}  // namespace {curve}
 
-      // Return the inverse of an integer modulo the order
-      static constexpr Scalar scalar_invert(const Scalar& x) {
-         // Generated using https://github.com/mmcloughlin/addchain
-%s
-      }
+            }}  // namespace
 
-    };
+            std::shared_ptr<const PrimeOrderCurve> PCurveInstance::{curve}() {{
+               return PrimeOrderCurveImpl<{curve}::Curve>::instance();
+            }}
 
-}
+            }}  // namespace Botan::PCurve
+            """))
 
-}  // namespace
-
-std::shared_ptr<const PrimeOrderCurve> PCurveInstance::%s() {
-   return PrimeOrderCurveImpl<%s::Curve>::instance();
-}
-
-}  // namespace Botan::PCurve
-""" % (curve, curve_params['P'], curve_params['A'], curve_params['B'], curve_params['N'], curve_params['X'], curve_params['Y'], addchain_fe2, addchain_scalar, curve, curve))
-
-    src_file.close()
     return 0
 
 if __name__ == '__main__':

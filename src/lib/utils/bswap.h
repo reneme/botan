@@ -22,8 +22,8 @@ namespace Botan {
 /**
  * Swap the byte order of an unsigned integer
  */
-template <std::unsigned_integral T>
-   requires(sizeof(T) == 1 || sizeof(T) == 2 || sizeof(T) == 4 || sizeof(T) == 8)
+template <BOTAN_UNSIGNED_INTEGRAL T>
+BOTAN_REQUIRES(sizeof(T) == 1 || sizeof(T) == 2 || sizeof(T) == 4 || sizeof(T) == 8)
 inline constexpr T reverse_bytes(T x) {
    if constexpr(sizeof(T) == 1) {
       return x;

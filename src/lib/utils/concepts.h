@@ -264,9 +264,10 @@ concept strong_type_with_capability = T::template has_capability<Capability>();
    #define BOTAN_CONTIGUOUS_RANGE Botan::ranges::contiguous_range
    #define BOTAN_CONTIGUOUS_OUTPUT_BYTE_RANGE Botan::ranges::contiguous_output_range<uint8_t>
    #define BOTAN_CONTIGUOUS_BYTE_RANGE Botan::ranges::contiguous_range<uint8_t>
-   #define BOTAN_INTEGRAL = std::integral;
-   #define BOTAN_CONTAINER = Botan::concepts::container;
-   #define BOTAN_CONTIGUOUS_STRONG_TYPE = Botan::concepts::contiguous_strong_type;
+   #define BOTAN_INTEGRAL std::integral
+   #define BOTAN_UNSIGNED_INTEGRAL std::unsigned_integral
+   #define BOTAN_CONTAINER Botan::concepts::container
+   #define BOTAN_CONTIGUOUS_STRONG_TYPE Botan::concepts::contiguous_strong_type
 
 #else  // BOTAN_CPP17_COMPATIBILITY_MODE
 
@@ -279,6 +280,7 @@ concept strong_type_with_capability = T::template has_capability<Capability>();
    #define BOTAN_CONTIGUOUS_OUTPUT_BYTE_RANGE typename
    #define BOTAN_CONTIGUOUS_BYTE_RANGE typename
    #define BOTAN_INTEGRAL typename
+   #define BOTAN_UNSIGNED_INTEGRAL typename
    #define BOTAN_CONTAINER typename
    #define BOTAN_CONTIGUOUS_STRONG_TYPE typename
 

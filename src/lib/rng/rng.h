@@ -99,7 +99,7 @@ class BOTAN_PUBLIC_API(2, 0) RandomNumberGenerator {
       * Incorporate some additional data into the RNG state.
       */
       template <typename T>
-         requires std::is_standard_layout_v<T> && std::is_trivial_v<T>
+      BOTAN_REQUIRES(std::is_standard_layout_v<T>&& std::is_trivial_v<T>)
       void add_entropy_T(const T& t) {
          this->add_entropy(reinterpret_cast<const uint8_t*>(&t), sizeof(T));
       }
@@ -206,7 +206,7 @@ class BOTAN_PUBLIC_API(2, 0) RandomNumberGenerator {
       * @param  bytes number of random bytes to initialize the container with
       * @throws Exception if RNG or memory allocation fails
       */
-      template <concepts::resizable_byte_buffer T>
+      template <BOTAN_RESIZABLE_BYTE_BUFFER T>
       void random_vec(T& v, size_t bytes) {
          v.resize(bytes);
          random_vec(v);
@@ -220,8 +220,8 @@ class BOTAN_PUBLIC_API(2, 0) RandomNumberGenerator {
       * @return       a container of type T with @p bytes random bytes
       * @throws Exception if RNG or memory allocation fails
       */
-      template <concepts::resizable_byte_buffer T = secure_vector<uint8_t>>
-         requires std::default_initializable<T>
+      template <BOTAN_RESIZABLE_BYTE_BUFFER T = secure_vector<uint8_t>>
+      BOTAN_REQUIRES(std::default_initializable<T>)
       T random_vec(size_t bytes) {
          T result;
          random_vec(result, bytes);
@@ -292,8 +292,7 @@ typedef RandomNumberGenerator RNG;
 */
 class BOTAN_PUBLIC_API(2, 0) Hardware_RNG : public RandomNumberGenerator {
    public:
-      void clear() final { /* no way to clear state of hardware RNG */
-      }
+      void clear() final { /* no way to clear state of hardware RNG */ }
 };
 
 /**

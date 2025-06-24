@@ -9,7 +9,7 @@
 #define BOTAN_SYMKEY_H_
 
 #include <botan/secmem.h>
-#include <span>
+#include <botan/span.h>
 #include <string>
 
 namespace Botan {

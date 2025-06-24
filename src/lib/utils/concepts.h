@@ -268,6 +268,7 @@ concept strong_type_with_capability = T::template has_capability<Capability>();
    #define BOTAN_UNSIGNED_INTEGRAL std::unsigned_integral
    #define BOTAN_CONTAINER Botan::concepts::container
    #define BOTAN_CONTIGUOUS_STRONG_TYPE Botan::concepts::contiguous_strong_type
+   #define BOTAN_RESIZABLE_BYTE_BUFFER Botan::concepts::resizable_byte_buffer
 
 #else  // BOTAN_CPP17_COMPATIBILITY_MODE
 
@@ -283,6 +284,7 @@ concept strong_type_with_capability = T::template has_capability<Capability>();
    #define BOTAN_UNSIGNED_INTEGRAL typename
    #define BOTAN_CONTAINER typename
    #define BOTAN_CONTIGUOUS_STRONG_TYPE typename
+   #define BOTAN_RESIZABLE_BYTE_BUFFER typename
 
 namespace Botan::concepts {
 

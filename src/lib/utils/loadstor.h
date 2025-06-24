@@ -56,8 +56,10 @@
 
 namespace Botan {
 
+#if !defined(BOTAN_CPP17_COMPATIBILITY_MODE)
 static_assert(std::endian::native == std::endian::big || std::endian::native == std::endian::little,
               "Mixed endian systems are not supported");
+#endif
 
 /**
 * Byte extraction
@@ -76,9 +78,7 @@ inline constexpr uint8_t get_byte_var(size_t byte_num, T input) {
 * @return byte byte number B of input
 */
 template <size_t B, typename T>
-inline constexpr uint8_t get_byte(T input)
-   requires(B < sizeof(T))
-{
+inline constexpr uint8_t get_byte(T input) BOTAN_REQUIRES(B < sizeof(T)) {
    const size_t shift = ((~B) & (sizeof(T) - 1)) << 3;
    return static_cast<uint8_t>((input >> shift) & 0xFF);
 }
@@ -124,6 +124,8 @@ inline constexpr uint64_t make_uint64(
            (static_cast<uint64_t>(i3) << 32) | (static_cast<uint64_t>(i4) << 24) | (static_cast<uint64_t>(i5) << 16) |
            (static_cast<uint64_t>(i6) << 8) | (static_cast<uint64_t>(i7)));
 }
+
+#if !defined(BOTAN_CPP17_COMPATIBILITY_MODE)
 
 namespace detail {
 
@@ -796,6 +798,34 @@ inline void copy_out_le(std::span<uint8_t> out, const InR& in) {
       out[i] = get_byte_var(sizeof(T) - 1 - i, in_s.front());
    }
 }
+
+#else
+
+namespace detail {
+
+template <typename T, size_t... i>
+void to_be(T in, uint8_t out[], std::index_sequence<i...>) {
+   ((out[i] = get_byte<i>(in)), ...);
+}
+
+template <typename T, size_t... i>
+void to_le(T in, uint8_t out[], std::index_sequence<i...>) {
+   ((out[i] = get_byte<sizeof(T) - i - 1>(in)), ...);
+}
+
+}  // namespace detail
+
+template <typename T>
+constexpr void store_be(T in, uint8_t out[]) {
+   detail::to_be<T>(in, out, std::make_index_sequence<sizeof(T)>());
+}
+
+template <typename T>
+constexpr void store_le(T in, uint8_t out[]) {
+   detail::to_le<T>(in, out, std::make_index_sequence<sizeof(T)>());
+}
+
+#endif
 
 }  // namespace Botan
 

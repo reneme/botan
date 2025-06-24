@@ -13,12 +13,37 @@
 #include <botan/exceptn.h>
 #include <botan/span.h>
 
+#include <type_traits>
+
+namespace Botan {
+
+template <typename T, typename Tag, typename... Capabilities>
+class Strong;
+
+template <typename... Ts>
+struct is_strong_type : std::false_type {};
+
+template <typename... Ts>
+struct is_strong_type<Strong<Ts...>> : std::true_type {};
+
+template <typename... Ts>
+constexpr bool is_strong_type_v = is_strong_type<std::remove_const_t<Ts>...>::value;
+
+template <typename T0 = void, typename... Ts>
+struct all_same {
+      static constexpr bool value = (std::is_same_v<T0, Ts> && ... && true);
+};
+
+template <typename... Ts>
+static constexpr bool all_same_v = all_same<Ts...>::value;
+
+}  // namespace Botan
+
 #if !defined(BOTAN_CPP17_COMPATIBILITY_MODE)
 
    #include <concepts>
    #include <iosfwd>
    #include <ranges>
-   #include <type_traits>
 
 namespace Botan {
 
@@ -231,19 +256,31 @@ concept strong_type_with_capability = T::template has_capability<Capability>();
 
 }  // namespace Botan
 
+   #define BOTAN_REQUIRES(x) requires((x))
+   #define BOTAN_REQUIRES_SAME_AS(x, y) requires(std::same_as<x, y>)
+
    #define BOTAN_RESIZABLE_BYTE_BUFFER Botan::concepts::resizable_byte_buffer
    #define BOTAN_CONTIGUOUS_OUTPUT_RANGE Botan::ranges::contiguous_output_range
    #define BOTAN_CONTIGUOUS_RANGE Botan::ranges::contiguous_range
    #define BOTAN_CONTIGUOUS_OUTPUT_BYTE_RANGE Botan::ranges::contiguous_output_range<uint8_t>
    #define BOTAN_CONTIGUOUS_BYTE_RANGE Botan::ranges::contiguous_range<uint8_t>
+   #define BOTAN_INTEGRAL = std::integral;
+   #define BOTAN_CONTAINER = Botan::concepts::container;
+   #define BOTAN_CONTIGUOUS_STRONG_TYPE = Botan::concepts::contiguous_strong_type;
 
 #else  // BOTAN_CPP17_COMPATIBILITY_MODE
+
+   #define BOTAN_REQUIRES(x)
+   #define BOTAN_REQUIRES_SAME_AS(x, y)
 
    #define BOTAN_RESIZABLE_BYTE_BUFFER typename
    #define BOTAN_CONTIGUOUS_OUTPUT_RANGE typename
    #define BOTAN_CONTIGUOUS_RANGE typename
    #define BOTAN_CONTIGUOUS_OUTPUT_BYTE_RANGE typename
    #define BOTAN_CONTIGUOUS_BYTE_RANGE typename
+   #define BOTAN_INTEGRAL typename
+   #define BOTAN_CONTAINER typename
+   #define BOTAN_CONTIGUOUS_STRONG_TYPE typename
 
 namespace Botan::concepts {
 
@@ -251,7 +288,14 @@ template <typename, typename = void>
 struct has_begin_end : std::false_type {};
 
 template <typename T>
-struct has_begin_end<T, std::void_t<decltype(std::begin(std::declval<T&>())), decltype(std::end(std::declval<T&>()))>>
+struct has_begin_end<T, std::void_t<decltype(std::declval<T&>().begin()), decltype(std::declval<T&>().end())>>
+      : std::true_type {};
+
+template <typename, typename = void>
+struct has_cbegin_cend : std::false_type {};
+
+template <typename T>
+struct has_cbegin_cend<T, std::void_t<decltype(std::declval<T&>().cbegin()), decltype(std::declval<T&>().cend())>>
       : std::true_type {};
 
 template <typename, typename = void>
@@ -259,6 +303,12 @@ struct has_data : std::false_type {};
 
 template <typename T>
 struct has_data<T, std::void_t<decltype(std::declval<T&>().data())>> : std::true_type {};
+
+template <typename, typename = void>
+struct has_size : std::false_type {};
+
+template <typename T>
+struct has_size<T, std::void_t<decltype(std::declval<T&>().size())>> : std::true_type {};
 
 template <typename T, typename = void>
 struct is_range : std::false_type {};
@@ -295,6 +345,27 @@ struct is_contiguous_output_range<
 
 template <typename T>
 constexpr bool is_contiguous_output_range_v = is_contiguous_output_range<T>::value;
+
+template <typename T, typename = void>
+struct is_container : std::false_type {};
+
+template <typename T>
+struct is_container<T, std::enable_if_t<has_begin_end<T>::value && has_cbegin_cend<T>::value && has_size<T>::value>>
+      : std::true_type {};
+
+template <typename T>
+constexpr bool is_container_v = is_container<T>::value;
+
+template <typename T, typename = void>
+struct is_contiguous_container : std::false_type {};
+
+template <typename T>
+struct is_contiguous_container<T,
+                               std::enable_if_t<is_container_v<T> && has_data<T>::value &&
+                                                std::is_pointer_v<decltype(std::declval<T&>().data())>>> {};
+
+template <typename T>
+constexpr bool is_contiguous_container_v = is_contiguous_container<T>::value;
 
 }  // namespace Botan::concepts
 

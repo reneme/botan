@@ -12,6 +12,7 @@
 #include <botan/concepts.h>
 
 #include <iosfwd>
+#include <limits>
 #include <span>
 #include <string>
 
@@ -58,19 +59,29 @@ class Strong_Base {
       constexpr const T&& get() const&& { return std::move(m_value); }
 };
 
+#if !defined(BOTAN_CPP17_COMPATIBILITY_MODE)
 template <typename T>
+#else
+template <typename T, typename = void>
+#endif
 class Strong_Adapter : public Strong_Base<T> {
+
    public:
       using Strong_Base<T>::Strong_Base;
 };
 
+#if !defined(BOTAN_CPP17_COMPATIBILITY_MODE)
 template <std::integral T>
-class Strong_Adapter<T> : public Strong_Base<T> {
+#else
+template <typename T>
+#endif
+class Strong_Adapter<T, std::enable_if_t<std::numeric_limits<T>::is_integer()>> : public Strong_Base<T> {
+
    public:
       using Strong_Base<T>::Strong_Base;
 };
 
-template <concepts::container T>
+template <BOTAN_CONTAINER T>
 class Container_Strong_Adapter_Base : public Strong_Base<T> {
    public:
       using value_type = typename T::value_type;
@@ -81,9 +92,8 @@ class Container_Strong_Adapter_Base : public Strong_Base<T> {
    public:
       using Strong_Base<T>::Strong_Base;
 
-      explicit Container_Strong_Adapter_Base(size_t size)
-         requires(concepts::resizable_container<T>)
-            : Container_Strong_Adapter_Base(T(size)) {}
+      explicit Container_Strong_Adapter_Base(size_t size) BOTAN_REQUIRES(concepts::resizable_container<T>) :
+            Container_Strong_Adapter_Base(T(size)) {}
 
       template <typename InputIt>
       Container_Strong_Adapter_Base(InputIt begin, InputIt end) : Container_Strong_Adapter_Base(T(begin, end)) {}
@@ -107,21 +117,17 @@ class Container_Strong_Adapter_Base : public Strong_Base<T> {
 
       size_type size() const noexcept(noexcept(this->get().size())) { return this->get().size(); }
 
-      bool empty() const noexcept(noexcept(this->get().empty()))
-         requires(concepts::has_empty<T>)
-      {
+      bool empty() const noexcept(noexcept(this->get().empty())) BOTAN_REQUIRES(concepts::has_empty<T>) {
          return this->get().empty();
       }
 
       void resize(size_type size) noexcept(noexcept(this->get().resize(size)))
-         requires(concepts::resizable_container<T>)
-      {
+         BOTAN_REQUIRES(concepts::resizable_container<T>) {
          this->get().resize(size);
       }
 
       void reserve(size_type size) noexcept(noexcept(this->get().reserve(size)))
-         requires(concepts::reservable_container<T>)
-      {
+         BOTAN_REQUIRES(concepts::reservable_container<T>) {
          this->get().reserve(size);
       }
 
@@ -137,27 +143,36 @@ class Container_Strong_Adapter_Base : public Strong_Base<T> {
 
       template <typename U>
       decltype(auto) at(U&& i) const noexcept(noexcept(this->get().at(i)))
-         requires(concepts::has_bounds_checked_accessors<T>)
-      {
+         BOTAN_REQUIRES(concepts::has_bounds_checked_accessors<T>) {
          return this->get().at(std::forward<U>(i));
       }
 
       template <typename U>
       decltype(auto) at(U&& i) noexcept(noexcept(this->get().at(i)))
-         requires(concepts::has_bounds_checked_accessors<T>)
-      {
+         BOTAN_REQUIRES(concepts::has_bounds_checked_accessors<T>) {
          return this->get().at(std::forward<U>(i));
       }
 };
 
+#if !defined(BOTAN_CPP17_COMPATIBILITY_MODE)
 template <concepts::container T>
-class Strong_Adapter<T> : public Container_Strong_Adapter_Base<T> {
+#else
+template <typename T>
+#endif
+class Strong_Adapter<T, std::enable_if_t<concepts::is_container_v<T>>> : public Container_Strong_Adapter_Base<T> {
+
    public:
       using Container_Strong_Adapter_Base<T>::Container_Strong_Adapter_Base;
 };
 
+#if !defined(BOTAN_CPP17_COMPATIBILITY_MODE)
 template <concepts::contiguous_container T>
-class Strong_Adapter<T> : public Container_Strong_Adapter_Base<T> {
+#else
+template <typename T>
+#endif
+class Strong_Adapter<T, std::enable_if_t<concepts::is_contiguous_container_v<T>>>
+      : public Container_Strong_Adapter_Base<T> {
+
    public:
       using pointer = typename T::pointer;
       using const_pointer = typename T::const_pointer;
@@ -171,9 +186,8 @@ class Strong_Adapter<T> : public Container_Strong_Adapter_Base<T> {
       // Disambiguates the usage of string literals, otherwise:
       // Strong_Adapter(std::span<>) and Strong_Adapter(const char*)
       // would be ambiguous.
-      explicit Strong_Adapter(const char* str)
-         requires(std::same_as<T, std::string>)
-            : Strong_Adapter(std::string(str)) {}
+      explicit Strong_Adapter(const char* str) BOTAN_REQUIRES_SAME_AS(T, std::string) :
+            Strong_Adapter(std::string(str)) {}
 
    public:
       decltype(auto) data() noexcept(noexcept(this->get().data())) { return this->get().data(); }
@@ -222,7 +236,7 @@ class Strong : public detail::Strong_Adapter<T> {
  */
 template <typename T>
 [[nodiscard]] constexpr decltype(auto) unwrap_strong_type(T&& t) {
-   if constexpr(!concepts::strong_type<std::remove_cvref_t<T>>) {
+   if constexpr(!is_strong_type_v<Botan::remove_cvref_t<T>>) {
       // If the parameter type isn't a strong type, return it as is.
       return std::forward<T>(t);
    } else {
@@ -244,32 +258,42 @@ template <typename T>
  * @return   the wrapped value
  */
 template <typename T, typename ParamT>
+#if !defined(BOTAN_CPP17_COMPATIBILITY_MODE)
    requires std::constructible_from<T, ParamT> ||
             (concepts::strong_type<T> && std::constructible_from<typename T::wrapped_type, ParamT>)
+#endif
 [[nodiscard]] constexpr decltype(auto) wrap_strong_type(ParamT&& t) {
-   if constexpr(std::same_as<std::remove_cvref_t<ParamT>, T>) {
+   if constexpr(std::is_same_v<Botan::remove_cvref_t<ParamT>, T>) {
       // Noop, if the parameter type already is the desired return type.
       return std::forward<ParamT>(t);
-   } else if constexpr(std::constructible_from<T, ParamT>) {
+   } else if constexpr(std::is_constructible_v<T, ParamT>) {
       // Implicit conversion from the parameter type to the return type.
       return T{std::forward<ParamT>(t)};
    } else {
       // Explicitly calling the wrapped type's constructor to support
       // implicit conversions on types that mark their constructors as explicit.
-      static_assert(concepts::strong_type<T> && std::constructible_from<typename T::wrapped_type, ParamT>);
+      static_assert(is_strong_type_v<T> && std::is_constructible_v<typename T::wrapped_type, ParamT>);
       return T{typename T::wrapped_type{std::forward<ParamT>(t)}};
    }
 }
 
 namespace detail {
 
+#if !defined(BOTAN_CPP17_COMPATIBILITY_MODE)
 template <typename T>
+#else
+template <typename T, typename = void>
+#endif
 struct wrapped_type_helper {
       using type = T;
 };
 
+#if !defined(BOTAN_CPP17_COMPATIBILITY_MODE)
 template <concepts::strong_type T>
-struct wrapped_type_helper<T> {
+#else
+template <typename T>
+#endif
+struct wrapped_type_helper<T, std::enable_if_t<is_strong_type_v<T>>> {
       using type = typename T::wrapped_type;
 };
 
@@ -285,337 +309,345 @@ struct wrapped_type_helper<T> {
  *       declaration if you know that you are dealing with a strong type.
  */
 template <typename T>
-using strong_type_wrapped_type = typename detail::wrapped_type_helper<std::remove_cvref_t<T>>::type;
+using strong_type_wrapped_type = typename detail::wrapped_type_helper<Botan::remove_cvref_t<T>>::type;
+
+#if !defined(BOTAN_CPP17_COMPATIBILITY_MODE)
+   #define BOTAN_REQUIRES_STRONG_TYPE_HAS_CAPABILITY(Capability) requires(detail::has_capability<Capability, Tags...>)
+#else
+   #define BOTAN_REQUIRES_STRONG_TYPE_HAS_CAPABILITY(Capability)
+#endif
 
 template <typename T, typename... Tags>
-   requires(concepts::streamable<T>)
+BOTAN_REQUIRES(concepts::streamable<T>)
 decltype(auto) operator<<(std::ostream& os, const Strong<T, Tags...>& v) {
    return os << v.get();
 }
 
 template <typename T, typename... Tags>
-   requires(std::equality_comparable<T>)
+BOTAN_REQUIRES(std::equality_comparable<T>)
 bool operator==(const Strong<T, Tags...>& lhs, const Strong<T, Tags...>& rhs) {
    return lhs.get() == rhs.get();
 }
 
+#if !defined(BOTAN_CPP17_COMPATIBILITY_MODE)
 template <typename T, typename... Tags>
-   requires(std::three_way_comparable<T>)
+BOTAN_REQUIRES(std::three_way_comparable<T>)
 auto operator<=>(const Strong<T, Tags...>& lhs, const Strong<T, Tags...>& rhs) {
    return lhs.get() <=> rhs.get();
 }
 
-template <std::integral T1, std::integral T2, typename... Tags>
+template <BOTAN_INTEGRAL T1, BOTAN_INTEGRAL T2, typename... Tags>
 auto operator<=>(T1 a, Strong<T2, Tags...> b) {
    return a <=> b.get();
 }
 
-template <std::integral T1, std::integral T2, typename... Tags>
+template <BOTAN_INTEGRAL T1, BOTAN_INTEGRAL T2, typename... Tags>
 auto operator<=>(Strong<T1, Tags...> a, T2 b) {
    return a.get() <=> b;
 }
+#endif
 
-template <std::integral T1, std::integral T2, typename... Tags>
+template <BOTAN_INTEGRAL T1, BOTAN_INTEGRAL T2, typename... Tags>
 auto operator==(T1 a, Strong<T2, Tags...> b) {
    return a == b.get();
 }
 
-template <std::integral T1, std::integral T2, typename... Tags>
+template <BOTAN_INTEGRAL T1, BOTAN_INTEGRAL T2, typename... Tags>
 auto operator==(Strong<T1, Tags...> a, T2 b) {
    return a.get() == b;
 }
 
-template <std::integral T1, std::integral T2, typename... Tags>
-   requires(detail::has_capability<EnableArithmeticWithPlainNumber, Tags...>)
+template <BOTAN_INTEGRAL T1, BOTAN_INTEGRAL T2, typename... Tags>
+BOTAN_REQUIRES_STRONG_TYPE_HAS_CAPABILITY(EnableArithmeticWithPlainNumber)
 constexpr decltype(auto) operator+(T1 a, Strong<T2, Tags...> b) {
    return Strong<T2, Tags...>(a + b.get());
 }
 
-template <std::integral T1, std::integral T2, typename... Tags>
-   requires(detail::has_capability<EnableArithmeticWithPlainNumber, Tags...>)
+template <BOTAN_INTEGRAL T1, BOTAN_INTEGRAL T2, typename... Tags>
+BOTAN_REQUIRES_STRONG_TYPE_HAS_CAPABILITY(EnableArithmeticWithPlainNumber)
 constexpr decltype(auto) operator+(Strong<T1, Tags...> a, T2 b) {
    return Strong<T1, Tags...>(a.get() + b);
 }
 
-template <std::integral T, typename... Tags>
+template <BOTAN_INTEGRAL T, typename... Tags>
 constexpr decltype(auto) operator+(Strong<T, Tags...> a, Strong<T, Tags...> b) {
    return Strong<T, Tags...>(a.get() + b.get());
 }
 
-template <std::integral T1, std::integral T2, typename... Tags>
-   requires(detail::has_capability<EnableArithmeticWithPlainNumber, Tags...>)
+template <BOTAN_INTEGRAL T1, BOTAN_INTEGRAL T2, typename... Tags>
+BOTAN_REQUIRES_STRONG_TYPE_HAS_CAPABILITY(EnableArithmeticWithPlainNumber)
 constexpr decltype(auto) operator-(T1 a, Strong<T2, Tags...> b) {
    return Strong<T2, Tags...>(a - b.get());
 }
 
-template <std::integral T1, std::integral T2, typename... Tags>
-   requires(detail::has_capability<EnableArithmeticWithPlainNumber, Tags...>)
+template <BOTAN_INTEGRAL T1, BOTAN_INTEGRAL T2, typename... Tags>
+BOTAN_REQUIRES_STRONG_TYPE_HAS_CAPABILITY(EnableArithmeticWithPlainNumber)
 constexpr decltype(auto) operator-(Strong<T1, Tags...> a, T2 b) {
    return Strong<T1, Tags...>(a.get() - b);
 }
 
-template <std::integral T, typename... Tags>
+template <BOTAN_INTEGRAL T, typename... Tags>
 constexpr decltype(auto) operator-(Strong<T, Tags...> a, Strong<T, Tags...> b) {
    return Strong<T, Tags...>(a.get() - b.get());
 }
 
-template <std::integral T1, std::integral T2, typename... Tags>
-   requires(detail::has_capability<EnableArithmeticWithPlainNumber, Tags...>)
+template <BOTAN_INTEGRAL T1, BOTAN_INTEGRAL T2, typename... Tags>
+BOTAN_REQUIRES_STRONG_TYPE_HAS_CAPABILITY(EnableArithmeticWithPlainNumber)
 constexpr decltype(auto) operator*(T1 a, Strong<T2, Tags...> b) {
    return Strong<T2, Tags...>(a * b.get());
 }
 
-template <std::integral T1, std::integral T2, typename... Tags>
-   requires(detail::has_capability<EnableArithmeticWithPlainNumber, Tags...>)
+template <BOTAN_INTEGRAL T1, BOTAN_INTEGRAL T2, typename... Tags>
+BOTAN_REQUIRES_STRONG_TYPE_HAS_CAPABILITY(EnableArithmeticWithPlainNumber)
 constexpr decltype(auto) operator*(Strong<T1, Tags...> a, T2 b) {
    return Strong<T1, Tags...>(a.get() * b);
 }
 
-template <std::integral T, typename... Tags>
+template <BOTAN_INTEGRAL T, typename... Tags>
 constexpr decltype(auto) operator*(Strong<T, Tags...> a, Strong<T, Tags...> b) {
    return Strong<T, Tags...>(a.get() * b.get());
 }
 
-template <std::integral T1, std::integral T2, typename... Tags>
-   requires(detail::has_capability<EnableArithmeticWithPlainNumber, Tags...>)
+template <BOTAN_INTEGRAL T1, BOTAN_INTEGRAL T2, typename... Tags>
+BOTAN_REQUIRES_STRONG_TYPE_HAS_CAPABILITY(EnableArithmeticWithPlainNumber)
 constexpr decltype(auto) operator/(T1 a, Strong<T2, Tags...> b) {
    return Strong<T2, Tags...>(a / b.get());
 }
 
-template <std::integral T1, std::integral T2, typename... Tags>
-   requires(detail::has_capability<EnableArithmeticWithPlainNumber, Tags...>)
+template <BOTAN_INTEGRAL T1, BOTAN_INTEGRAL T2, typename... Tags>
+BOTAN_REQUIRES_STRONG_TYPE_HAS_CAPABILITY(EnableArithmeticWithPlainNumber)
 constexpr decltype(auto) operator/(Strong<T1, Tags...> a, T2 b) {
    return Strong<T1, Tags...>(a.get() / b);
 }
 
-template <std::integral T, typename... Tags>
+template <BOTAN_INTEGRAL T, typename... Tags>
 constexpr decltype(auto) operator/(Strong<T, Tags...> a, Strong<T, Tags...> b) {
    return Strong<T, Tags...>(a.get() / b.get());
 }
 
-template <std::integral T1, std::integral T2, typename... Tags>
-   requires(detail::has_capability<EnableArithmeticWithPlainNumber, Tags...>)
+template <BOTAN_INTEGRAL T1, BOTAN_INTEGRAL T2, typename... Tags>
+BOTAN_REQUIRES_STRONG_TYPE_HAS_CAPABILITY(EnableArithmeticWithPlainNumber)
 constexpr decltype(auto) operator^(T1 a, Strong<T2, Tags...> b) {
    return Strong<T2, Tags...>(a ^ b.get());
 }
 
-template <std::integral T1, std::integral T2, typename... Tags>
-   requires(detail::has_capability<EnableArithmeticWithPlainNumber, Tags...>)
+template <BOTAN_INTEGRAL T1, BOTAN_INTEGRAL T2, typename... Tags>
+BOTAN_REQUIRES_STRONG_TYPE_HAS_CAPABILITY(EnableArithmeticWithPlainNumber)
 constexpr decltype(auto) operator^(Strong<T1, Tags...> a, T2 b) {
    return Strong<T1, Tags...>(a.get() ^ b);
 }
 
-template <std::integral T, typename... Tags>
+template <BOTAN_INTEGRAL T, typename... Tags>
 constexpr decltype(auto) operator^(Strong<T, Tags...> a, Strong<T, Tags...> b) {
    return Strong<T, Tags...>(a.get() ^ b.get());
 }
 
-template <std::integral T1, std::integral T2, typename... Tags>
-   requires(detail::has_capability<EnableArithmeticWithPlainNumber, Tags...>)
+template <BOTAN_INTEGRAL T1, BOTAN_INTEGRAL T2, typename... Tags>
+BOTAN_REQUIRES_STRONG_TYPE_HAS_CAPABILITY(EnableArithmeticWithPlainNumber)
 constexpr decltype(auto) operator&(T1 a, Strong<T2, Tags...> b) {
    return Strong<T2, Tags...>(a & b.get());
 }
 
-template <std::integral T1, std::integral T2, typename... Tags>
-   requires(detail::has_capability<EnableArithmeticWithPlainNumber, Tags...>)
+template <BOTAN_INTEGRAL T1, BOTAN_INTEGRAL T2, typename... Tags>
+BOTAN_REQUIRES_STRONG_TYPE_HAS_CAPABILITY(EnableArithmeticWithPlainNumber)
 constexpr decltype(auto) operator&(Strong<T1, Tags...> a, T2 b) {
    return Strong<T1, Tags...>(a.get() & b);
 }
 
-template <std::integral T, typename... Tags>
+template <BOTAN_INTEGRAL T, typename... Tags>
 constexpr decltype(auto) operator&(Strong<T, Tags...> a, Strong<T, Tags...> b) {
    return Strong<T, Tags...>(a.get() & b.get());
 }
 
-template <std::integral T1, std::integral T2, typename... Tags>
-   requires(detail::has_capability<EnableArithmeticWithPlainNumber, Tags...>)
+template <BOTAN_INTEGRAL T1, BOTAN_INTEGRAL T2, typename... Tags>
+BOTAN_REQUIRES_STRONG_TYPE_HAS_CAPABILITY(EnableArithmeticWithPlainNumber)
 constexpr decltype(auto) operator|(T1 a, Strong<T2, Tags...> b) {
    return Strong<T2, Tags...>(a | b.get());
 }
 
-template <std::integral T1, std::integral T2, typename... Tags>
-   requires(detail::has_capability<EnableArithmeticWithPlainNumber, Tags...>)
+template <BOTAN_INTEGRAL T1, BOTAN_INTEGRAL T2, typename... Tags>
+BOTAN_REQUIRES_STRONG_TYPE_HAS_CAPABILITY(EnableArithmeticWithPlainNumber)
 constexpr decltype(auto) operator|(Strong<T1, Tags...> a, T2 b) {
    return Strong<T1, Tags...>(a.get() | b);
 }
 
-template <std::integral T, typename... Tags>
+template <BOTAN_INTEGRAL T, typename... Tags>
 constexpr decltype(auto) operator|(Strong<T, Tags...> a, Strong<T, Tags...> b) {
    return Strong<T, Tags...>(a.get() | b.get());
 }
 
-template <std::integral T1, std::integral T2, typename... Tags>
-   requires(detail::has_capability<EnableArithmeticWithPlainNumber, Tags...>)
+template <BOTAN_INTEGRAL T1, BOTAN_INTEGRAL T2, typename... Tags>
+BOTAN_REQUIRES_STRONG_TYPE_HAS_CAPABILITY(EnableArithmeticWithPlainNumber)
 constexpr decltype(auto) operator>>(T1 a, Strong<T2, Tags...> b) {
    return Strong<T2, Tags...>(a >> b.get());
 }
 
-template <std::integral T1, std::integral T2, typename... Tags>
-   requires(detail::has_capability<EnableArithmeticWithPlainNumber, Tags...>)
+template <BOTAN_INTEGRAL T1, BOTAN_INTEGRAL T2, typename... Tags>
+BOTAN_REQUIRES_STRONG_TYPE_HAS_CAPABILITY(EnableArithmeticWithPlainNumber)
 constexpr decltype(auto) operator>>(Strong<T1, Tags...> a, T2 b) {
    return Strong<T1, Tags...>(a.get() >> b);
 }
 
-template <std::integral T, typename... Tags>
+template <BOTAN_INTEGRAL T, typename... Tags>
 constexpr decltype(auto) operator>>(Strong<T, Tags...> a, Strong<T, Tags...> b) {
    return Strong<T, Tags...>(a.get() >> b.get());
 }
 
-template <std::integral T1, std::integral T2, typename... Tags>
-   requires(detail::has_capability<EnableArithmeticWithPlainNumber, Tags...>)
+template <BOTAN_INTEGRAL T1, BOTAN_INTEGRAL T2, typename... Tags>
+BOTAN_REQUIRES_STRONG_TYPE_HAS_CAPABILITY(EnableArithmeticWithPlainNumber)
 constexpr decltype(auto) operator<<(T1 a, Strong<T2, Tags...> b) {
    return Strong<T2, Tags...>(a << b.get());
 }
 
-template <std::integral T1, std::integral T2, typename... Tags>
-   requires(detail::has_capability<EnableArithmeticWithPlainNumber, Tags...>)
+template <BOTAN_INTEGRAL T1, BOTAN_INTEGRAL T2, typename... Tags>
+BOTAN_REQUIRES_STRONG_TYPE_HAS_CAPABILITY(EnableArithmeticWithPlainNumber)
 constexpr decltype(auto) operator<<(Strong<T1, Tags...> a, T2 b) {
    return Strong<T1, Tags...>(a.get() << b);
 }
 
-template <std::integral T, typename... Tags>
+template <BOTAN_INTEGRAL T, typename... Tags>
 constexpr decltype(auto) operator<<(Strong<T, Tags...> a, Strong<T, Tags...> b) {
    return Strong<T, Tags...>(a.get() << b.get());
 }
 
-template <std::integral T1, std::integral T2, typename... Tags>
-   requires(detail::has_capability<EnableArithmeticWithPlainNumber, Tags...>)
+template <BOTAN_INTEGRAL T1, BOTAN_INTEGRAL T2, typename... Tags>
+BOTAN_REQUIRES_STRONG_TYPE_HAS_CAPABILITY(EnableArithmeticWithPlainNumber)
 constexpr auto operator+=(Strong<T1, Tags...>& a, T2 b) {
    a.get() += b;
    return a;
 }
 
-template <std::integral T, typename... Tags>
+template <BOTAN_INTEGRAL T, typename... Tags>
 constexpr auto operator+=(Strong<T, Tags...>& a, Strong<T, Tags...> b) {
    a.get() += b.get();
    return a;
 }
 
-template <std::integral T1, std::integral T2, typename... Tags>
-   requires(detail::has_capability<EnableArithmeticWithPlainNumber, Tags...>)
+template <BOTAN_INTEGRAL T1, BOTAN_INTEGRAL T2, typename... Tags>
+BOTAN_REQUIRES_STRONG_TYPE_HAS_CAPABILITY(EnableArithmeticWithPlainNumber)
 constexpr auto operator-=(Strong<T1, Tags...>& a, T2 b) {
    a.get() -= b;
    return a;
 }
 
-template <std::integral T, typename... Tags>
+template <BOTAN_INTEGRAL T, typename... Tags>
 constexpr auto operator-=(Strong<T, Tags...>& a, Strong<T, Tags...> b) {
    a.get() -= b.get();
    return a;
 }
 
-template <std::integral T1, std::integral T2, typename... Tags>
-   requires(detail::has_capability<EnableArithmeticWithPlainNumber, Tags...>)
+template <BOTAN_INTEGRAL T1, BOTAN_INTEGRAL T2, typename... Tags>
+BOTAN_REQUIRES_STRONG_TYPE_HAS_CAPABILITY(EnableArithmeticWithPlainNumber)
 constexpr auto operator*=(Strong<T1, Tags...>& a, T2 b) {
    a.get() *= b;
    return a;
 }
 
-template <std::integral T, typename... Tags>
+template <BOTAN_INTEGRAL T, typename... Tags>
 constexpr auto operator*=(Strong<T, Tags...>& a, Strong<T, Tags...> b) {
    a.get() *= b.get();
    return a;
 }
 
-template <std::integral T1, std::integral T2, typename... Tags>
-   requires(detail::has_capability<EnableArithmeticWithPlainNumber, Tags...>)
+template <BOTAN_INTEGRAL T1, BOTAN_INTEGRAL T2, typename... Tags>
+BOTAN_REQUIRES_STRONG_TYPE_HAS_CAPABILITY(EnableArithmeticWithPlainNumber)
 constexpr auto operator/=(Strong<T1, Tags...>& a, T2 b) {
    a.get() /= b;
    return a;
 }
 
-template <std::integral T, typename... Tags>
+template <BOTAN_INTEGRAL T, typename... Tags>
 constexpr auto operator/=(Strong<T, Tags...>& a, Strong<T, Tags...> b) {
    a.get() /= b.get();
    return a;
 }
 
-template <std::integral T1, std::integral T2, typename... Tags>
-   requires(detail::has_capability<EnableArithmeticWithPlainNumber, Tags...>)
+template <BOTAN_INTEGRAL T1, BOTAN_INTEGRAL T2, typename... Tags>
+BOTAN_REQUIRES_STRONG_TYPE_HAS_CAPABILITY(EnableArithmeticWithPlainNumber)
 constexpr auto operator^=(Strong<T1, Tags...>& a, T2 b) {
    a.get() ^= b;
    return a;
 }
 
-template <std::integral T, typename... Tags>
+template <BOTAN_INTEGRAL T, typename... Tags>
 constexpr auto operator^=(Strong<T, Tags...>& a, Strong<T, Tags...> b) {
    a.get() ^= b.get();
    return a;
 }
 
-template <std::integral T1, std::integral T2, typename... Tags>
-   requires(detail::has_capability<EnableArithmeticWithPlainNumber, Tags...>)
+template <BOTAN_INTEGRAL T1, BOTAN_INTEGRAL T2, typename... Tags>
+BOTAN_REQUIRES_STRONG_TYPE_HAS_CAPABILITY(EnableArithmeticWithPlainNumber)
 constexpr auto operator&=(Strong<T1, Tags...>& a, T2 b) {
    a.get() &= b;
    return a;
 }
 
-template <std::integral T, typename... Tags>
+template <BOTAN_INTEGRAL T, typename... Tags>
 constexpr auto operator&=(Strong<T, Tags...>& a, Strong<T, Tags...> b) {
    a.get() &= b.get();
    return a;
 }
 
-template <std::integral T1, std::integral T2, typename... Tags>
-   requires(detail::has_capability<EnableArithmeticWithPlainNumber, Tags...>)
+template <BOTAN_INTEGRAL T1, BOTAN_INTEGRAL T2, typename... Tags>
+BOTAN_REQUIRES_STRONG_TYPE_HAS_CAPABILITY(EnableArithmeticWithPlainNumber)
 constexpr auto operator|=(Strong<T1, Tags...>& a, T2 b) {
    a.get() |= b;
    return a;
 }
 
-template <std::integral T, typename... Tags>
+template <BOTAN_INTEGRAL T, typename... Tags>
 constexpr auto operator|=(Strong<T, Tags...>& a, Strong<T, Tags...> b) {
    a.get() |= b.get();
    return a;
 }
 
-template <std::integral T1, std::integral T2, typename... Tags>
-   requires(detail::has_capability<EnableArithmeticWithPlainNumber, Tags...>)
+template <BOTAN_INTEGRAL T1, BOTAN_INTEGRAL T2, typename... Tags>
+BOTAN_REQUIRES_STRONG_TYPE_HAS_CAPABILITY(EnableArithmeticWithPlainNumber)
 constexpr auto operator>>=(Strong<T1, Tags...>& a, T2 b) {
    a.get() >>= b;
    return a;
 }
 
-template <std::integral T, typename... Tags>
+template <BOTAN_INTEGRAL T, typename... Tags>
 constexpr auto operator>>=(Strong<T, Tags...>& a, Strong<T, Tags...> b) {
    a.get() >>= b.get();
    return a;
 }
 
-template <std::integral T1, std::integral T2, typename... Tags>
-   requires(detail::has_capability<EnableArithmeticWithPlainNumber, Tags...>)
+template <BOTAN_INTEGRAL T1, BOTAN_INTEGRAL T2, typename... Tags>
+BOTAN_REQUIRES_STRONG_TYPE_HAS_CAPABILITY(EnableArithmeticWithPlainNumber)
 constexpr auto operator<<=(Strong<T1, Tags...>& a, T2 b) {
    a.get() <<= b;
    return a;
 }
 
-template <std::integral T, typename... Tags>
+template <BOTAN_INTEGRAL T, typename... Tags>
 constexpr auto operator<<=(Strong<T, Tags...>& a, Strong<T, Tags...> b) {
    a.get() <<= b.get();
    return a;
 }
 
-template <std::integral T, typename... Tags>
+template <BOTAN_INTEGRAL T, typename... Tags>
 constexpr auto operator++(Strong<T, Tags...>& a, int) {
    auto tmp = a;
    ++a.get();
    return tmp;
 }
 
-template <std::integral T, typename... Tags>
+template <BOTAN_INTEGRAL T, typename... Tags>
 constexpr auto operator++(Strong<T, Tags...>& a) {
    ++a.get();
    return a;
 }
 
-template <std::integral T, typename... Tags>
+template <BOTAN_INTEGRAL T, typename... Tags>
 constexpr auto operator--(Strong<T, Tags...>& a, int) {
    auto tmp = a;
    --a.get();
    return tmp;
 }
 
-template <std::integral T, typename... Tags>
+template <BOTAN_INTEGRAL T, typename... Tags>
 constexpr auto operator--(Strong<T, Tags...>& a) {
    --a.get();
    return a;
@@ -636,7 +668,8 @@ constexpr auto operator--(Strong<T, Tags...>& a) {
  *    bar(slicer.take<Foo>());  // This does not copy the data from buffer but
  *                              // just annotates the 'Foo' strong-type info.
  */
-template <concepts::contiguous_strong_type T>
+template <typename T>
+BOTAN_REQUIRES(concepts::contiguous_strong_type<T>)
 class StrongSpan {
       using underlying_span = std::
          conditional_t<std::is_const_v<T>, std::span<const typename T::value_type>, std::span<typename T::value_type>>;
@@ -664,10 +697,9 @@ class StrongSpan {
       //       a declaration of an ordinary copy constructor. The existance of a copy constructor
       //       is interpreted as "not cheap to copy", setting off the `performance-unnecessary-value-param` check.
       //       See also: https://github.com/randombit/botan/issues/3591
-      template <concepts::contiguous_strong_type T2>
-      StrongSpan(const StrongSpan<T2>& other)
-         requires(std::is_same_v<T2, std::remove_const_t<T>>)
-            : m_span(other.get()) {}
+      template <BOTAN_CONTIGUOUS_STRONG_TYPE T2>
+      BOTAN_REQUIRES_SAME_AS(T2, std::remove_const_t<T>)
+      StrongSpan(const StrongSpan<T2>& other) : m_span(other.get()) {}
 
       StrongSpan(const StrongSpan& other) = default;
       StrongSpan(StrongSpan&& other) = default;

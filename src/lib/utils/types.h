@@ -29,7 +29,6 @@
    #define BOTAN_CPLUSPLUS __cplusplus
 #endif
 
-
 #if defined(BOTAN_CPP17_COMPATIBILITY_MODE) && BOTAN_CPLUSPLUS < 201703L
    #error "Botan 3.x requires at least C++17 in compatibility mode"
 #endif
@@ -140,6 +139,14 @@ static_assert(sizeof(std::size_t) == 8 || sizeof(std::size_t) == 4, "This platfo
 * How much to allocate for a buffer of no particular size
 */
 constexpr size_t DefaultBufferSize = 4096;
+
+#if defined(BOTAN_CPP17_COMPATIBILITY_MODE)
+template <typename T>
+struct remove_cvref_t : std::remove_cv<std::remove_reference_t<T>> {};
+#else
+template <typename T>
+using remove_cvref_t = std::remove_cvref_t<T>;
+#endif
 
 }  // namespace Botan
 

@@ -34,7 +34,7 @@ class Sponge {
 
    public:
       struct SpongeConfig final {
-            uint8_t bit_rate;
+            size_t bit_rate;
             state_t initial_state;
       };
 
@@ -67,7 +67,7 @@ class Sponge {
       }
 
    protected:
-      uint8_t cursor() const { return m_S_cursor; }
+      size_t cursor() const { return m_S_cursor; }
 
       template <std::invocable<word&, word> WordModifierFnT,
                 std::invocable<word&, word, PartialWordBounds> PartialWordModifierFnT,
@@ -100,7 +100,7 @@ class Sponge {
                                            .offset = bytes_out_of_word_alignment,
                                            .length = bytes_from_input,
                                         });
-               m_S_cursor += static_cast<uint8_t>(bytes_from_input);
+               m_S_cursor += bytes_from_input;
             }
 
             // Process as many aligned 64-bit integer values as possible
@@ -120,7 +120,7 @@ class Sponge {
                                            .offset = 0,
                                            .length = remaining_bytes_out_of_word_alignment,
                                         });
-               m_S_cursor += static_cast<uint8_t>(remaining_bytes_out_of_word_alignment);
+               m_S_cursor += remaining_bytes_out_of_word_alignment;
             }
 
             // We reached the end of a sponge state block... permute() and start over
@@ -133,8 +133,8 @@ class Sponge {
 
    private:
       std::array<word, words> m_S;
-      uint8_t m_S_cursor;
-      uint8_t m_bit_rate;
+      size_t m_S_cursor;
+      size_t m_bit_rate;
 };
 
 }  // namespace Botan

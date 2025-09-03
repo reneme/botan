@@ -14,7 +14,27 @@
 
 namespace Botan {
 
-SHA_3::SHA_3(size_t output_bits) : m_keccak(2 * output_bits, 2, 2), m_output_length(output_bits / 8) {
+namespace {
+
+constexpr Keccak_Permutation select_permutation(size_t output_bits) {
+   constexpr Keccak_Permutation::Config sha3_config = {.custom_padding = 0x02, .custom_padding_bit_len = 2};
+   switch(output_bits) {
+      case 224:
+         return Keccak_Permutation({.bit_rate = 448, .initial_state = {}}, sha3_config);
+      case 256:
+         return Keccak_Permutation({.bit_rate = 512, .initial_state = {}}, sha3_config);
+      case 384:
+         return Keccak_Permutation({.bit_rate = 768, .initial_state = {}}, sha3_config);
+      case 512:
+         return Keccak_Permutation({.bit_rate = 1024, .initial_state = {}}, sha3_config);
+      default:
+         throw Invalid_Argument(fmt("SHA_3: Invalid output length {}", output_bits));
+   }
+}
+
+}  // namespace
+
+SHA_3::SHA_3(size_t output_bits) : m_keccak(select_permutation(output_bits)), m_output_length(output_bits / 8) {
    // We only support the parameters for SHA-3 in this constructor
 
    if(output_bits != 224 && output_bits != 256 && output_bits != 384 && output_bits != 512) {
@@ -39,7 +59,7 @@ std::unique_ptr<HashFunction> SHA_3::new_object() const {
 }
 
 void SHA_3::clear() {
-   m_keccak.clear();
+   m_keccak = select_permutation(m_output_length * 8);
 }
 
 void SHA_3::add_data(std::span<const uint8_t> input) {
@@ -49,7 +69,7 @@ void SHA_3::add_data(std::span<const uint8_t> input) {
 void SHA_3::final_result(std::span<uint8_t> output) {
    m_keccak.finish();
    m_keccak.squeeze(output);
-   m_keccak.clear();
+   clear();
 }
 
 }  // namespace Botan

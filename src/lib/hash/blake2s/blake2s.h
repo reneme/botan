@@ -2,6 +2,7 @@
  * BLAKE2s
  * (C) 2023, 2025       Richard Huveneers
  * (C) 2025             Kagan Can Sit
+ * (C) 2025             René Meusel, Rohde & Schwarz Cybersecurity
  *
  * Botan is released under the Simplified BSD License (see license.txt)
  */
@@ -10,8 +11,7 @@
 #define BOTAN_BLAKE2S_H_
 
 #include <botan/hash.h>
-
-#include <array>
+#include <botan/internal/alignment_buffer.h>
 
 namespace Botan {
 
@@ -19,6 +19,9 @@ namespace Botan {
  * BLAKE2s
  */
 class BLAKE2s final : public HashFunction {
+   private:
+      static inline constexpr std::size_t block_size = 64;
+
    public:
       explicit BLAKE2s(std::size_t output_bits = 256);
       ~BLAKE2s() override;
@@ -47,14 +50,11 @@ class BLAKE2s final : public HashFunction {
       void compress(bool last, std::span<const uint8_t> buf);
 
    private:
-      uint64_t m_bytes_processed;
+      uint64_t m_bytes_processed = 0;
+      AlignmentBuffer<uint8_t, block_size, AlignmentBufferFinalBlock::must_be_deferred> m_buffer;
 
-      std::array<uint8_t, 64> m_b{};  // input buffer
       std::array<uint32_t, 8> m_h{};  // chained state
-      uint8_t m_c = 0;                // pointer for b[]
       std::size_t m_outlen = 0;       // digest size
-
-      static inline constexpr std::size_t block_size = 64;
 };
 
 }  // namespace Botan

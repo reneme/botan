@@ -2,6 +2,7 @@
  * BLAKE2s
  * (C) 2023, 2025       Richard Huveneers
  * (C) 2025             Kagan Can Sit
+ * (C) 2025             René Meusel, Rohde & Schwarz Cybersecurity
  *
  * Based on the RFC7693 reference implementation
  *
@@ -53,14 +54,12 @@ void BLAKE2s::state_init(std::size_t outlen, const uint8_t* key, std::size_t key
    m_h[0] ^= 0x01010000 ^ (keylen << 8) ^ outlen;
 
    m_bytes_processed = 0;
-
-   m_b = {0};  // zero input block
-   m_c = 0;    // pointer within buffer
    m_outlen = outlen;
+   m_buffer.clear();
 
    if(keylen > 0) {
       add_data(std::span<const uint8_t>(key, keylen));
-      m_c = block_size;  // at the end
+      m_bytes_processed = block_size;  // at the end
    }
 }
 
@@ -112,36 +111,29 @@ void BLAKE2s::clear() {
    state_init(m_outlen, nullptr, 0);
 }
 
-void BLAKE2s::add_data(std::span<const uint8_t> in) {
-   const std::size_t fill = block_size - m_c;
+void BLAKE2s::add_data(std::span<const uint8_t> input) {
+   BufferSlicer in(input);
 
-   if(in.size() > fill) {
-      std::copy_n(in.begin(), fill, m_b.begin() + m_c);  // fill buffer
-
-      m_bytes_processed += block_size;
-
-      compress(false, m_b);
-      in = in.subspan(fill);
-      m_c = 0;
-
-      while(in.size() > block_size) {
+   while(!in.empty()) {
+      if(const auto one_block = m_buffer.handle_unaligned_data(in)) {
          m_bytes_processed += block_size;
+         compress(false, *one_block);
+      }
 
-         compress(false, in.first(block_size));
-         in = in.subspan(block_size);
+      if(m_buffer.in_alignment()) {
+         while(const auto aligned_block = m_buffer.next_aligned_block_to_process(in)) {
+            m_bytes_processed += block_size;
+            compress(false, *aligned_block);
+         }
       }
    }
-
-   BOTAN_ASSERT_NOMSG(in.size() <= (block_size - m_c));
-   std::copy(in.begin(), in.end(), m_b.begin() + m_c);
-   m_c += static_cast<uint8_t>(in.size());
 }
 
 void BLAKE2s::final_result(std::span<uint8_t> out) {
-   m_bytes_processed += m_c;
+   m_bytes_processed += m_buffer.elements_in_buffer();
 
-   std::fill(m_b.begin() + m_c, m_b.end(), 0);  // fill up with zeros
-   compress(true, m_b);                         // final block flag = 1
+   m_buffer.fill_up_with_zeros();
+   compress(true, m_buffer.consume());
 
    // little endian convert and store
    copy_out_le(out.first(output_length()), m_h);
@@ -164,7 +156,6 @@ BLAKE2s::BLAKE2s(std::size_t output_bits) {
 }
 
 BLAKE2s::~BLAKE2s() {
-   secure_scrub_memory(m_b);
    secure_scrub_memory(m_h);
 }
 

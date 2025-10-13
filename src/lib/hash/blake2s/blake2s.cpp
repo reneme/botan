@@ -52,7 +52,8 @@ void BLAKE2s::state_init(std::size_t outlen, const uint8_t* key, std::size_t key
 
    m_h[0] ^= 0x01010000 ^ (keylen << 8) ^ outlen;
 
-   m_t = {0};  // input count (both words zeroed)
+   m_bytes_processed = 0;
+
    m_b = {0};  // zero input block
    m_c = 0;    // pointer within buffer
    m_outlen = outlen;
@@ -80,8 +81,8 @@ void BLAKE2s::compress(bool last, std::span<const uint8_t> buf) {
    // init work variables
    std::array<uint32_t, 16> v = concat(m_h, blake2s_iv);
 
-   v[12] ^= m_t[0];  // low 32 bits of offset
-   v[13] ^= m_t[1];  // high 32 bits
+   v[12] ^= static_cast<uint32_t>(m_bytes_processed);
+   v[13] ^= static_cast<uint32_t>(m_bytes_processed >> 32);
    if(last) {        // last block flag set ?
       v[14] = ~v[14];
    }
@@ -117,20 +118,14 @@ void BLAKE2s::add_data(std::span<const uint8_t> in) {
    if(in.size() > fill) {
       std::copy_n(in.begin(), fill, m_b.begin() + m_c);  // fill buffer
 
-      m_t[0] += block_size;      // add counters
-      if(m_t[0] < block_size) {  // carry overflow ?
-         m_t[1]++;               // high word
-      }
+      m_bytes_processed += block_size;
 
       compress(false, m_b);
       in = in.subspan(fill);
       m_c = 0;
 
       while(in.size() > block_size) {
-         m_t[0] += block_size;      // add counters
-         if(m_t[0] < block_size) {  // carry overflow ?
-            m_t[1]++;               // high word
-         }
+         m_bytes_processed += block_size;
 
          compress(false, in.first(block_size));
          in = in.subspan(block_size);
@@ -143,10 +138,7 @@ void BLAKE2s::add_data(std::span<const uint8_t> in) {
 }
 
 void BLAKE2s::final_result(std::span<uint8_t> out) {
-   m_t[0] += m_c;      // mark last block offset
-   if(m_t[0] < m_c) {  // carry overflow
-      m_t[1]++;        // high word
-   }
+   m_bytes_processed += m_c;
 
    std::fill(m_b.begin() + m_c, m_b.end(), 0);  // fill up with zeros
    compress(true, m_b);                         // final block flag = 1
@@ -174,7 +166,6 @@ BLAKE2s::BLAKE2s(std::size_t output_bits) {
 BLAKE2s::~BLAKE2s() {
    secure_scrub_memory(m_b);
    secure_scrub_memory(m_h);
-   secure_scrub_memory(m_t);
 }
 
 }  // namespace Botan

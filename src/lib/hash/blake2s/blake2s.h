@@ -46,9 +46,11 @@ class BLAKE2s final : public HashFunction {
       void state_init(std::size_t outlen, const uint8_t* key, std::size_t keylen);
       void compress(bool last, std::span<const uint8_t> buf);
 
+   private:
+      uint64_t m_bytes_processed;
+
       std::array<uint8_t, 64> m_b{};  // input buffer
       std::array<uint32_t, 8> m_h{};  // chained state
-      std::array<uint32_t, 2> m_t{};  // total number of bytes
       uint8_t m_c = 0;                // pointer for b[]
       std::size_t m_outlen = 0;       // digest size
 

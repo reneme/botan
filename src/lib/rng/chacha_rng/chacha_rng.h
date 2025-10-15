@@ -76,7 +76,7 @@ class BOTAN_PUBLIC_API(2, 3) ChaCha_RNG final : public Stateful_RNG {
       * in response. In this case, an exception will be thrown rather
       * than generating duplicated output.
       */
-      ChaCha_RNG(bool fast_key_erasure = false);
+      explicit ChaCha_RNG(bool fast_key_erasure = false);
 
       /**
       * Provide an initial seed to the RNG, without providing an

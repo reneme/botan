@@ -20,10 +20,10 @@ class Entropy_Sources;
 * ChaCha_RNG is a very fast but completely ad-hoc RNG created by
 * creating a 256-bit random value and using it as a key for ChaCha20.
 *
-* The RNG maintains two 256-bit keys, one for HMAC_SHA256 (HK) and the
-* other for ChaCha20 (CK). To compute a new key in response to
+* The RNG maintains a 512-bit and a 256-bit key, one for HMAC_SHA512 (HK)
+* and the other for ChaCha20 (CK). To compute a new key in response to
 * reseeding request or add_entropy calls, ChaCha_RNG computes
-*   CK' = HMAC_SHA256(HK, input_material)
+*   CK' = HMAC_SHA512(HK, input_material)
 * Then a new HK' is computed by running ChaCha20 with the new key to
 * output 32 bytes:
 *   HK' = ChaCha20(CK')
@@ -31,11 +31,40 @@ class Entropy_Sources;
 * Now output can be produced by continuing to produce output with ChaCha20
 * under CK'
 *
+* If fast key erasure rekeying is set in the constructor, CK gets overwritten
+* by additional output from ChaCha20 after each generate operation.
+*  CK' = ChaCha20(CK)
+* This costs performance, but can be used when backtracking resistance
+* of the internal state is desired (e.g. for usage in DRG.3 or DRT.1
+* context of the German AIS 20/31 scheme).
+*
 * The first HK (before seeding occurs) is taken as the all zero value.
 *
 * @warning This RNG construction is probably fine but is non-standard.
 * The primary reason to use it is in cases where the other RNGs are
 * not fast enough.
+*
+* # Short rationale of design choices:
+* - (re-)seeding with HMAC(SHA-512) has the advantage, that inputs
+*   do not need to have a fixed length and full entropy over a uniform
+*   distribution, they just need to contain enough entropy (e.g. more
+*   than 240 bit min-entropy). Using SHA-512 over SHA-256 as the underlying
+*   primitive has the advantage of a wider internal width and less
+*   entropy loss when hashing.
+* - Using ChaCha as stream cipher has the advantage of no entropy loss
+*   regarding its seed due to being a random permutation for each key.
+*   Furthermore ChaCha has a 512 bit block width, which shifts block
+*   collisions in a very unlikely range (regarding output block count).
+* - Using ChaCha(20) instead of ChaCha(8) or ChaCha(12) has the
+*   advantage of beeing a conservative choice also taken by the
+*   Linux kernel, where it is already accepted as a secure CSPRNG
+*   implementation by many people and organizations.
+* - Providing optional fast key erasure is necessary to reach
+*   backtracking resistance of the internal state. This costs
+*   performance depending on the requests sizes of the user.
+*   It's of course more expensive to rekey on every 4 byte output,
+*   than let's say 1024 byte buffers.
+*   Because of these performance reasons, it has to be enabled explicitely.
 */
 class BOTAN_PUBLIC_API(2, 3) ChaCha_RNG final : public Stateful_RNG {
    public:
@@ -134,7 +163,11 @@ class BOTAN_PUBLIC_API(2, 3) ChaCha_RNG final : public Stateful_RNG {
 
       std::unique_ptr<MessageAuthenticationCode> m_hmac;
       std::unique_ptr<StreamCipher> m_chacha;
-      bool m_fast_key_erasure;
+      const bool m_fast_key_erasure;
+      const size_t m_chacha_keylen;
+
+      constexpr static char* m_stream_cipher_algo = "ChaCha(20)";
+      constexpr static char* m_hmac_algo = "HMAC(SHA-512)";
 };
 
 }  // namespace Botan

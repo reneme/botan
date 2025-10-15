@@ -166,8 +166,8 @@ class BOTAN_PUBLIC_API(2, 3) ChaCha_RNG final : public Stateful_RNG {
       const bool m_fast_key_erasure;
       const size_t m_chacha_keylen;
 
-      constexpr static char* m_stream_cipher_algo = "ChaCha(20)";
-      constexpr static char* m_hmac_algo = "HMAC(SHA-512)";
+      const static inline char* m_stream_cipher_algo = "ChaCha(20)";
+      const static inline char* m_hmac_algo = "HMAC(SHA-512)";
 };
 
 }  // namespace Botan

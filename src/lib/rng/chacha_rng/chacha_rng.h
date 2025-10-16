@@ -175,6 +175,8 @@ class BOTAN_PUBLIC_API(2, 3) ChaCha_RNG final : public Stateful_RNG {
 
       void clear_state() override;
 
+      void update_chacha_state(std::span<const uint8_t> key_material);
+
       std::unique_ptr<MessageAuthenticationCode> m_hmac;
       std::unique_ptr<StreamCipher> m_chacha;
       bool m_fast_key_erasure;

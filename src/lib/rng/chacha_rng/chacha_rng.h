@@ -73,6 +73,8 @@ class BOTAN_PUBLIC_API(2, 3) ChaCha_RNG final : public Stateful_RNG {
       static constexpr std::string_view stream_cipher_algo = "ChaCha(20)";
       static constexpr std::string_view hmac_algo = "HMAC(SHA-512)";
 
+      // use maximum key length providing 256 bit security
+      static constexpr size_t chacha_key_len = 32;
       // use "classic" 8 byte nonce as extended key material
       static constexpr size_t chacha_iv_len = 8;
 
@@ -176,7 +178,6 @@ class BOTAN_PUBLIC_API(2, 3) ChaCha_RNG final : public Stateful_RNG {
       std::unique_ptr<MessageAuthenticationCode> m_hmac;
       std::unique_ptr<StreamCipher> m_chacha;
       bool m_fast_key_erasure;
-      size_t m_chacha_keylen;
 };
 
 }  // namespace Botan

@@ -23,8 +23,7 @@ namespace Botan {
 ChaCha_RNG::ChaCha_RNG(bool fast_key_erasure) :
       m_hmac(MessageAuthenticationCode::create_or_throw(hmac_algo)),
       m_chacha(StreamCipher::create_or_throw(stream_cipher_algo)),
-      m_fast_key_erasure(fast_key_erasure),
-      m_chacha_keylen(m_chacha->key_spec().maximum_keylength()) {
+      m_fast_key_erasure(fast_key_erasure) {
    clear();
 }
 
@@ -36,8 +35,7 @@ ChaCha_RNG::ChaCha_RNG(RandomNumberGenerator& underlying_rng, size_t reseed_inte
       Stateful_RNG(underlying_rng, reseed_interval),
       m_hmac(MessageAuthenticationCode::create_or_throw(hmac_algo)),
       m_chacha(StreamCipher::create_or_throw(stream_cipher_algo)),
-      m_fast_key_erasure(fast_key_erasure),
-      m_chacha_keylen(m_chacha->key_spec().maximum_keylength()) {
+      m_fast_key_erasure(fast_key_erasure) {
    clear();
 }
 
@@ -48,8 +46,7 @@ ChaCha_RNG::ChaCha_RNG(RandomNumberGenerator& underlying_rng,
       Stateful_RNG(underlying_rng, entropy_sources, reseed_interval),
       m_hmac(MessageAuthenticationCode::create_or_throw(hmac_algo)),
       m_chacha(StreamCipher::create_or_throw(stream_cipher_algo)),
-      m_fast_key_erasure(fast_key_erasure),
-      m_chacha_keylen(m_chacha->key_spec().maximum_keylength()) {
+      m_fast_key_erasure(fast_key_erasure) {
    clear();
 }
 
@@ -57,8 +54,7 @@ ChaCha_RNG::ChaCha_RNG(Entropy_Sources& entropy_sources, size_t reseed_interval,
       Stateful_RNG(entropy_sources, reseed_interval),
       m_hmac(MessageAuthenticationCode::create_or_throw(hmac_algo)),
       m_chacha(StreamCipher::create_or_throw(stream_cipher_algo)),
-      m_fast_key_erasure(fast_key_erasure),
-      m_chacha_keylen(m_chacha->key_spec().maximum_keylength()) {
+      m_fast_key_erasure(fast_key_erasure) {
    clear();
 }
 
@@ -66,7 +62,7 @@ void ChaCha_RNG::clear_state() {
    m_hmac->set_key(std::vector<uint8_t>(m_hmac->output_length(), 0x00));
    // additional variable for key material is needed to stay on the stack
    auto key_material = m_hmac->final();
-   const auto [chacha_key, chacha_iv] = split_key_material(key_material, m_chacha_keylen, chacha_iv_len);
+   const auto [chacha_key, chacha_iv] = split_key_material(key_material, chacha_key_len, chacha_iv_len);
    m_chacha->set_key(chacha_key);
    m_chacha->set_iv(chacha_iv);
 }
@@ -83,8 +79,8 @@ void ChaCha_RNG::generate_output(std::span<uint8_t> output, std::span<const uint
    // optionally overwrite key after each output operation for backtracking resistance
    if(m_fast_key_erasure) {
       // additional variable for key material is needed to stay on the stack
-      auto key_material = m_chacha->keystream_bytes(m_chacha_keylen + chacha_iv_len);
-      const auto [chacha_key, chacha_iv] = split_key_material(key_material, m_chacha_keylen, chacha_iv_len);
+      auto key_material = m_chacha->keystream_bytes(chacha_key_len + chacha_iv_len);
+      const auto [chacha_key, chacha_iv] = split_key_material(key_material, chacha_key_len, chacha_iv_len);
       m_chacha->set_key(chacha_key);
       m_chacha->set_iv(chacha_iv);
    }
@@ -94,7 +90,7 @@ void ChaCha_RNG::update(std::span<const uint8_t> input) {
    m_hmac->update(input);
    // additional variable for key material is needed to stay on the stack
    auto key_material = m_hmac->final();
-   const auto [chacha_key, chacha_iv] = split_key_material(key_material, m_chacha_keylen, chacha_iv_len);
+   const auto [chacha_key, chacha_iv] = split_key_material(key_material, chacha_key_len, chacha_iv_len);
    m_chacha->set_key(chacha_key);
    m_chacha->set_iv(chacha_iv);
    const auto mac_key = m_chacha->keystream_bytes(m_hmac->output_length());

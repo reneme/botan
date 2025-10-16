@@ -56,7 +56,7 @@ class Entropy_Sources;
 *   Furthermore ChaCha has a 512 bit block width, which shifts block
 *   collisions in a very unlikely range (regarding output block count).
 * - Using ChaCha(20) instead of ChaCha(8) or ChaCha(12) has the
-*   advantage of beeing a conservative choice also taken by the
+*   advantage of being a conservative choice also taken by the
 *   Linux kernel, where it is already accepted as a secure CSPRNG
 *   implementation by many people and organizations.
 * - Providing optional fast key erasure is necessary to reach
@@ -64,11 +64,18 @@ class Entropy_Sources;
 *   performance depending on the requests sizes of the user.
 *   It's of course more expensive to rekey on every 4 byte output,
 *   than let's say 1024 byte buffers.
-*   Because of these performance reasons, it has to be enabled explicitely.
+*   Because of these performance reasons, it has to be enabled explicitly.
 * - Also set nonce/IV of ChaCha when (re-)seeding and rekeying, to effectively
 *   extend effective internal high entropy state by 64 bit.
 */
 class BOTAN_PUBLIC_API(2, 3) ChaCha_RNG final : public Stateful_RNG {
+   private:  // constants
+      static constexpr std::string_view stream_cipher_algo = "ChaCha(20)";
+      static constexpr std::string_view hmac_algo = "HMAC(SHA-512)";
+
+      // use "classic" 8 byte nonce as extended key material
+      static constexpr size_t chacha_iv_len = 8;
+
    public:
       /**
       * Automatic reseeding is disabled completely, as it has no access to
@@ -77,6 +84,10 @@ class BOTAN_PUBLIC_API(2, 3) ChaCha_RNG final : public Stateful_RNG {
       * If a fork is detected, the RNG will be unable to reseed itself
       * in response. In this case, an exception will be thrown rather
       * than generating duplicated output.
+      *
+      * @param fast_key_erasure overwrite state after each operation
+      * for backtracking resistance, costs performance depending
+      * on request size mix, deactivated by default
       */
       explicit ChaCha_RNG(bool fast_key_erasure = false);
 
@@ -92,7 +103,7 @@ class BOTAN_PUBLIC_API(2, 3) ChaCha_RNG final : public Stateful_RNG {
       *
       * @param seed the seed material, should be at least 256 bits
       * @param fast_key_erasure overwrite state after each operation
-      * for backtracking resistance, costs performance dependending
+      * for backtracking resistance, costs performance depending
       * on request size mix, deactivated by default
       */
       BOTAN_FUTURE_EXPLICIT ChaCha_RNG(std::span<const uint8_t> seed, bool fast_key_erasure = false);
@@ -106,7 +117,7 @@ class BOTAN_PUBLIC_API(2, 3) ChaCha_RNG final : public Stateful_RNG {
       * @param reseed_interval specifies a limit of how many times
       * the RNG will be called before automatic reseeding is performed
       * @param fast_key_erasure overwrite state after each operation
-      * for backtracking resistance, costs performance dependending
+      * for backtracking resistance, costs performance depending
       * on request size mix, deactivated by default
       */
       BOTAN_FUTURE_EXPLICIT ChaCha_RNG(RandomNumberGenerator& underlying_rng,
@@ -121,7 +132,7 @@ class BOTAN_PUBLIC_API(2, 3) ChaCha_RNG final : public Stateful_RNG {
       * @param reseed_interval specifies a limit of how many times
       * the RNG will be called before automatic reseeding is performed.
       * @param fast_key_erasure overwrite state after each operation
-      * for backtracking resistance, costs performance dependending
+      * for backtracking resistance, costs performance depending
       * on request size mix, deactivated by default
       */
       BOTAN_FUTURE_EXPLICIT ChaCha_RNG(Entropy_Sources& entropy_sources,
@@ -139,7 +150,7 @@ class BOTAN_PUBLIC_API(2, 3) ChaCha_RNG final : public Stateful_RNG {
       * @param reseed_interval specifies a limit of how many times
       * the RNG will be called before automatic reseeding is performed.
       * @param fast_key_erasure overwrite state after each operation
-      * for backtracking resistance, costs performance dependending
+      * for backtracking resistance, costs performance depending
       * on request size mix, deactivated by default
       */
       ChaCha_RNG(RandomNumberGenerator& underlying_rng,
@@ -164,14 +175,8 @@ class BOTAN_PUBLIC_API(2, 3) ChaCha_RNG final : public Stateful_RNG {
 
       std::unique_ptr<MessageAuthenticationCode> m_hmac;
       std::unique_ptr<StreamCipher> m_chacha;
-      const bool m_fast_key_erasure;
-      const size_t m_chacha_keylen;
-
-      const static inline char* m_stream_cipher_algo = "ChaCha(20)";
-      const static inline char* m_hmac_algo = "HMAC(SHA-512)";
-
-      // use "classic" 8 byte nonce as extended key material
-      const static inline size_t m_chacha_iv_len = 8;
+      bool m_fast_key_erasure;
+      size_t m_chacha_keylen;
 };
 
 }  // namespace Botan

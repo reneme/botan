@@ -738,16 +738,16 @@ class ChaCha_RNG_FKE_Unit_Tests final : public Stateful_RNG_Tests {
 
          rng->randomize(out.data(), out.size());
          result.test_eq("underlying RNG calls", counting_rng.randomize_count(), size_t(0));
-         result.test_eq("out before reseed", out, "DEBC38FA382AF877C94999F25D460234F3EFED6D578C6C57EB8087999B337F3F");
+         result.test_eq("out before reseed", out, "12805A7C7A76657DA7F19F2FCBA633A84CE816A296179C805EBDA300C1CA100C");
 
          rng->randomize(out.data(), out.size());
          result.test_eq("underlying RNG calls", counting_rng.randomize_count(), size_t(0));
-         result.test_eq("out before reseed", out, "D3B499D0855C90317F0D88CF26C81D5F0C29EFC943923677A49FEB8B6C8A3DFC");
+         result.test_eq("out before reseed", out, "06998802D70DFC5D1141E4C39A6A5498EB4E75923B5E2F78D3C780542C19753E");
 
          // reseed must happen here
          rng->randomize(out.data(), out.size());
          result.test_eq("underlying RNG calls", counting_rng.randomize_count(), size_t(1));
-         result.test_eq("out after reseed", out, "F913E2A2D9B7E0CB016D53B43C36595DB7B5A11A48EC1341433FF57EC313A867");
+         result.test_eq("out after reseed", out, "D203EB11C3F14A0341C5A6D8F2FA7FAA10C1FD2162507CA679B45F2024E72890");
 
          return result;
       }

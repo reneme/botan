@@ -65,6 +65,8 @@ class Entropy_Sources;
 *   It's of course more expensive to rekey on every 4 byte output,
 *   than let's say 1024 byte buffers.
 *   Because of these performance reasons, it has to be enabled explicitely.
+* - Also set nonce/IV of ChaCha when (re-)seeding and rekeying, to effectively
+*   extend effective internal high entropy state by 64 bit.
 */
 class BOTAN_PUBLIC_API(2, 3) ChaCha_RNG final : public Stateful_RNG {
    public:
@@ -93,8 +95,7 @@ class BOTAN_PUBLIC_API(2, 3) ChaCha_RNG final : public Stateful_RNG {
       * for backtracking resistance, costs performance dependending
       * on request size mix, deactivated by default
       */
-      BOTAN_FUTURE_EXPLICIT ChaCha_RNG(std::span<const uint8_t> seed,
-                                       bool fast_key_erasure = false);
+      BOTAN_FUTURE_EXPLICIT ChaCha_RNG(std::span<const uint8_t> seed, bool fast_key_erasure = false);
 
       /**
       * Automatic reseeding from @p underlying_rng will take place after
@@ -168,6 +169,9 @@ class BOTAN_PUBLIC_API(2, 3) ChaCha_RNG final : public Stateful_RNG {
 
       const static inline char* m_stream_cipher_algo = "ChaCha(20)";
       const static inline char* m_hmac_algo = "HMAC(SHA-512)";
+
+      // use "classic" 8 byte nonce as extended key material
+      const static inline size_t m_chacha_iv_len = 8;
 };
 
 }  // namespace Botan

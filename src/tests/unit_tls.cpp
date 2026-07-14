@@ -458,6 +458,12 @@ class TLS_Handshake_Test final {
                   m_results.test_failure("Expected " + m_expected_version.to_string() + " negotiated " +
                                          session.version().to_string());
                }
+
+               if(m_summary.has_value()) {
+                  m_results.test_failure("Session established callback called multiple times");
+               }
+
+               m_summary.emplace(session);
             }
 
             std::string tls_server_choose_app_protocol(const std::vector<std::string>& protos) override {
@@ -538,6 +544,13 @@ class TLS_Handshake_Test final {
 
             void set_custom_kdf_callback(custom_kdf_clbk clbk) { m_custom_kdf_callback = std::move(clbk); }
 
+            const Botan::TLS::Session_Summary& summary() const {
+               if(!m_summary.has_value()) {
+                  throw Test_Error("TLS handshake did not complete successfully");
+               }
+               return m_summary.value();
+            }
+
          private:
             Test::Result& m_results;
             const Botan::TLS::Protocol_Version m_expected_version;
@@ -549,6 +562,7 @@ class TLS_Handshake_Test final {
             ephemeral_key_agreement_clbk m_ephemeral_key_agreement_callback;
             custom_kdf_clbk m_custom_kdf_callback;
             std::optional<Botan::TLS::Alert> m_expected_handshake_alert;
+            std::optional<Botan::TLS::Session_Summary> m_summary;
       };
 
       const Botan::TLS::Protocol_Version m_offer_version;
